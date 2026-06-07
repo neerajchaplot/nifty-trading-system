@@ -1,0 +1,66 @@
+spring:
+  application:
+    name: agent5-execution
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/nifty_trading}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:password}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    open-in-view: false
+    show-sql: false
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+
+server:
+  port: 8085
+
+# ── Upstox connectivity (provided by core-module UpstoxAutoConfiguration) ──────
+# Beans created: upstoxRestClient (market data / margin) and upstoxOrderRestClient (orders)
+upstox:
+  api:
+    # Standard gateway — market data, option chain, margin check
+    base-url: https://api.upstox.com
+    # Low-latency order gateway (production). Not a secret — lives here, not in env vars.
+    order-base-url: https://api-hft.upstox.com
+    # API credentials — from environment variables only
+    api-key: ${UPSTOX_API_KEY:}
+    api-secret: ${UPSTOX_API_SECRET:}
+    # Production access token (loaded from api_tokens DB table via ApiTokenDbLoader at startup)
+    # Set as plain fallback only when TOKEN_ENCRYPTION_KEY is absent
+    access-token: ${UPSTOX_ACCESS_TOKEN:}
+    token-encryption-key: ${TOKEN_ENCRYPTION_KEY:}
+    # orderAccessToken: not set in production — order RestClient falls back to access-token
+    connect-timeout-seconds: 10
+    read-timeout-seconds: 15
+
+# ── Agent 5 execution behaviour (agent5-specific only) ─────────────────────────
+agent5:
+  execution:
+    # How often to poll Upstox order status after multi/place (milliseconds)
+    fill-poll-interval-ms: 5000
+    # How long to wait for LIMIT fill before converting to MARKET (milliseconds)
+    fill-timeout-ms: 30000
+    # Slippage alert fraction — alert if actual net < expected × (1 - threshold)
+    # Trade stays live regardless; this is a warning only
+    slippage-alert-threshold: "0.10"
+    # Product type: D = Delivery/NRML. NEVER use I (Intraday) for weekly spreads.
+    product: D
+
+logging:
+  level:
+    com.the3Cgrp.zupptrade.agent5: INFO
+    org.springframework.web.client: WARN

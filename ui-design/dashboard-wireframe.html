@@ -1,0 +1,1702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1440" />
+  <title>ZuppTrade — Nifty Dashboard Wireframe</title>
+  <style>
+    /* ── Reset & Base ──────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #F8FAFC;
+      --card:        #FFFFFF;
+      --border:      #E2E8F0;
+      --border-light:#F1F5F9;
+      --text-primary:#0F172A;
+      --text-sec:    #475569;
+      --text-muted:  #94A3B8;
+      --accent:      #2563EB;
+      --accent-lite: #EFF6FF;
+      --green:       #16A34A;
+      --green-bg:    #F0FDF4;
+      --green-border:#BBF7D0;
+      --red:         #DC2626;
+      --red-bg:      #FEF2F2;
+      --red-border:  #FECACA;
+      --amber:       #D97706;
+      --amber-bg:    #FFFBEB;
+      --amber-border:#FDE68A;
+      --orange:      #EA580C;
+      --orange-bg:   #FFF7ED;
+      --orange-border:#FED7AA;
+      --purple:      #7C3AED;
+      --purple-bg:   #F5F3FF;
+      --teal:        #0D9488;
+      --teal-bg:     #F0FDFA;
+      --nav-h:       52px;
+      --strip-h:     50px;
+      --font:        'Inter', system-ui, -apple-system, sans-serif;
+      --radius:      10px;
+      --shadow:      0 1px 3px rgba(0,0,0,.07), 0 1px 2px rgba(0,0,0,.05);
+      --shadow-md:   0 4px 6px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.05);
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text-primary);
+      font-size: 13px;
+      line-height: 1.5;
+      min-width: 1200px;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Top Nav ───────────────────────────────────────────────── */
+    .nav {
+      height: var(--nav-h);
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 0;
+      flex-shrink: 0;
+      z-index: 100;
+    }
+    .nav-brand {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -0.3px;
+      margin-right: 8px;
+    }
+    .nav-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 400;
+      padding-left: 12px;
+      border-left: 1px solid var(--border);
+    }
+    .nav-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .nav-time {
+      font-size: 12px;
+      color: var(--text-sec);
+      font-variant-numeric: tabular-nums;
+    }
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--green);
+      background: var(--green-bg);
+      border: 1px solid var(--green-border);
+      padding: 2px 8px;
+      border-radius: 99px;
+    }
+    .live-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .btn-icon {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 12px;
+      color: var(--text-sec);
+      cursor: pointer;
+      font-family: var(--font);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-icon:hover { background: var(--bg); border-color: #CBD5E1; }
+
+    /* ── Market Outlook Strip ──────────────────────────────────── */
+    .strip-wrapper {
+      flex-shrink: 0;
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+    }
+    .strip {
+      height: var(--strip-h);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 0;
+      cursor: pointer;
+      user-select: none;
+    }
+    .strip:hover { background: #FAFBFC; }
+
+    .strip-item {
+      display: flex;
+      flex-direction: column;
+      padding: 0 18px;
+      border-right: 1px solid var(--border-light);
+    }
+    .strip-item:first-child { padding-left: 0; }
+    .strip-label {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .strip-value {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+      font-variant-numeric: tabular-nums;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .strip-change {
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .up   { color: var(--green); }
+    .down { color: var(--red); }
+
+    .bias-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+    .bias-bullish { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+    .bias-bearish { background: var(--red-bg);   color: var(--red);   border: 1px solid var(--red-border); }
+    .bias-neutral { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
+
+    .conf-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .conf-medium { background: var(--accent-lite); color: var(--accent); border: 1px solid #BFDBFE; }
+    .conf-high   { background: var(--green-bg);    color: var(--green);  border: 1px solid var(--green-border); }
+    .conf-low    { background: var(--amber-bg);    color: var(--amber);  border: 1px solid var(--amber-border); }
+
+    .strip-score {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .strip-expand {
+      margin-left: auto;
+      font-size: 18px;
+      color: var(--text-muted);
+      transition: transform .2s;
+      line-height: 1;
+    }
+    .strip-expand.open { transform: rotate(180deg); }
+
+    /* ── Expanded Outlet Strip ─────────────────────────────────── */
+    .strip-expanded {
+      display: none;
+      padding: 12px 20px 16px;
+      background: var(--card);
+      border-top: 1px solid var(--border-light);
+    }
+    .strip-expanded.open { display: block; }
+    .tier-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .tier-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+    }
+    .tier-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-sec);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+    .tier-score-val { color: var(--green); font-weight: 700; }
+    .tier-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-sec);
+      padding: 2px 0;
+    }
+    .tier-row-val { font-weight: 600; color: var(--text-primary); }
+    .strip-commentary {
+      margin-top: 10px;
+      font-size: 12px;
+      color: var(--text-sec);
+      background: var(--accent-lite);
+      border: 1px solid #BFDBFE;
+      border-radius: 6px;
+      padding: 7px 12px;
+    }
+
+    /* ── Main Body ─────────────────────────────────────────────── */
+    .body {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Left Zone ─────────────────────────────────────────────── */
+    .left-zone {
+      width: 42%;
+      flex-shrink: 0;
+      border-right: 1px solid var(--border);
+      background: var(--bg);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .zone-header {
+      padding: 14px 20px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-light);
+      background: var(--card);
+      flex-shrink: 0;
+    }
+    .zone-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-sec);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+    .zone-meta {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .left-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+    }
+    .left-content::-webkit-scrollbar { width: 4px; }
+    .left-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── State Tabs ────────────────────────────────────────────── */
+    .state-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 14px;
+    }
+    .state-tab {
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid transparent;
+      background: none;
+      color: var(--text-muted);
+      font-family: var(--font);
+    }
+    .state-tab.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+    .state-tab:not(.active):hover {
+      background: var(--bg);
+      border-color: var(--border);
+      color: var(--text-sec);
+    }
+
+    /* ── State Panel: Ready ────────────────────────────────────── */
+    .state-panel { display: none; }
+    .state-panel.active { display: block; }
+
+    .signal-summary-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow);
+    }
+    .signal-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .signal-row:last-child { margin-bottom: 0; }
+    .signal-key {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+    .signal-val {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .btn-primary {
+      width: 100%;
+      padding: 12px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: var(--font);
+      letter-spacing: 0.2px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: background .15s;
+    }
+    .btn-primary:hover { background: #1D4ED8; }
+
+    .idle-note {
+      margin-top: 10px;
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* ── State Panel: Trade Card ───────────────────────────────── */
+    .trade-card-rec {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow-md);
+    }
+    .tc-header {
+      background: linear-gradient(135deg, #1E40AF 0%, #2563EB 100%);
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .tc-strategy {
+      font-size: 14px;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: 0.3px;
+    }
+    .tc-conf-pill {
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 99px;
+      letter-spacing: 0.4px;
+    }
+    .tc-body { padding: 14px 16px; }
+
+    .legs-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .leg-card {
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .leg-sell { background: var(--red-bg); border: 1px solid var(--red-border); }
+    .leg-buy  { background: var(--green-bg); border: 1px solid var(--green-border); }
+    .leg-badge {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .leg-sell .leg-badge { color: var(--red); }
+    .leg-buy  .leg-badge { color: var(--green); }
+    .leg-strike {
+      font-size: 16px;
+      font-weight: 800;
+      color: var(--text-primary);
+      margin-bottom: 2px;
+    }
+    .leg-premium {
+      font-size: 12px;
+      color: var(--text-sec);
+    }
+    .leg-premium span { font-weight: 700; color: var(--text-primary); }
+
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .metric-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      text-align: center;
+    }
+    .metric-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 3px;
+    }
+    .metric-val {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+    .metric-sub {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    .section-title {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 8px;
+      padding-bottom: 5px;
+      border-bottom: 1px solid var(--border-light);
+    }
+    .gate-list { margin-bottom: 14px; }
+    .gate-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 0;
+      border-bottom: 1px solid var(--border-light);
+      font-size: 12px;
+    }
+    .gate-row:last-child { border-bottom: none; }
+    .gate-badge {
+      width: 22px;
+      height: 22px;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+    .gate-pass { background: var(--green-bg); color: var(--green); }
+    .gate-fail { background: var(--red-bg);   color: var(--red); }
+    .gate-info { background: var(--bg);        color: var(--text-muted); border: 1px solid var(--border); }
+    .gate-name { font-weight: 700; color: var(--text-primary); width: 24px; }
+    .gate-desc { color: var(--text-sec); flex: 1; }
+    .gate-value { font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+
+    .monitor-config {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 14px;
+    }
+    .monitor-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 3px 0;
+      font-size: 12px;
+    }
+    .monitor-key { color: var(--text-sec); }
+    .monitor-val { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .t1 { color: var(--amber); }
+    .t2 { color: var(--orange); }
+    .t3 { color: var(--red); }
+
+    .action-row {
+      display: flex;
+      gap: 8px;
+    }
+    .btn-confirm {
+      flex: 1;
+      padding: 11px;
+      background: var(--green);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: var(--font);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      transition: background .15s;
+    }
+    .btn-confirm:hover { background: #15803D; }
+    .btn-reject {
+      padding: 11px 16px;
+      background: none;
+      color: var(--red);
+      border: 1px solid var(--red-border);
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: var(--font);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: background .15s;
+    }
+    .btn-reject:hover { background: var(--red-bg); }
+
+    /* ── State Panel: Rejected ─────────────────────────────────── */
+    .rejected-card {
+      background: var(--card);
+      border: 1px solid var(--red-border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .rej-header {
+      background: linear-gradient(135deg, #991B1B 0%, #DC2626 100%);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .rej-strategy { font-size: 14px; font-weight: 800; color: #fff; }
+    .rej-badge {
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 99px;
+    }
+    .rej-body { padding: 14px 16px; }
+    .rej-reason {
+      background: var(--red-bg);
+      border: 1px solid var(--red-border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 12px;
+      color: var(--red);
+      margin-bottom: 12px;
+    }
+    .rej-reason strong { font-weight: 700; }
+    .rej-actions { display: flex; gap: 8px; }
+    .btn-retry {
+      flex: 1;
+      padding: 10px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: var(--font);
+    }
+    .btn-dismiss {
+      padding: 10px 14px;
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      font-size: 12px;
+      color: var(--text-sec);
+      cursor: pointer;
+      font-family: var(--font);
+    }
+
+    /* ── State Panel: Active Entry ─────────────────────────────── */
+    .fill-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+    .fill-header {
+      background: linear-gradient(135deg, #065F46 0%, #059669 100%);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .fill-title { font-size: 13px; font-weight: 800; color: #fff; }
+    .fill-status-badge {
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 99px;
+      animation: pulse 2s infinite;
+    }
+    .fill-body { padding: 14px 16px; }
+    .fill-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border-light);
+      font-size: 12px;
+    }
+    .fill-row:last-child { border-bottom: none; }
+    .fill-key { color: var(--text-sec); }
+    .fill-val { font-weight: 700; font-variant-numeric: tabular-nums; }
+    .fill-target { font-size: 11px; color: var(--text-muted); }
+    .fill-diff-pos { color: var(--green); font-size: 11px; }
+    .fill-diff-neg { color: var(--red); font-size: 11px; }
+    .btn-zerodha {
+      width: 100%;
+      margin-top: 12px;
+      padding: 10px;
+      background: #387ED1;
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: var(--font);
+    }
+
+    /* ── Right Zone ────────────────────────────────────────────── */
+    .right-zone {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+    }
+    .right-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .right-scroll::-webkit-scrollbar { width: 4px; }
+    .right-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── Live Trades Section ───────────────────────────────────── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .section-heading {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-sec);
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+    .trade-count-badge {
+      background: var(--accent);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .trades-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* ── Individual Live Trade Card ────────────────────────────── */
+    .live-trade {
+      background: var(--card);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      transition: border-color .3s, background .3s;
+    }
+    .live-trade.warn-t1 { background: #FFFBEB; border-color: #FDE68A; }
+    .live-trade.warn-t2 { background: #FFF7ED; border-color: var(--orange-border); }
+    .live-trade.warn-t3 { background: var(--red-bg); border-color: var(--red-border); }
+
+    .lt-header {
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-light);
+      background: rgba(0,0,0,0.015);
+    }
+    .lt-title-group { display: flex; align-items: center; gap: 8px; }
+    .lt-strategy {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text-primary);
+      letter-spacing: 0.2px;
+    }
+    .lt-expiry {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .lt-dte-pill {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 99px;
+      background: var(--accent-lite);
+      color: var(--accent);
+    }
+    .lt-status {
+      font-size: 10px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .lt-status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+    .alert-tag {
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 7px;
+      border-radius: 99px;
+      margin-left: 8px;
+    }
+    .alert-t1 { background: var(--amber-bg); color: var(--amber); border: 1px solid var(--amber-border); }
+    .alert-t2 { background: var(--orange-bg); color: var(--orange); border: 1px solid var(--orange-border); }
+    .alert-t3 { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+
+    .lt-body { padding: 12px 14px; }
+    .lt-legs-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .lt-leg {
+      border-radius: 7px;
+      padding: 8px 10px;
+    }
+    .lt-leg-sell { background: var(--red-bg);   border: 1px solid var(--red-border); }
+    .lt-leg-buy  { background: var(--green-bg); border: 1px solid var(--green-border); }
+    .lt-leg-label {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .lt-leg-sell .lt-leg-label { color: var(--red); }
+    .lt-leg-buy  .lt-leg-label { color: var(--green); }
+    .lt-leg-strike { font-size: 14px; font-weight: 800; color: var(--text-primary); }
+    .lt-leg-detail { font-size: 11px; color: var(--text-sec); }
+    .lt-leg-detail span { font-weight: 600; color: var(--text-primary); }
+
+    .lt-metrics-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+    .lt-metric {
+      text-align: center;
+      padding: 7px 6px;
+      border-radius: 7px;
+      background: var(--bg);
+      border: 1px solid var(--border-light);
+    }
+    .lt-metric-label {
+      font-size: 9px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 2px;
+    }
+    .lt-metric-val { font-size: 13px; font-weight: 800; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .lt-metric-sub { font-size: 9px; color: var(--text-muted); }
+
+    /* Threshold bars */
+    .threshold-section { margin-bottom: 10px; }
+    .threshold-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+    .threshold-label {
+      width: 80px;
+      font-size: 11px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .threshold-bar-wrap {
+      flex: 1;
+      height: 6px;
+      background: var(--border-light);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .threshold-bar {
+      height: 100%;
+      border-radius: 99px;
+      transition: width .3s;
+    }
+    .bar-safe   { background: linear-gradient(90deg, #4ADE80, #22C55E); }
+    .bar-caution{ background: linear-gradient(90deg, #FCD34D, #F59E0B); }
+    .bar-danger { background: linear-gradient(90deg, #FCA5A5, #EF4444); }
+    .threshold-level {
+      font-size: 11px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      width: 52px;
+      text-align: right;
+    }
+    .tl-t1 { color: var(--amber); }
+    .tl-t2 { color: var(--orange); }
+    .tl-t3 { color: var(--red); }
+
+    .lt-pnl-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+    }
+    .pnl-label { font-size: 11px; color: var(--text-muted); font-weight: 500; }
+    .pnl-val {
+      font-size: 15px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+    .pnl-pos { color: var(--green); }
+    .pnl-neg { color: var(--red); }
+    .pnl-pct {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 99px;
+    }
+    .pnl-pct-pos { background: var(--green-bg); color: var(--green); }
+    .pnl-pct-neg { background: var(--red-bg); color: var(--red); }
+
+    /* ── Empty Trade Slot ──────────────────────────────────────── */
+    .empty-slot {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+    .empty-slot-icon { font-size: 20px; margin-bottom: 4px; }
+
+    /* ── P&L Summary ───────────────────────────────────────────── */
+    .pnl-summary-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+    .pnl-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .pnl-box {
+      text-align: center;
+      padding: 10px 8px;
+      border-radius: 8px;
+      background: var(--bg);
+      border: 1px solid var(--border-light);
+    }
+    .pnl-box-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 4px;
+    }
+    .pnl-box-val {
+      font-size: 16px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+    .pnl-box-sub { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+
+    .capital-bar-wrap {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .capital-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      margin-bottom: 7px;
+    }
+    .capital-label { color: var(--text-muted); font-weight: 500; }
+    .capital-val   { font-weight: 700; color: var(--text-primary); }
+    .capital-track {
+      height: 8px;
+      background: var(--border-light);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .capital-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: linear-gradient(90deg, #60A5FA, #2563EB);
+    }
+    .capital-pct {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      text-align: right;
+    }
+    .pnl-footer {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 12px;
+    }
+    .btn-report {
+      padding: 7px 14px;
+      background: none;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: var(--font);
+    }
+    .btn-report:hover { background: var(--accent-lite); }
+
+    /* ── Divider labels ────────────────────────────────────────── */
+    .divider-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .divider-label::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border-light);
+    }
+
+    /* ── Scrollbar polish ──────────────────────────────────────── */
+    .left-content::-webkit-scrollbar,
+    .right-scroll::-webkit-scrollbar { width: 3px; }
+    .left-content::-webkit-scrollbar-track,
+    .right-scroll::-webkit-scrollbar-track { background: transparent; }
+    .left-content::-webkit-scrollbar-thumb,
+    .right-scroll::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+  <!-- ── TOP NAV ────────────────────────────────────────────────────── -->
+  <nav class="nav">
+    <span class="nav-brand">ZuppTrade</span>
+    <span class="nav-sub">Nifty 50 Options Dashboard</span>
+    <div class="nav-right">
+      <span class="nav-time" id="clock">06 Jun 2026 &nbsp;·&nbsp; 09:47:22 IST</span>
+      <span class="live-badge"><span class="live-dot"></span> LIVE</span>
+      <button class="btn-icon">↻ Refresh</button>
+      <button class="btn-icon">⚙ Settings</button>
+    </div>
+  </nav>
+
+  <!-- ── MARKET OUTLOOK STRIP ───────────────────────────────────────── -->
+  <div class="strip-wrapper" id="stripWrapper">
+    <div class="strip" id="stripToggle" onclick="toggleStrip()">
+      <div class="strip-item">
+        <span class="strip-label">Nifty 50</span>
+        <span class="strip-value">
+          23,847.30 &nbsp;
+          <span class="strip-change up">▲ +0.34%</span>
+        </span>
+      </div>
+      <div class="strip-item">
+        <span class="strip-label">VIX</span>
+        <span class="strip-value">
+          15.50 &nbsp;<span class="strip-change down">▼ −0.82%</span>
+        </span>
+      </div>
+      <div class="strip-item">
+        <span class="strip-label">Bias</span>
+        <span class="strip-value">
+          <span class="bias-pill bias-bullish">▲ BULLISH · MILD</span>
+        </span>
+      </div>
+      <div class="strip-item">
+        <span class="strip-label">Score</span>
+        <span class="strip-score">+0.38</span>
+      </div>
+      <div class="strip-item">
+        <span class="strip-label">Confidence</span>
+        <span class="strip-value"><span class="conf-pill conf-medium">MEDIUM</span></span>
+      </div>
+      <div class="strip-item">
+        <span class="strip-label">Signal Age</span>
+        <span class="strip-value" style="font-size:12px;">8 min ago</span>
+      </div>
+      <span class="strip-expand" id="stripChevron">⌄</span>
+    </div>
+
+    <div class="strip-expanded" id="stripExpanded">
+      <div class="tier-grid">
+        <div class="tier-card">
+          <div class="tier-title">
+            T1 · Technical
+            <span class="tier-score-val">+0.15</span>
+          </div>
+          <div class="tier-row"><span>EMA 20</span><span class="tier-row-val">23,900 &nbsp;↑</span></div>
+          <div class="tier-row"><span>EMA 50</span><span class="tier-row-val">23,690 &nbsp;↑</span></div>
+          <div class="tier-row"><span>VIX direction</span><span class="tier-row-val">Falling</span></div>
+          <div class="tier-row"><span>VIX regime</span><span class="tier-row-val">NORMAL</span></div>
+        </div>
+        <div class="tier-card">
+          <div class="tier-title">
+            T2 · Options Flow
+            <span class="tier-score-val">+0.12</span>
+          </div>
+          <div class="tier-row"><span>PCR</span><span class="tier-row-val">1.17 (neutral)</span></div>
+          <div class="tier-row"><span>IV regime</span><span class="tier-row-val">NORMAL</span></div>
+          <div class="tier-row"><span>ATM IV / HV</span><span class="tier-row-val">1.02</span></div>
+          <div class="tier-row"><span>IV skew</span><span class="tier-row-val">Slight put bid</span></div>
+        </div>
+        <div class="tier-card">
+          <div class="tier-title">
+            T3 · Macro / Sentiment
+            <span class="tier-score-val">+0.11</span>
+          </div>
+          <div class="tier-row"><span>FII long ratio</span><span class="tier-row-val">0.45</span></div>
+          <div class="tier-row"><span>DII net</span><span class="tier-row-val">+684 Cr</span></div>
+          <div class="tier-row"><span>Gift Nifty</span><span class="tier-row-val">+48 pts</span></div>
+          <div class="tier-row"><span>Sentiment score</span><span class="tier-row-val">+0.11</span></div>
+        </div>
+      </div>
+      <div class="strip-commentary">
+        💬 <strong>Mild bullish bias.</strong> EMA stack supportive with spot below both EMAs but recovering. PCR neutral zone. FII net long with DII support. No material contra-signals. Suitable for sell-spread strategies.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MAIN BODY ───────────────────────────────────────────────────── -->
+  <div class="body">
+
+    <!-- ── LEFT ZONE ──────────────────────────────────────────────────── -->
+    <div class="left-zone">
+      <div class="zone-header">
+        <span class="zone-title">Recommendation Engine</span>
+        <span class="zone-meta">Signal: BULLISH · MILD · MEDIUM &nbsp;·&nbsp; Expiry 10 Jun (DTE 3)</span>
+      </div>
+      <div class="left-content">
+
+        <!-- State switcher (demo only) -->
+        <div class="state-tabs">
+          <button class="state-tab active" onclick="showState('ready')">A · Ready</button>
+          <button class="state-tab" onclick="showState('tradecard')">B · Trade Card</button>
+          <button class="state-tab" onclick="showState('rejected')">C · Rejected</button>
+          <button class="state-tab" onclick="showState('active')">D · Active Entry</button>
+        </div>
+
+        <!-- ── STATE A: READY ─────────────────────────────────────────── -->
+        <div class="state-panel active" id="state-ready">
+          <div class="signal-summary-card">
+            <div class="divider-label">Current Signal</div>
+            <div class="signal-row">
+              <span class="signal-key">Direction</span>
+              <span class="bias-pill bias-bullish">▲ BULLISH · MILD</span>
+            </div>
+            <div class="signal-row">
+              <span class="signal-key">Composite score</span>
+              <span class="signal-val" style="color:var(--green);">+0.38</span>
+            </div>
+            <div class="signal-row">
+              <span class="signal-key">Confidence</span>
+              <span class="conf-pill conf-medium">MEDIUM</span>
+            </div>
+            <div class="signal-row">
+              <span class="signal-key">Expiry date</span>
+              <span class="signal-val">10 Jun 2026 &nbsp;<span style="color:var(--text-muted);">(DTE 3)</span></span>
+            </div>
+            <div class="signal-row">
+              <span class="signal-key">Capital available</span>
+              <span class="signal-val">₹ 5,00,000</span>
+            </div>
+          </div>
+
+          <button class="btn-primary" onclick="showState('tradecard')">
+            ▶ &nbsp; Generate Recommendation
+          </button>
+          <p class="idle-note">Engine will run all 5 layers and populate the trade card below.</p>
+        </div>
+
+        <!-- ── STATE B: TRADE CARD ────────────────────────────────────── -->
+        <div class="state-panel" id="state-tradecard">
+          <div class="trade-card-rec">
+            <div class="tc-header">
+              <span class="tc-strategy">✦ &nbsp;BULL PUT SPREAD</span>
+              <span class="tc-conf-pill">MEDIUM CONF</span>
+            </div>
+            <div class="tc-body">
+
+              <div class="divider-label">Legs</div>
+              <div class="legs-grid">
+                <div class="leg-card leg-sell">
+                  <div class="leg-badge">SELL &nbsp;·&nbsp; SHORT LEG</div>
+                  <div class="leg-strike">24,100 PE</div>
+                  <div class="leg-premium">@ <span>₹ 48.50</span> &nbsp;LTP</div>
+                  <div class="leg-premium">Fill est. <span>₹ 46.10</span></div>
+                </div>
+                <div class="leg-card leg-buy">
+                  <div class="leg-badge">BUY &nbsp;·&nbsp; LONG LEG</div>
+                  <div class="leg-strike">23,900 PE</div>
+                  <div class="leg-premium">@ <span>₹ 21.30</span> &nbsp;LTP</div>
+                  <div class="leg-premium">Fill est. <span>₹ 22.40</span></div>
+                </div>
+              </div>
+
+              <div class="divider-label">Position Metrics</div>
+              <div class="metrics-grid">
+                <div class="metric-box">
+                  <div class="metric-label">Net Premium</div>
+                  <div class="metric-val">₹ 27.20</div>
+                  <div class="metric-sub">per unit</div>
+                </div>
+                <div class="metric-box">
+                  <div class="metric-label">Max Profit</div>
+                  <div class="metric-val" style="color:var(--green);">₹ 4,080</div>
+                  <div class="metric-sub">3 lots</div>
+                </div>
+                <div class="metric-box">
+                  <div class="metric-label">Max Loss</div>
+                  <div class="metric-val" style="color:var(--red);">₹ 25,920</div>
+                  <div class="metric-sub">theoretical</div>
+                </div>
+                <div class="metric-box">
+                  <div class="metric-label">RoC</div>
+                  <div class="metric-val" style="color:var(--accent);">0.82%</div>
+                  <div class="metric-sub">min 0.21%</div>
+                </div>
+                <div class="metric-box">
+                  <div class="metric-label">PoP</div>
+                  <div class="metric-val" style="color:var(--green);">84.3%</div>
+                  <div class="metric-sub">min 80%</div>
+                </div>
+                <div class="metric-box">
+                  <div class="metric-label">Lots</div>
+                  <div class="metric-val">3</div>
+                  <div class="metric-sub">50 units each</div>
+                </div>
+              </div>
+
+              <div class="divider-label">Gate Results</div>
+              <div class="gate-list">
+                <div class="gate-row">
+                  <span class="gate-badge gate-pass">✓</span>
+                  <span class="gate-name">G1</span>
+                  <span class="gate-desc">PoP ≥ 80% (sell spread minimum)</span>
+                  <span class="gate-value" style="color:var(--green);">84.3%</span>
+                </div>
+                <div class="gate-row">
+                  <span class="gate-badge gate-info">○</span>
+                  <span class="gate-name">G2</span>
+                  <span class="gate-desc">Max loss per lot (indicative, sizing only)</span>
+                  <span class="gate-value">₹ 8,640</span>
+                </div>
+                <div class="gate-row">
+                  <span class="gate-badge gate-pass">✓</span>
+                  <span class="gate-name">G3</span>
+                  <span class="gate-desc">PoP − PoPP ≤ 15% (spread width check)</span>
+                  <span class="gate-value" style="color:var(--green);">11.2%</span>
+                </div>
+                <div class="gate-row">
+                  <span class="gate-badge gate-pass">✓</span>
+                  <span class="gate-name">G4</span>
+                  <span class="gate-desc">RoC ≥ 0.21% (DTE-adjusted minimum)</span>
+                  <span class="gate-value" style="color:var(--green);">0.82%</span>
+                </div>
+              </div>
+
+              <div class="divider-label">Monitor Thresholds</div>
+              <div class="monitor-config">
+                <div class="monitor-row">
+                  <span class="monitor-key">T1 · Watch</span>
+                  <span class="monitor-val t1">24,020</span>
+                </div>
+                <div class="monitor-row">
+                  <span class="monitor-key">T2 · Readjust</span>
+                  <span class="monitor-val t2">24,100</span>
+                </div>
+                <div class="monitor-row">
+                  <span class="monitor-key">T3 · Exit</span>
+                  <span class="monitor-val t3">24,250</span>
+                </div>
+              </div>
+
+              <div class="action-row">
+                <button class="btn-confirm" onclick="showState('active')">✓ &nbsp;Confirm &amp; Send to Zerodha</button>
+                <button class="btn-reject" onclick="showState('ready')">✗ Reject</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── STATE C: REJECTED ──────────────────────────────────────── -->
+        <div class="state-panel" id="state-rejected">
+          <div class="rejected-card">
+            <div class="rej-header">
+              <span class="rej-strategy">✦ &nbsp;BULL CALL SPREAD</span>
+              <span class="rej-badge">REJECTED</span>
+            </div>
+            <div class="rej-body">
+
+              <div class="legs-grid">
+                <div class="leg-card leg-buy">
+                  <div class="leg-badge">BUY · LONG LEG</div>
+                  <div class="leg-strike">23,400 CE</div>
+                  <div class="leg-premium">@ <span>₹ 156.80</span></div>
+                </div>
+                <div class="leg-card leg-sell">
+                  <div class="leg-badge">SELL · SHORT LEG</div>
+                  <div class="leg-strike">23,600 CE</div>
+                  <div class="leg-premium">@ <span>₹ 68.40</span></div>
+                </div>
+              </div>
+
+              <div class="divider-label">Gate Results</div>
+              <div class="gate-list">
+                <div class="gate-row">
+                  <span class="gate-badge gate-fail">✗</span>
+                  <span class="gate-name">G1</span>
+                  <span class="gate-desc">Breakeven PoP ≥ 35% (debit spread min)</span>
+                  <span class="gate-value" style="color:var(--red);">33.1%</span>
+                </div>
+                <div class="gate-row">
+                  <span class="gate-badge gate-info">○</span>
+                  <span class="gate-name">G2</span>
+                  <span class="gate-desc">Indicative — not evaluated</span>
+                  <span class="gate-value" style="color:var(--text-muted);">—</span>
+                </div>
+                <div class="gate-row">
+                  <span class="gate-badge gate-info">○</span>
+                  <span class="gate-name">G3</span>
+                  <span class="gate-desc">Not applicable (debit spread)</span>
+                  <span class="gate-value" style="color:var(--text-muted);">—</span>
+                </div>
+                <div class="gate-row">
+                  <span class="gate-badge gate-info">○</span>
+                  <span class="gate-name">G4</span>
+                  <span class="gate-desc">Not evaluated (G1 failed, engine exited)</span>
+                  <span class="gate-value" style="color:var(--text-muted);">—</span>
+                </div>
+              </div>
+
+              <div class="rej-reason">
+                <strong>Why rejected: </strong>Breakeven PoP 33.1% is below the 35% minimum for debit spreads. The ATM call on DTE 3 has insufficient time value. Try a longer expiry or wait for a higher-premium setup.
+              </div>
+
+              <div class="rej-actions">
+                <button class="btn-retry" onclick="showState('ready')">↺ &nbsp;Try Different Expiry</button>
+                <button class="btn-dismiss" onclick="showState('ready')">✗ Dismiss</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── STATE D: ACTIVE ENTRY ──────────────────────────────────── -->
+        <div class="state-panel" id="state-active">
+          <div class="fill-card">
+            <div class="fill-header">
+              <span class="fill-title">BULL PUT SPREAD &nbsp;·&nbsp; 24100 / 23900 PE</span>
+              <span class="fill-status-badge">● PENDING FILL</span>
+            </div>
+            <div class="fill-body">
+              <div class="divider-label">Order Fill Tracking</div>
+              <div class="fill-row">
+                <span class="fill-key">Short leg fill</span>
+                <div style="text-align:right;">
+                  <span class="fill-val">₹ 46.10</span>
+                  <span class="fill-target"> &nbsp;(target 48.50)</span>
+                  <span class="fill-diff-neg"> &nbsp;−2.40</span>
+                </div>
+              </div>
+              <div class="fill-row">
+                <span class="fill-key">Long leg fill</span>
+                <div style="text-align:right;">
+                  <span class="fill-val">₹ 22.40</span>
+                  <span class="fill-target"> &nbsp;(target 21.30)</span>
+                  <span class="fill-diff-neg"> &nbsp;+1.10</span>
+                </div>
+              </div>
+              <div class="fill-row">
+                <span class="fill-key">Net premium received</span>
+                <span class="fill-val" style="color:var(--green);">₹ 23.70 / unit</span>
+              </div>
+              <div class="fill-row">
+                <span class="fill-key">Lots</span>
+                <span class="fill-val">3 &nbsp;<span style="color:var(--text-muted); font-size:11px;">(150 units)</span></span>
+              </div>
+              <div class="fill-row">
+                <span class="fill-key">Order IDs</span>
+                <span class="fill-val" style="font-size:11px; color:var(--text-sec);">ZR-240610-0047, ZR-240610-0048</span>
+              </div>
+              <button class="btn-zerodha">↗ &nbsp;View in Zerodha Kite</button>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /left-content -->
+    </div><!-- /left-zone -->
+
+    <!-- ── RIGHT ZONE ──────────────────────────────────────────────────── -->
+    <div class="right-zone">
+      <div class="right-scroll">
+
+        <!-- Live Trades -->
+        <div>
+          <div class="section-header">
+            <span class="section-heading">Live Trades Monitor</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:11px;color:var(--text-muted);">2 of 3 slots used</span>
+              <span class="trade-count-badge">2</span>
+            </div>
+          </div>
+          <div class="trades-grid">
+
+            <!-- ── TRADE #1: Normal (safe) ──────────────────────────────── -->
+            <div class="live-trade">
+              <div class="lt-header">
+                <div class="lt-title-group">
+                  <span class="lt-strategy">BULL PUT SPREAD</span>
+                  <span class="lt-dte-pill">DTE 3</span>
+                  <span class="lt-expiry">· Expiry 10 Jun</span>
+                </div>
+                <div style="display:flex;align-items:center;">
+                  <span class="lt-status">
+                    <span class="lt-status-dot"></span> MONITORING
+                  </span>
+                </div>
+              </div>
+              <div class="lt-body">
+                <div class="lt-legs-row">
+                  <div class="lt-leg lt-leg-sell">
+                    <div class="lt-leg-label">SELL</div>
+                    <div class="lt-leg-strike">24,100 PE</div>
+                    <div class="lt-leg-detail">Fill <span>₹ 46.10</span> &nbsp;·&nbsp; 3 lots</div>
+                  </div>
+                  <div class="lt-leg lt-leg-buy">
+                    <div class="lt-leg-label">BUY</div>
+                    <div class="lt-leg-strike">23,900 PE</div>
+                    <div class="lt-leg-detail">Fill <span>₹ 22.40</span> &nbsp;·&nbsp; 3 lots</div>
+                  </div>
+                </div>
+
+                <div class="lt-metrics-row">
+                  <div class="lt-metric">
+                    <div class="lt-metric-label">Spot Now</div>
+                    <div class="lt-metric-val">23,847</div>
+                  </div>
+                  <div class="lt-metric">
+                    <div class="lt-metric-label">Short Strike</div>
+                    <div class="lt-metric-val">24,100</div>
+                  </div>
+                  <div class="lt-metric">
+                    <div class="lt-metric-label">Distance</div>
+                    <div class="lt-metric-val" style="color:var(--green);">+253</div>
+                    <div class="lt-metric-sub">pts above</div>
+                  </div>
+                  <div class="lt-metric">
+                    <div class="lt-metric-label">Net Prem.</div>
+                    <div class="lt-metric-val">₹ 23.70</div>
+                    <div class="lt-metric-sub">/ unit</div>
+                  </div>
+                </div>
+
+                <div class="threshold-section">
+                  <div class="divider-label">Thresholds</div>
+                  <div class="threshold-row">
+                    <span class="threshold-label tl-t1">T1 Watch</span>
+                    <div class="threshold-bar-wrap">
+                      <div class="threshold-bar bar-safe" style="width:35%;"></div>
+                    </div>
+                    <span class="threshold-level tl-t1">24,020</span>
+                  </div>
+                  <div class="threshold-row">
+                    <span class="threshold-label tl-t2">T2 Readjust</span>
+                    <div class="threshold-bar-wrap">
+                      <div class="threshold-bar bar-safe" style="width:35%;"></div>
+                    </div>
+                    <span class="threshold-level tl-t2">24,100</span>
+                  </div>
+                  <div class="threshold-row">
+                    <span class="threshold-label tl-t3">T3 Exit</span>
+                    <div class="threshold-bar-wrap">
+                      <div class="threshold-bar bar-safe" style="width:35%;"></div>
+                    </div>
+                    <span class="threshold-level tl-t3">24,250</span>
+                  </div>
+                </div>
+
+                <div class="lt-pnl-row">
+                  <span class="pnl-label">Unrealised P&amp;L</span>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="pnl-val pnl-pos">+ ₹ 1,240</span>
+                    <span class="pnl-pct pnl-pct-pos">▲ +30.4%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── TRADE #2: T1 Breach (amber) ─────────────────────────── -->
+            <div class="live-trade warn-t1">
+              <div class="lt-header">
+                <div class="lt-title-group">
+                  <span class="lt-strategy">BEAR CALL SPREAD</span>
+                  <span class="lt-dte-pill" style="background:#FDE68A;color:#92400E;">DTE 7</span>
+                  <span class="lt-expiry">· Expiry 17 Jun</span>
+                </div>
+                <div style="display:flex;align-items:center;">
+                  <span class="lt-status">
+                    <span class="lt-status-dot" style="background:var(--amber);"></span> MONITORING
+                  </span>
+                  <span class="alert-tag alert-t1">⚠ T1 WATCH</span>
+                </div>
+              </div>
+              <div class="lt-body">
+                <div style="background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:7px;padding:7px 10px;font-size:11px;color:var(--amber);font-weight:600;margin-bottom:10px;">
+                  ⚠ &nbsp;Spot has crossed T1 watch level (23,660). Monitor closely — consider adjusting if spot continues higher.
+                </div>
+
+                <div class="lt-legs-row">
+                  <div class="lt-leg lt-leg-sell">
+                    <div class="lt-leg-label">SELL</div>
+                    <div class="lt-leg-strike">23,600 CE</div>
+                    <div class="lt-leg-detail">Fill <span>₹ 65.00</span> &nbsp;·&nbsp; 2 lots</div>
+                  </div>
+                  <div class="lt-leg lt-leg-buy">
+                    <div class="lt-leg-label">BUY</div>
+                    <div class="lt-leg-strike">23,800 CE</div>
+                    <div class="lt-leg-detail">Fill <span>₹ 29.70</span> &nbsp;·&nbsp; 2 lots</div>
+                  </div>
+                </div>
+
+                <div class="lt-metrics-row">
+                  <div class="lt-metric">
+                    <div class="lt-metric-label">Spot Now</div>
+                    <div class="lt-metric-val" style="color:var(--amber);">23,847</div>
+                  </div>
+                  <div class="lt-metric">
+                    <div class="lt-metric-label">Short Strike</div>
+                    <div class="lt-metric-val">23,600</div>
+                  </div>
+                  <div class="lt-metric">
+                    <div class="lt-metric-label">Distance</div>
+                    <div class="lt-metric-val" style="color:var(--red);">−247</div>
+                    <div class="lt-metric-sub">pts above !</div>
+                  </div>
+                  <div class="lt-metric">
+                    <div class="lt-metric-label">Net Prem.</div>
+                    <div class="lt-metric-val">₹ 35.30</div>
+                    <div class="lt-metric-sub">/ unit</div>
+                  </div>
+                </div>
+
+                <div class="threshold-section">
+                  <div class="divider-label">Thresholds</div>
+                  <div class="threshold-row">
+                    <span class="threshold-label tl-t1">T1 Watch</span>
+                    <div class="threshold-bar-wrap">
+                      <div class="threshold-bar bar-caution" style="width:100%;"></div>
+                    </div>
+                    <span class="threshold-level tl-t1">23,660 ✓</span>
+                  </div>
+                  <div class="threshold-row">
+                    <span class="threshold-label tl-t2">T2 Readjust</span>
+                    <div class="threshold-bar-wrap">
+                      <div class="threshold-bar bar-caution" style="width:55%;"></div>
+                    </div>
+                    <span class="threshold-level tl-t2">23,750</span>
+                  </div>
+                  <div class="threshold-row">
+                    <span class="threshold-label tl-t3">T3 Exit</span>
+                    <div class="threshold-bar-wrap">
+                      <div class="threshold-bar bar-caution" style="width:30%;"></div>
+                    </div>
+                    <span class="threshold-level tl-t3">23,900</span>
+                  </div>
+                </div>
+
+                <div class="lt-pnl-row" style="background:var(--amber-bg);border-color:var(--amber-border);">
+                  <span class="pnl-label">Unrealised P&amp;L</span>
+                  <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="pnl-val pnl-neg">− ₹ 480</span>
+                    <span class="pnl-pct pnl-pct-neg">▼ −12.9%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ── EMPTY SLOT ────────────────────────────────────────────── -->
+            <div class="empty-slot">
+              <div class="empty-slot-icon">＋</div>
+              <div><strong>1 trade slot available</strong></div>
+              <div>Generate a new recommendation from the left panel to use this slot.</div>
+            </div>
+
+          </div><!-- /trades-grid -->
+        </div>
+
+        <!-- P&L Summary -->
+        <div>
+          <div class="section-header">
+            <span class="section-heading">P&amp;L Summary</span>
+          </div>
+          <div class="pnl-summary-card">
+            <div class="pnl-grid">
+              <div class="pnl-box">
+                <div class="pnl-box-label">Today Closed</div>
+                <div class="pnl-box-val" style="color:var(--text-muted);">₹ 0</div>
+                <div class="pnl-box-sub">No closed trades</div>
+              </div>
+              <div class="pnl-box">
+                <div class="pnl-box-label">Open P&amp;L</div>
+                <div class="pnl-box-val pnl-pos">+ ₹ 760</div>
+                <div class="pnl-box-sub">2 active trades</div>
+              </div>
+              <div class="pnl-box">
+                <div class="pnl-box-label">Week to Date</div>
+                <div class="pnl-box-val pnl-pos">+ ₹ 4,320</div>
+                <div class="pnl-box-sub">3 trades closed</div>
+              </div>
+              <div class="pnl-box">
+                <div class="pnl-box-label">Month to Date</div>
+                <div class="pnl-box-val pnl-pos">+ ₹ 12,840</div>
+                <div class="pnl-box-sub">9 trades closed</div>
+              </div>
+            </div>
+
+            <div class="capital-bar-wrap">
+              <div class="capital-header">
+                <span class="capital-label">Capital Deployed</span>
+                <span class="capital-val">₹ 78,400 &nbsp;of&nbsp; ₹ 5,00,000</span>
+              </div>
+              <div class="capital-track">
+                <div class="capital-fill" style="width:15.7%;"></div>
+              </div>
+              <div class="capital-pct">15.7% deployed &nbsp;·&nbsp; ₹ 4,21,600 available</div>
+            </div>
+
+            <div class="pnl-footer">
+              <button class="btn-report">▶ &nbsp;View Full Report</button>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /right-scroll -->
+    </div><!-- /right-zone -->
+
+  </div><!-- /body -->
+
+  <script>
+    // ── Market Outlook strip toggle ────────────────────────────────────
+    function toggleStrip() {
+      const expanded = document.getElementById('stripExpanded');
+      const chevron  = document.getElementById('stripChevron');
+      const isOpen   = expanded.classList.toggle('open');
+      chevron.classList.toggle('open', isOpen);
+      chevron.textContent = isOpen ? '⌃' : '⌄';
+    }
+
+    // ── Left panel state machine ───────────────────────────────────────
+    function showState(name) {
+      document.querySelectorAll('.state-panel').forEach(p => p.classList.remove('active'));
+      document.querySelectorAll('.state-tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('state-' + name).classList.add('active');
+      const idx = { ready:0, tradecard:1, rejected:2, active:3 }[name];
+      document.querySelectorAll('.state-tab')[idx].classList.add('active');
+    }
+
+    // ── Live clock ─────────────────────────────────────────────────────
+    function updateClock() {
+      const now = new Date();
+      const opts = { timeZone: 'Asia/Kolkata', hour12: false,
+        year:'numeric', month:'2-digit', day:'2-digit',
+        hour:'2-digit', minute:'2-digit', second:'2-digit' };
+      const parts = new Intl.DateTimeFormat('en-IN', opts).formatToParts(now);
+      const p = {};
+      parts.forEach(x => p[x.type] = x.value);
+      document.getElementById('clock').textContent =
+        `${p.day} ${['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(p.month)]} ${p.year}  ·  ${p.hour}:${p.minute}:${p.second} IST`;
+    }
+    updateClock();
+    setInterval(updateClock, 1000);
+  </script>
+
+</body>
+</html>

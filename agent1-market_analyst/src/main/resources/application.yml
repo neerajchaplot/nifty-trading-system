@@ -1,0 +1,88 @@
+spring:
+  application:
+    name: agent1-market_analyst
+  cache:
+    type: caffeine
+    caffeine:
+      # Marketaux free tier: 100 req/day — cache sentiment for 30 minutes.
+      # maximumSize=5 is generous; in practice only 1 entry ("nsei") is ever stored.
+      spec: maximumSize=5,expireAfterWrite=30m
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        default_schema: public
+  flyway:
+    enabled: false   # schema is owned and migrated by agent2-recommendation
+
+server:
+  port: 8081
+
+nifty:
+  trading:
+    vix:
+      low-threshold: 13.0
+      normal-high: 18.0
+      high-extreme: 24.0
+      daily-change-bullish: -2.0
+      daily-change-bearish: 10.0
+    fii:
+      significant-flow-crore: 500
+      long-ratio-bullish: 0.60
+      long-ratio-bearish: 0.40
+    pcr:
+      bullish-above: 1.20
+      bearish-below: 0.80
+    gift-nifty:
+      significant-pts: 50
+    scoring:
+      tier1a-weight: 0.30
+      tier1b-weight: 0.20
+      tier2-weight: 0.30
+      tier3-weight: 0.10
+      tier4-weight: 0.10
+      futures-premium-threshold: 20
+      max-pain-band: 100
+      marketaux-bullish: 0.30
+      marketaux-bearish: -0.30
+      rsi-overbought: 60
+      rsi-oversold: 40
+      dii-significant-crore: 500
+    confidence:
+      low-below: 0.41
+      high-above: 0.70
+      divergence-penalty: 0.80
+    vix-modifier:
+      low: 1.10
+      normal: 1.00
+      high: 0.85
+      extreme: 0.60
+    adx-modifier:
+      strong-trend-above: 30
+      moderate-trend-above: 20
+      strong-modifier: 1.15
+      moderate-modifier: 1.00
+      weak-modifier: 0.80
+
+upstox:
+  api:
+    base-url: https://api.upstox.com
+    access-token: ${UPSTOX_ACCESS_TOKEN}
+
+marketaux:
+  api:
+    key: ${MARKETAUX_API_KEY}
+    base-url: https://api.marketaux.com
+
+groq:
+  api:
+    base-url: https://api.groq.com
+    key: ${GROQ_API_KEY}
+    model: llama-3.3-70b-versatile
+    max-tokens: 1000
+
+logging:
+  level:
+    com.the3Cgrp.zupptrade.agent1: DEBUG

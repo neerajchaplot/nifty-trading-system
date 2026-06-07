@@ -1,0 +1,32 @@
+# ── Sandbox profile ────────────────────────────────────────────────────────────
+# Activate with: -Dspring.profiles.active=sandbox
+#
+# Margin check  → api.upstox.com        (real production API, UPSTOX_ACCESS_TOKEN)
+# Order placement → api-sandbox.upstox.com (sandbox, UPSTOX_SANDBOX_TOKEN)
+#
+# This gives real margin figures while placing zero-risk sandbox orders.
+# ───────────────────────────────────────────────────────────────────────────────
+
+upstox:
+  api:
+    # Market data and margin check remain on the real Upstox API
+    base-url: https://api.upstox.com
+    # Orders route to sandbox — not a secret, lives here
+    order-base-url: https://api-sandbox.upstox.com
+    # Sandbox token for the order RestClient (UPSTOX_SANDBOX_TOKEN set as system env var)
+    order-access-token: ${UPSTOX_SANDBOX_TOKEN:}
+
+agent5:
+  execution:
+    fill-poll-interval-ms: 5000
+    fill-timeout-ms: 30000
+    slippage-alert-threshold: "0.10"
+    product: D
+    # Cancel on timeout in sandbox rather than converting to MARKET —
+    # sandbox fills don't reflect real liquidity
+    cancel-on-timeout-instead-of-market: true
+
+logging:
+  level:
+    com.the3Cgrp.zupptrade.agent5: DEBUG
+    org.springframework.web.client: DEBUG

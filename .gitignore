@@ -1,0 +1,25 @@
+# Credentials and local config — never commit these
+application-local.yml
+**/application-local.yml
+.env
+*.env
+
+# Maven
+target/
+*.class
+*.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+*.project
+*.classpath
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Auth module — confidential, local only, never push to remote
+upstox-auth/
