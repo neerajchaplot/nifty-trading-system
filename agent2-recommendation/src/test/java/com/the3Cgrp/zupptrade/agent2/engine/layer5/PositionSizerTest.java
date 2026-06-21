@@ -110,9 +110,9 @@ class PositionSizerTest {
         ctx.setGateResults(new ArrayList<>());
 
         TradeLegDto shortLeg = new TradeLegDto(OptionType.PE, shortStrike, shortLtp,
-                LegAction.SELL, new BigDecimal("-0.15"), new BigDecimal("0.87"));
+                LegAction.SELL, new BigDecimal("-0.15"), new BigDecimal("0.87"), null);
         TradeLegDto longLeg = new TradeLegDto(OptionType.PE, longStrike, longLtp,
-                LegAction.BUY, new BigDecimal("-0.12"), new BigDecimal("0.90"));
+                LegAction.BUY, new BigDecimal("-0.12"), new BigDecimal("0.90"), null);
         ctx.setShortLeg(shortLeg);
         ctx.setLongLeg(longLeg);
 

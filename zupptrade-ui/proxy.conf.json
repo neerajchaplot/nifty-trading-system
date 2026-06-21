@@ -1,0 +1,26 @@
+{
+  "/api/agent1": {
+    "target": "http://localhost:8081",
+    "secure": false,
+    "pathRewrite": { "^/api/agent1": "/api/v1/agent1" },
+    "logLevel": "warn"
+  },
+  "/api/agent2": {
+    "target": "http://localhost:8082",
+    "secure": false,
+    "pathRewrite": { "^/api/agent2": "/api/v1/agent2" },
+    "logLevel": "warn"
+  },
+  "/api/agent3": {
+    "target": "http://localhost:8083",
+    "secure": false,
+    "pathRewrite": { "^/api/agent3": "/api/v1/agent3" },
+    "logLevel": "warn"
+  },
+  "/api/agent5": {
+    "target": "http://localhost:8085",
+    "secure": false,
+    "pathRewrite": { "^/api/agent5": "/api/v1/agent5" },
+    "logLevel": "warn"
+  }
+}

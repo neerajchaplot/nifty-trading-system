@@ -1,0 +1,28 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; overflow: hidden; }
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: #F8FAFC;
+  color: #0F172A;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Google Fonts - Inter */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* Thin scrollbars globally */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 2px; }
+
+/* Reset Angular Material typography interference */
+.mat-typography h1, .mat-typography h2, .mat-typography h3,
+.mat-typography h4, .mat-typography h5, .mat-typography h6 {
+  margin: 0;
+}
+
+/* Number formatting */
+.tabular { font-variant-numeric: tabular-nums; }

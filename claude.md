@@ -1218,33 +1218,79 @@ POST /api/v1/agent3/evaluate/{trade\_id}
 
 \### Purpose
 
-Receives confirmed trade from Agent 2. Executes on Zerodha Kite API.
+Receives confirmed trade from Agent 2. Executes on Upstox v2 Order API.
 
 Semi-auto in v1 — waits for user confirmation before placing.
 
 
 
+\### Upstox API Hosts
+
+\- Market data + margin check → `api.upstox.com` (production, `UPSTOX\_ACCESS\_TOKEN`)
+
+\- Order placement / modify / cancel → `api-hft.upstox.com` (production) or `api-sandbox.upstox.com` (sandbox, `UPSTOX\_SANDBOX\_TOKEN`)
+
+Both RestClient beans (`upstoxRestClient`, `upstoxOrderRestClient`) are auto-configured by core-module's `UpstoxAutoConfiguration`.
+
+
+
+\### Order Identification
+
+Every trade placed by this system carries two identifiers:
+
+\- **tag** (shared across all legs of one trade): `ZUPP\_{tradeId\_first8\_uppercase}` — queryable from Upstox via `GET /v2/order/details?tag=...`
+
+\- **correlation\_id** (per leg): `ZUPP\_{id8}\_L{legIndex}` — returned in multi/place response to map order\_id back to leg without state
+
+Exit orders use tag `ZUPP\_{id8}\_X` and correlation\_id `ZUPP\_{id8}\_X\_L{legIndex}`.
+
+
+
+\### Product Type
+
+All Nifty weekly spread legs use product `"D"` (Delivery / NRML) — held overnight until Tuesday expiry.
+
+Never use `"I"` (Intraday) — auto-squared at 3:20 PM.
+
+
+
 \### Execution Sequence
 
-1\. Receive execution\_order JSON from Agent 2 confirm endpoint
+1\. Receive `ExecuteTradeRequest` (tradeId + legs with instrumentKey, action, limitPrice, quantity)
 
-2\. Check available margin: `kite.margins()`
+2\. Read `expectedNetPremiumPerUnit` from trades table (status must be CONFIRMED)
 
-3\. If insufficient margin → reject, alert user
+3\. Margin check: `POST /v2/charges/margin` on `api.upstox.com` — reject if insufficient
 
-4\. Place leg 1 (short strike) as LIMIT order at LTP
+4\. Place both legs simultaneously: `POST /v2/order/multi/place` on `api-hft.upstox.com`
 
-5\. Poll order status — 30s timeout → modify to MARKET if unfilled → cancel if still unfilled
+   \- Payload validation is all-or-nothing (both legs accepted or both rejected)
 
-6\. On leg 1 fill → place leg 2 (long strike)
+   \- Exchange fills are NOT atomic — partial fills are possible
 
-7\. If leg 2 fails → immediately cancel/close leg 1. Alert user.
+5\. Poll both order statuses simultaneously — 30s timeout
 
-8\. Both filled → compute actual net premium from fills
+6\. On timeout: if `cancel-on-timeout-instead-of-market=true` (sandbox) → cancel; else modify to MARKET
 
-9\. Slippage check: if actual net premium < expected × 0.90 → alert user (trade still live)
+7\. If one leg fills and the other rejects → place reverse MARKET order on filled leg (rollback), return FAILED
 
-10\. Pass confirmed fills to Agent 3 via monitor-config endpoint
+8\. Both filled → compute actual net premium from fill prices
+
+9\. Slippage check: if actual net premium < expected × 0.90 → set slippageAlert=true (trade still live)
+
+10\. Persist fills as JSON to `trades.entry\_fills`, update status to ACTIVE
+
+11\. Pass confirmed fills to Agent 3 via monitor-config endpoint
+
+
+
+\### Exit Sequence
+
+1\. Receive `ExitTradeRequest` (tradeId, reason, legs with instrumentKey + originalAction + quantity)
+
+2\. Place reverse MARKET multi/place (BUY→SELL, SELL→BUY) using exit tag
+
+3\. Update `trades.status = CLOSED`, set `closed\_at` and `close\_reason`
 
 
 
@@ -1252,13 +1298,31 @@ Semi-auto in v1 — waits for user confirmation before placing.
 
 
 
-\### Zerodha Kite API
+\### Key Upstox Order Endpoints
 
-\- Daily token refresh required before 9:00 AM scheduled run
+\- `POST /v2/order/multi/place` — simultaneous multi-leg entry
 
-\- Static IP required for order placement (configure in deployment)
+\- `GET /v2/order/details?order\_id={id}` — poll individual order status
 
-\- No native basket order — place legs sequentially with rollback
+\- `GET /v2/order/details?tag={tag}` — query all legs of a trade by tag
+
+\- `PUT /v2/order/modify` — modify LIMIT → MARKET on timeout
+
+\- `DELETE /v2/order/cancel?order\_id={id}` — cancel open order
+
+
+
+\### Sandbox Testing
+
+Run with `-Dspring.profiles.active=sandbox`:
+
+\- Margin check hits real `api.upstox.com` (production token, no real orders)
+
+\- Order placement hits `api-sandbox.upstox.com` (sandbox token, no real money)
+
+\- Required env vars: `UPSTOX\_ACCESS\_TOKEN`, `UPSTOX\_SANDBOX\_TOKEN`, `DB\_USER`, `DB\_PASSWORD`
+
+\- Run: `mvn test -pl agent5-execution -Dspring.profiles.active=sandbox -Dgroups=sandbox`
 
 
 
@@ -1620,9 +1684,31 @@ upstox:
 
 &#x20; api:
 
-&#x20;   base-url: https://api.upstox.com
+&#x20;   base-url: https://api.upstox.com          # market data + margin (not a secret)
 
-&#x20;   access-token: ${UPSTOX\_ACCESS\_TOKEN}
+&#x20;   order-base-url: https://api-hft.upstox.com # HFT order host (not a secret)
+
+&#x20;   access-token: ${UPSTOX\_ACCESS\_TOKEN}       # production token — env var
+
+&#x20;   # order-access-token: leave unset in production (falls back to access-token)
+
+&#x20;   # order-access-token: ${UPSTOX\_SANDBOX\_TOKEN} ← set only in application-sandbox.yml
+
+
+
+agent5:
+
+&#x20; execution:
+
+&#x20;   fill-poll-interval-ms: 5000
+
+&#x20;   fill-timeout-ms: 30000
+
+&#x20;   slippage-alert-threshold: 0.10
+
+&#x20;   product: D                                 # NRML — never I (intraday)
+
+&#x20;   cancel-on-timeout-instead-of-market: false # true in sandbox profile
 
 
 
@@ -1633,16 +1719,6 @@ marketaux:
 &#x20;   key: ${MARKETAUX\_API\_KEY}
 
 &#x20;   base-url: https://api.marketaux.com
-
-
-
-zerodha:
-
-&#x20; kite:
-
-&#x20;   api-key: ${KITE\_API\_KEY}
-
-&#x20;   api-secret: ${KITE\_API\_SECRET}
 
 ```
 
@@ -1752,7 +1828,7 @@ Build and implement in this sequence:
 
 4\. \*\*agent2-recommendation\*\* — Black-Scholes first (unit test), then strategy selector, then REST endpoints.
 
-5\. \*\*agent5-execution\*\* — Kite API integration.
+5\. \*\*agent5-execution\*\* — Upstox v2 Order API integration (multi/place, margin check, status poll, rollback).
 
 6\. \*\*agent3-monitor\*\* — monitoring loop.
 

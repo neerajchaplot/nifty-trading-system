@@ -1,7 +1,6 @@
 package com.the3Cgrp.zupptrade.agent5.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 import com.the3Cgrp.zupptrade.agent5.client.UpstoxOrderClient;
 import com.the3Cgrp.zupptrade.agent5.client.UpstoxOrderClient.UpstoxOrderException;
 import com.the3Cgrp.zupptrade.agent5.client.request.MarginCheckRequest;
@@ -11,6 +10,11 @@ import com.the3Cgrp.zupptrade.agent5.client.response.MultiOrderResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.OrderStatusResponse;
 import com.the3Cgrp.zupptrade.agent5.config.Agent5ExecutionProperties;
 import com.the3Cgrp.zupptrade.agent5.dto.*;
+import com.the3Cgrp.zupptrade.core.alert.AlertService;
+import com.the3Cgrp.zupptrade.ledger.LedgerEventType;
+import com.the3Cgrp.zupptrade.ledger.TradeLedgerService;
+import com.the3Cgrp.zupptrade.ledger.payload.*;
+import com.the3Cgrp.zupptrade.shared.dto.ExitTradeRequest;
 import com.the3Cgrp.zupptrade.shared.enums.LegAction;
 import com.the3Cgrp.zupptrade.shared.enums.TradeStatus;
 import org.slf4j.Logger;
@@ -48,19 +52,25 @@ public class TradeExecutionService {
 
     private static final Logger log = LoggerFactory.getLogger(TradeExecutionService.class);
 
-    private final UpstoxOrderClient      orderClient;
+    private final UpstoxOrderClient         orderClient;
     private final Agent5ExecutionProperties props;
-    private final JdbcTemplate           jdbc;
-    private final ObjectMapper           mapper;
+    private final JdbcTemplate              jdbc;
+    private final JsonMapper                mapper;
+    private final AlertService              alertService;
+    private final TradeLedgerService        ledger;
 
     public TradeExecutionService(UpstoxOrderClient orderClient,
                                  Agent5ExecutionProperties props,
                                  JdbcTemplate jdbc,
-                                 ObjectMapper mapper) {
-        this.orderClient = orderClient;
-        this.props       = props;
-        this.jdbc        = jdbc;
-        this.mapper      = mapper;
+                                 JsonMapper mapper,
+                                 AlertService alertService,
+                                 TradeLedgerService ledger) {
+        this.orderClient  = orderClient;
+        this.props        = props;
+        this.jdbc         = jdbc;
+        this.mapper       = mapper;
+        this.alertService = alertService;
+        this.ledger       = ledger;
     }
 
     // ── Entry ───────────────────────────────────────────────────────────────
@@ -75,7 +85,7 @@ public class TradeExecutionService {
         // Read expected net premium from DB — Agent 5 never trusts caller for financial figures
         BigDecimal expectedNet = readExpectedNetPremium(tradeId);
         if (expectedNet == null) {
-            return rejected(tradeId, null, "Trade not found or not in CONFIRMED status: " + tradeId);
+            return rejected(tradeId, null, "MARGIN_CHECK", "Trade not found or not in CONFIRMED status: " + tradeId);
         }
 
         // ── Step 1: Margin check ─────────────────────────────────────────────
@@ -84,7 +94,7 @@ public class TradeExecutionService {
             margin = orderClient.checkMargin(buildMarginRequest(request));
         } catch (UpstoxOrderException e) {
             log.error("execution.margin.failed", kv("tradeId", tradeId), kv("error", e.getMessage()));
-            return rejected(tradeId, expectedNet, "Margin check failed: " + e.getMessage());
+            return rejected(tradeId, expectedNet, "MARGIN_CHECK", "Margin check failed: " + e.getMessage());
         }
 
         if (!margin.hasSufficientMargin()) {
@@ -93,7 +103,7 @@ public class TradeExecutionService {
             log.warn("execution.margin.insufficient", kv("tradeId", tradeId),
                     kv("required", margin.data().finalMargin()),
                     kv("available", margin.data().availableMargin()));
-            return rejected(tradeId, expectedNet, reason);
+            return rejected(tradeId, expectedNet, "MARGIN_CHECK", reason);
         }
 
         // ── Step 2: multi/place — all legs simultaneously ────────────────────
@@ -102,7 +112,7 @@ public class TradeExecutionService {
             placed = orderClient.placeMultiOrder(buildMultiOrderRequest(request, tag));
         } catch (UpstoxOrderException e) {
             log.error("execution.place.failed", kv("tradeId", tradeId), kv("error", e.getMessage()));
-            return rejected(tradeId, expectedNet, "Order placement failed: " + e.getMessage());
+            return rejected(tradeId, expectedNet, "ORDER_PLACEMENT", "Order placement failed: " + e.getMessage());
         }
 
         // ── Step 3: Check payload validation result ──────────────────────────
@@ -111,8 +121,12 @@ public class TradeExecutionService {
                     .map(e -> e.correlationId() + ": " + e.message())
                     .collect(Collectors.joining("; "));
             log.warn("execution.payload.errors", kv("tradeId", tradeId), kv("errors", errors));
-            return rejected(tradeId, expectedNet, "Payload error — no orders sent to exchange: " + errors);
+            return rejected(tradeId, expectedNet, "ORDER_PLACEMENT", "Payload error — no orders sent to exchange: " + errors);
         }
+
+        // ── Ledger: TRADE_PLACED — orders are live on exchange ───────────────
+        recordSilently(tradeId, LedgerEventType.TRADE_PLACED, buildTradePlacedPayload(request, placed),
+                "AGENT5:SYSTEM");
 
         // Build correlationId → orderId map from response
         Map<String, String> correlationToOrderId = new HashMap<>();
@@ -134,7 +148,7 @@ public class TradeExecutionService {
                             kv("tradeId", tradeId), kv("orderId", orderId));
                 }
             });
-            return rejected(tradeId, expectedNet, "Exchange rejected one or more legs: " + errors);
+            return rejected(tradeId, expectedNet, "ORDER_PLACEMENT", "Exchange rejected one or more legs: " + errors);
         }
 
         // ── Step 4: Poll all orders to completion ────────────────────────────
@@ -149,7 +163,7 @@ public class TradeExecutionService {
             if (orderId == null) {
                 log.error("execution.order.id.missing",
                         kv("tradeId", tradeId), kv("correlationId", correlationId));
-                return rejected(tradeId, expectedNet,
+                return rejected(tradeId, expectedNet, "ORDER_PLACEMENT",
                         "No order_id returned for correlation_id=" + correlationId);
             }
 
@@ -166,7 +180,7 @@ public class TradeExecutionService {
                                 log.error("execution.cancel.unfilled.failed", kv("orderId", id));
                             }
                         });
-                return rejected(tradeId, expectedNet,
+                return rejected(tradeId, expectedNet, "FILL_TIMEOUT",
                         "Leg " + i + " (orderId=" + orderId + ") rejected by exchange. Rollback attempted.");
             }
             fills.add(fill);
@@ -189,6 +203,11 @@ public class TradeExecutionService {
         // ── Step 6: Persist fills and set ACTIVE ────────────────────────────
         persistFills(tradeId, fills);
 
+        // Ledger: TRADE_EXECUTED — both legs filled, trade is ACTIVE
+        recordSilently(tradeId, LedgerEventType.TRADE_EXECUTED,
+                buildTradeExecutedPayload(fills, actualNet, slippage, slippageMsg),
+                "AGENT5:SYSTEM");
+
         log.info("execution.complete", kv("tradeId", tradeId),
                 kv("actualNet", actualNet), kv("slippageAlert", slippage));
 
@@ -198,14 +217,31 @@ public class TradeExecutionService {
 
     // ── Exit ─────────────────────────────────────────────────────────────────
 
-    public List<LegFillDto> exit(ExitTradeRequest request) {
+    public ExitTradeResponse exit(ExitTradeRequest request) {
         UUID tradeId = request.tradeId();
         String exitTag = OrderTagBuilder.exitTag(tradeId);
 
         log.info("exit.start", kv("tradeId", tradeId),
                 kv("reason", request.reason()), kv("legCount", request.exitLegs().size()));
 
-        // Build reverse MARKET multi-order
+        // ── Guard: validate exit-eligible status ─────────────────────────────
+        // Agent 3 sets EXIT_IN_PROGRESS before calling this endpoint (scheduler-side
+        // dedup). We proceed if status is ACTIVE, EXIT_IN_PROGRESS, or EXIT_FAILED.
+        // Any other status (CLOSED, REJECTED, PENDING_CONFIRM) means the exit is
+        // not applicable — return without placing orders.
+        TradeStatus current = readCurrentStatus(tradeId);
+        if (current == null || (current != TradeStatus.ACTIVE &&
+                                 current != TradeStatus.EXIT_IN_PROGRESS &&
+                                 current != TradeStatus.EXIT_FAILED)) {
+            log.warn("exit.invalid_status tradeId={} status={} — exit not applicable", tradeId, current);
+            return new ExitTradeResponse(tradeId, current,
+                    "Trade not in exit-eligible status: " + current, null);
+        }
+
+        // ── Ensure EXIT_IN_PROGRESS is set (idempotent if Agent 3 already set it) ──
+        setTradeStatus(tradeId, TradeStatus.EXIT_IN_PROGRESS, null);
+
+        // ── Build reverse MARKET multi-order ─────────────────────────────────
         List<MultiOrderRequest.OrderLeg> legs = new ArrayList<>();
         for (int i = 0; i < request.exitLegs().size(); i++) {
             ExitTradeRequest.ExitLeg leg = request.exitLegs().get(i);
@@ -219,19 +255,45 @@ public class TradeExecutionService {
         try {
             placed = orderClient.placeMultiOrder(new MultiOrderRequest(legs));
         } catch (UpstoxOrderException e) {
-            log.error("exit.place.failed MANUAL INTERVENTION REQUIRED",
+            String reason = "Exit order placement failed: " + e.getMessage();
+            log.error("exit.place.failed — MANUAL INTERVENTION REQUIRED",
                     kv("tradeId", tradeId), kv("error", e.getMessage()));
-            return List.of();
+            alertService.critical(tradeId, "exit_failed",
+                    "Trade " + tradeId + " exit FAILED — position may still be open. " +
+                    "MANUAL INTERVENTION REQUIRED. Error: " + e.getMessage());
+            setTradeStatus(tradeId, TradeStatus.EXIT_FAILED, reason);
+            recordSilently(tradeId, LedgerEventType.EXIT_FAILED,
+                    new ExitFailedPayload("ORDER_PLACEMENT", reason, 1), "AGENT5:SYSTEM");
+            return new ExitTradeResponse(tradeId, TradeStatus.EXIT_FAILED, reason, null);
         }
 
-        // Mark trade CLOSED in DB
-        jdbc.update("UPDATE trades SET status = 'CLOSED', closed_at = NOW(), " +
-                    "close_reason = ? WHERE id = ?", request.reason(), tradeId);
+        // ── Check for payload validation errors ──────────────────────────────
+        if (placed.hasPayloadErrors()) {
+            String errors = placed.errors().stream()
+                    .map(err -> err.correlationId() + ": " + err.message())
+                    .collect(Collectors.joining("; "));
+            String reason = "Exit payload error — orders not sent to exchange: " + errors;
+            log.error("exit.payload.error", kv("tradeId", tradeId), kv("errors", errors));
+            alertService.critical(tradeId, "exit_payload_error",
+                    "Trade " + tradeId + " exit failed — payload rejected by Upstox before reaching exchange. " +
+                    "MANUAL INTERVENTION REQUIRED. Errors: " + errors);
+            setTradeStatus(tradeId, TradeStatus.EXIT_FAILED, reason);
+            recordSilently(tradeId, LedgerEventType.EXIT_FAILED,
+                    new ExitFailedPayload("ORDER_PLACEMENT", reason, 1), "AGENT5:SYSTEM");
+            return new ExitTradeResponse(tradeId, TradeStatus.EXIT_FAILED, reason, null);
+        }
 
-        log.info("exit.complete", kv("tradeId", tradeId),
+        // ── Mark CLOSED — exit MARKET orders fill near-instantly ─────────────
+        LocalDateTime closedAt = LocalDateTime.now();
+        setTradeStatusClosed(tradeId, request.reason(), closedAt);
+        recordSilently(tradeId, LedgerEventType.TRADE_CLOSED,
+                new TradeClosedPayload(request.reason(), List.of(), null, null),
+                "AGENT5:SYSTEM");
+
+        log.info("exit.complete", kv("tradeId", tradeId), kv("reason", request.reason()),
                 kv("success", placed.summary() != null ? placed.summary().success() : 0));
 
-        return List.of(); // exit fills can be fetched from Upstox by tag if needed
+        return new ExitTradeResponse(tradeId, TradeStatus.CLOSED, null, closedAt);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -376,20 +438,105 @@ public class TradeExecutionService {
             String fillsJson = mapper.writeValueAsString(fills);
             jdbc.update("UPDATE trades SET status = 'ACTIVE', confirmed_at = NOW(), " +
                         "entry_fills = ?::jsonb WHERE id = ?", fillsJson, tradeId);
-        } catch (JsonProcessingException | org.springframework.dao.DataAccessException e) {
+        } catch (Exception e) {
             log.error("execution.persist.failed", kv("tradeId", tradeId), kv("error", e.getMessage()));
         }
     }
 
-    private ExecuteTradeResponse rejected(UUID tradeId, BigDecimal expectedNet, String reason) {
+    private ExecuteTradeResponse rejected(UUID tradeId, BigDecimal expectedNet,
+                                           String failureStage, String reason) {
         try {
             jdbc.update("UPDATE trades SET status = 'REJECTED', close_reason = ? WHERE id = ?",
                     reason, tradeId);
         } catch (Exception e) {
             log.error("execution.status.update.failed", kv("tradeId", tradeId));
         }
+        recordSilently(tradeId, LedgerEventType.TRADE_FAILED,
+                new TradeFailedPayload(failureStage, reason, null), "AGENT5:SYSTEM");
         return new ExecuteTradeResponse(tradeId, TradeStatus.REJECTED, List.of(),
                 null, expectedNet, false, null, reason, LocalDateTime.now());
+    }
+
+    // ── Ledger helpers ────────────────────────────────────────────────────────
+
+    /**
+     * Records a ledger event without propagating failures.
+     * Used for post-Upstox events where trade state on exchange takes precedence.
+     */
+    private void recordSilently(UUID tradeId, LedgerEventType eventType,
+                                  Object payload, String occurredBy) {
+        try {
+            ledger.record(tradeId, eventType, payload, occurredBy);
+        } catch (Exception e) {
+            log.error("ledger.record.failed — AUDIT GAP. tradeId={} event={} error={}",
+                    tradeId, eventType, e.getMessage());
+            alertService.critical(tradeId, "ledger_write_failed",
+                    "Ledger write failed for event " + eventType + " on trade " + tradeId +
+                    ". Audit trail has a gap. DB error: " + e.getMessage());
+        }
+    }
+
+    private TradePlacedPayload buildTradePlacedPayload(ExecuteTradeRequest request,
+                                                        MultiOrderResponse placed) {
+        List<TradePlacedPayload.LegOrder> legOrders = new ArrayList<>();
+        for (int i = 0; i < request.legs().size(); i++) {
+            LegOrderRequest leg = request.legs().get(i);
+            String corrId  = OrderTagBuilder.correlationId(request.tradeId(), i);
+            String orderId = placed.data() != null
+                    ? placed.data().stream()
+                        .filter(d -> d.correlationId().equals(corrId))
+                        .findFirst().map(d -> d.orderId()).orElse(null)
+                    : null;
+            legOrders.add(new TradePlacedPayload.LegOrder(corrId, orderId,
+                    leg.instrumentKey(), leg.action().name(), leg.quantity()));
+        }
+        return new TradePlacedPayload(legOrders);
+    }
+
+    private TradeExecutedPayload buildTradeExecutedPayload(List<LegFillDto> fills,
+                                                             BigDecimal actualNet,
+                                                             boolean slippageAlert,
+                                                             String slippageMsg) {
+        List<TradeExecutedPayload.LegFill> legFills = fills.stream()
+                .map(f -> new TradeExecutedPayload.LegFill(
+                        f.orderId(), f.instrumentKey(), f.action().name(),
+                        f.quantityFilled(), f.averageFillPrice()))
+                .toList();
+        return new TradeExecutedPayload(legFills, actualNet, slippageAlert, slippageMsg);
+    }
+
+    private TradeStatus readCurrentStatus(UUID tradeId) {
+        try {
+            String status = jdbc.queryForObject(
+                    "SELECT status FROM trades WHERE id = ?", String.class, tradeId);
+            return status != null ? TradeStatus.valueOf(status) : null;
+        } catch (Exception e) {
+            log.error("exit.status.read.failed", kv("tradeId", tradeId), kv("error", e.getMessage()));
+            return null;
+        }
+    }
+
+    private void setTradeStatus(UUID tradeId, TradeStatus status, String closeReason) {
+        try {
+            if (closeReason != null) {
+                jdbc.update("UPDATE trades SET status = ?, close_reason = ? WHERE id = ?",
+                        status.name(), closeReason, tradeId);
+            } else {
+                jdbc.update("UPDATE trades SET status = ? WHERE id = ?", status.name(), tradeId);
+            }
+        } catch (Exception e) {
+            log.error("exit.status.update.failed",
+                    kv("tradeId", tradeId), kv("status", status), kv("error", e.getMessage()));
+        }
+    }
+
+    private void setTradeStatusClosed(UUID tradeId, String closeReason, LocalDateTime closedAt) {
+        try {
+            jdbc.update("UPDATE trades SET status = 'CLOSED', closed_at = NOW(), close_reason = ? WHERE id = ?",
+                    closeReason, tradeId);
+        } catch (Exception e) {
+            log.error("exit.closed.update.failed", kv("tradeId", tradeId), kv("error", e.getMessage()));
+        }
     }
 
     private void sleep(long ms) {

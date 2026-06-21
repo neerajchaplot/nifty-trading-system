@@ -1,0 +1,200 @@
+<div class="right-scroll">
+
+  <!-- ── LIVE TRADES ─────────────────────────────────────────────────── -->
+  <div>
+    <div class="section-header">
+      <span class="section-heading">Live Trades Monitor</span>
+      <div class="header-meta">
+        <span class="slot-label">{{ trades.length }} of {{ MAX_SLOTS }} slots used</span>
+        <span class="trade-count-badge" *ngIf="trades.length > 0">{{ trades.length }}</span>
+      </div>
+    </div>
+
+    <div class="trades-grid">
+      <!-- ── Active trade cards ─────────────────────────────────────── -->
+      <div class="live-trade" [ngClass]="warningClass(trade)"
+           *ngFor="let trade of trades">
+
+        <div class="lt-header">
+          <div class="lt-title-group">
+            <span class="lt-strategy">{{ strategyLabel(trade.monitorConfig?.strategy) }}</span>
+            <span class="lt-dte-pill">{{ dteLabel(trade.expiryDate) }}</span>
+            <span class="lt-expiry">· {{ trade.expiryDate }}</span>
+          </div>
+          <div class="lt-status-group">
+            <span class="lt-status">
+              <span class="lt-status-dot" [style.background]="warningClass(trade) ? '#D97706' : '#16A34A'"></span>
+              MONITORING
+            </span>
+            <span class="alert-tag" [ngClass]="alertTag(trade)?.cssClass" *ngIf="alertTag(trade)">
+              {{ alertTag(trade)?.label }}
+            </span>
+          </div>
+        </div>
+
+        <div class="lt-body">
+          <!-- Alert message -->
+          <div class="alert-message" [ngClass]="'alert-msg-' + (trade.lastThresholdHit?.toLowerCase() ?? 'none')"
+               *ngIf="alertMessage(trade)">
+            {{ alertMessage(trade) }}
+          </div>
+
+          <!-- Legs -->
+          <div class="lt-legs-row" *ngIf="trade.monitorConfig">
+            <div class="lt-leg lt-leg-sell">
+              <div class="lt-leg-label">SELL</div>
+              <div class="lt-leg-strike">{{ trade.monitorConfig.shortLeg.strike | number }} {{ trade.monitorConfig.shortLeg.optionType }}</div>
+              <div class="lt-leg-detail">
+                Fill <span>₹ {{ trade.monitorConfig.shortLeg.ltp | number:'1.2-2' }}</span>
+                &nbsp;·&nbsp; {{ trade.monitorConfig.lots }} lots
+              </div>
+            </div>
+            <div class="lt-leg lt-leg-buy">
+              <div class="lt-leg-label">BUY</div>
+              <div class="lt-leg-strike">{{ trade.monitorConfig.longLeg.strike | number }} {{ trade.monitorConfig.longLeg.optionType }}</div>
+              <div class="lt-leg-detail">
+                Fill <span>₹ {{ trade.monitorConfig.longLeg.ltp | number:'1.2-2' }}</span>
+                &nbsp;·&nbsp; {{ trade.monitorConfig.lots }} lots
+              </div>
+            </div>
+          </div>
+
+          <!-- Metrics row -->
+          <div class="lt-metrics-row">
+            <div class="lt-metric">
+              <div class="lt-metric-label">Spot Now</div>
+              <div class="lt-metric-val" [style.color]="warningClass(trade) ? '#D97706' : null">
+                {{ trade.spotPrice | number:'1.0-0' }}
+              </div>
+            </div>
+            <div class="lt-metric">
+              <div class="lt-metric-label">Short Strike</div>
+              <div class="lt-metric-val">{{ trade.monitorConfig?.shortLeg?.strike | number }}</div>
+            </div>
+            <div class="lt-metric">
+              <div class="lt-metric-label">Distance</div>
+              <div class="lt-metric-val"
+                   [style.color]="(distance(trade) ?? 0) < 0 ? '#DC2626' : '#16A34A'">
+                {{ (distance(trade) ?? 0) > 0 ? '+' : '' }}{{ distance(trade) | number:'1.0-0' }}
+              </div>
+              <div class="lt-metric-sub">pts</div>
+            </div>
+            <div class="lt-metric">
+              <div class="lt-metric-label">Net Prem.</div>
+              <div class="lt-metric-val">₹ {{ trade.monitorConfig?.actualNetPremiumPerUnit | number:'1.2-2' }}</div>
+              <div class="lt-metric-sub">/ unit</div>
+            </div>
+          </div>
+
+          <!-- Threshold bars -->
+          <div class="threshold-section" *ngIf="trade.monitorConfig?.thresholds">
+            <div class="divider-label">Thresholds</div>
+
+            <div class="threshold-row">
+              <span class="threshold-label tl-t1">T1 Watch</span>
+              <app-threshold-bar
+                [progress]="thresholdProgress(trade, 'T1')"
+                [variant]="thresholdVariant(trade, 'T1')">
+              </app-threshold-bar>
+              <span class="threshold-level tl-t1">
+                {{ trade.monitorConfig!.thresholds.t1WatchNiftyLevel | number:'1.0-0' }}
+                {{ trade.lastThresholdHit === 'T1' || trade.lastThresholdHit === 'T2' || trade.lastThresholdHit === 'T3' ? '✓' : '' }}
+              </span>
+            </div>
+
+            <div class="threshold-row">
+              <span class="threshold-label tl-t2">T2 Readjust</span>
+              <app-threshold-bar
+                [progress]="thresholdProgress(trade, 'T2')"
+                [variant]="thresholdVariant(trade, 'T2')">
+              </app-threshold-bar>
+              <span class="threshold-level tl-t2">
+                {{ trade.monitorConfig!.thresholds.t2ReadjustNiftyLevel | number:'1.0-0' }}
+                {{ trade.lastThresholdHit === 'T2' || trade.lastThresholdHit === 'T3' ? '✓' : '' }}
+              </span>
+            </div>
+
+            <div class="threshold-row">
+              <span class="threshold-label tl-t3">T3 Exit</span>
+              <app-threshold-bar
+                [progress]="thresholdProgress(trade, 'T3')"
+                [variant]="thresholdVariant(trade, 'T3')">
+              </app-threshold-bar>
+              <span class="threshold-level tl-t3">
+                {{ trade.monitorConfig!.thresholds.t3ExitNiftyLevel | number:'1.0-0' }}
+                {{ trade.lastThresholdHit === 'T3' ? '✓' : '' }}
+              </span>
+            </div>
+          </div>
+
+          <!-- P&L Row -->
+          <div class="lt-pnl-row"
+               [style.background]="warningClass(trade) === 'warn-t1' ? '#FFFBEB' : null"
+               [style.border-color]="warningClass(trade) === 'warn-t1' ? '#FDE68A' : null">
+            <span class="pnl-label">Unrealised P&amp;L</span>
+            <div class="pnl-right">
+              <span class="pnl-val" [style.color]="pnlColor(trade.markToMarketPnl)">
+                {{ formatInr(trade.markToMarketPnl) }}
+              </span>
+              <span class="pnl-pct" [ngClass]="pnlPctClass(trade.markToMarketPnl)" *ngIf="pnlPct(trade)">
+                {{ pnlPct(trade) }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Empty slots ────────────────────────────────────────────── -->
+      <div class="empty-slot" *ngFor="let _ of emptySlots">
+        <div class="empty-slot-icon">＋</div>
+        <div><strong>Trade slot available</strong></div>
+        <div>Generate a recommendation from the left panel to use this slot.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── P&L SUMMARY (stubbed) ──────────────────────────────────────── -->
+  <div>
+    <div class="section-header">
+      <span class="section-heading">P&amp;L Summary</span>
+    </div>
+    <div class="pnl-summary-card">
+      <div class="pnl-grid">
+        <div class="pnl-box">
+          <div class="pnl-box-label">Today Closed</div>
+          <div class="pnl-box-val muted">₹ 0</div>
+          <div class="pnl-box-sub">No closed trades today</div>
+        </div>
+        <div class="pnl-box">
+          <div class="pnl-box-label">Open P&amp;L</div>
+          <div class="pnl-box-val" [style.color]="openPnl >= 0 ? '#16A34A' : '#DC2626'">
+            {{ formatInr(openPnl) }}
+          </div>
+          <div class="pnl-box-sub">{{ trades.length }} active trade{{ trades.length !== 1 ? 's' : '' }}</div>
+        </div>
+        <div class="pnl-box">
+          <div class="pnl-box-label">Week to Date</div>
+          <div class="pnl-box-val muted">—</div>
+          <div class="pnl-box-sub">Historical data pending</div>
+        </div>
+        <div class="pnl-box">
+          <div class="pnl-box-label">Month to Date</div>
+          <div class="pnl-box-val muted">—</div>
+          <div class="pnl-box-sub">Historical data pending</div>
+        </div>
+      </div>
+
+      <div class="capital-bar-wrap">
+        <div class="capital-header">
+          <span class="capital-label">Capital Deployed (estimated)</span>
+          <span class="capital-val">Live data drives this</span>
+        </div>
+        <div class="capital-track">
+          <div class="capital-fill" style="width:0%"></div>
+        </div>
+        <div class="capital-pct">Connect to portfolio API for live margin usage</div>
+      </div>
+    </div>
+  </div>
+
+</div>

@@ -9,6 +9,7 @@ import com.the3Cgrp.zupptrade.core.upstox.crypto.TokenEncryptionService;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxHistoricalDataClient;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxMarketQuoteClient;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxOptionChainClient;
+import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxPositionClient;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxProfileClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -139,16 +140,36 @@ public class UpstoxAutoConfiguration {
         return new UpstoxOptionChainClient(upstoxRestClient);
     }
 
+    @Bean
+    public UpstoxPositionClient upstoxPositionClient(RestClient upstoxRestClient) {
+        return new UpstoxPositionClient(upstoxRestClient);
+    }
+
     /**
-     * Only created when TOKEN_ENCRYPTION_KEY is configured AND JdbcTemplate is on the classpath.
-     * Uses ObjectProvider so the bean is created even if no JdbcTemplate bean exists yet —
-     * ApiTokenDbLoader.run() receives null and skips gracefully.
+     * Loads the Upstox access token from the api_tokens table on startup.
+     * Only active when upstox.api.token-encryption-key is configured.
+     *
+     * Uses ObjectProvider<JdbcTemplate> for lazy resolution — evaluated at run() time
+     * (after full context initialisation), NOT at auto-configuration registration time.
      *
      * Why ObjectProvider instead of @ConditionalOnBean(JdbcTemplate.class):
-     *   @ConditionalOnBean is evaluated during auto-configuration registration, which can happen
-     *   before JdbcTemplateAutoConfiguration has created the bean — causing a false negative
-     *   and silently skipping the loader entirely. ObjectProvider resolves lazily at run() time,
-     *   by which point the full application context (including JdbcTemplate) is always ready.
+     *   @ConditionalOnBean is evaluated during auto-configuration registration, which happens
+     *   before JdbcTemplateAutoConfiguration has finished creating its beans — causing a
+     *   false negative that silently skips the loader even when a DataSource IS configured.
+     *   ObjectProvider.getIfAvailable() resolves at run() time when all beans are ready.
+     *
+     * Spring Boot 4 NullBean note:
+     *   Returning null from a @Bean method registers a NullBean, which crashes
+     *   callRunners() with BeanNotOfRequiredTypeException. This is safe here because
+     *   when JdbcTemplate IS available (DataSource + driver on classpath), getIfAvailable()
+     *   returns a real JdbcTemplate and we never return null. The null branch only fires
+     *   when no DataSource is configured — in which case the bean is skipped gracefully.
+     *   If no token source is available at all, UpstoxTokenHolder stays empty and
+     *   the first API call will log upstox.token.expired.
+     *
+     *   IMPORTANT: if adding a new context where DataSource IS expected but JdbcTemplate
+     *   is still null (e.g., test-only context without JDBC auto-config), fix it by adding
+     *   spring-boot-starter-jdbc to that module's test scope — not by changing this bean.
      */
     @Bean
     @ConditionalOnProperty(name = "upstox.api.token-encryption-key")

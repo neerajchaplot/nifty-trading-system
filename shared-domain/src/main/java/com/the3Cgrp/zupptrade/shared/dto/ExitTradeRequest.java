@@ -1,4 +1,4 @@
-package com.the3Cgrp.zupptrade.agent5.dto;
+package com.the3Cgrp.zupptrade.shared.dto;
 
 import com.the3Cgrp.zupptrade.shared.enums.LegAction;
 import jakarta.validation.constraints.NotBlank;
@@ -11,11 +11,11 @@ import java.util.UUID;
 /**
  * Input to POST /api/v1/agent5/exit/{tradeId}.
  *
- * Called by Agent 3 on T3 EXIT breach, VIX spike > 30%, or manual user exit.
- * Agent 5 places reverse MARKET orders for each leg to close the position.
+ * Placed in shared-domain so Agent 3 can build the request without
+ * a compile-time dependency on agent5-execution.
  *
- * exitLegs: sourced from entry_fills stored in trades table.
- *   originalAction: the action at entry. Agent 5 reverses it (BUY→SELL, SELL→BUY).
+ * exitLegs: sourced from MonitorConfigDto (shortLeg + longLeg).
+ *   originalAction: the action at ENTRY. Agent 5 reverses it (SELL→BUY, BUY→SELL).
  */
 public record ExitTradeRequest(
 

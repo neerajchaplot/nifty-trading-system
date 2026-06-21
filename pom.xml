@@ -21,6 +21,7 @@
     <properties>
         <java.version>21</java.version>
         <logstash-logback-encoder.version>8.0</logstash-logback-encoder.version>
+        <shedlock.version>6.3.0</shedlock.version>
         <!--
             Default: exclude integration-tagged tests from normal mvn test runs.
             Override to empty string to enable them:
@@ -30,11 +31,13 @@
     </properties>
 
     <modules>
+        <module>db-migrations</module>         <!-- must be first — agents depend on it for Flyway scripts -->
         <module>shared-domain</module>
         <module>core-module</module>
+        <module>ledger-module</module>
         <module>agent1-market_analyst</module>
         <module>agent2-recommendation</module>
-       <!-- <module>agent3-monitor</module> -->
+        <module>agent3-monitor</module>
         <!--<module>agent4-backtest</module> -->
         <module>agent5-execution</module>
         <!--<module>orchestrator</module> -->
@@ -42,6 +45,11 @@
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>com.the3Cgrp.zupptrade</groupId>
+                <artifactId>db-migrations</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.the3Cgrp.zupptrade</groupId>
                 <artifactId>shared-domain</artifactId>
@@ -53,10 +61,40 @@
                 <version>${project.version}</version>
             </dependency>
             <dependency>
+                <groupId>com.the3Cgrp.zupptrade</groupId>
+                <artifactId>ledger-module</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>net.logstash.logback</groupId>
                 <artifactId>logstash-logback-encoder</artifactId>
                 <version>${logstash-logback-encoder.version}</version>
             </dependency>
+            <dependency>
+                <groupId>net.javacrumbs.shedlock</groupId>
+                <artifactId>shedlock-spring</artifactId>
+                <version>${shedlock.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>net.javacrumbs.shedlock</groupId>
+                <artifactId>shedlock-provider-jdbc-template</artifactId>
+                <version>${shedlock.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <dependencies>
+        <!--
+            PostgreSQL JDBC driver — available in test scope for all modules.
+            Agents that need it at compile scope (agent1, agent2, agent5) declare it
+            without a scope in their own pom.xml — child declaration overrides this.
+            Version managed by Spring Boot BOM via spring-boot-starter-parent.
+        -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
 </project>

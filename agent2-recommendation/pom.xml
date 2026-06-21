@@ -40,7 +40,7 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Flyway (starter brings Boot 4 flyway autoconfigure + core) -->
+        <!-- Flyway engine — SQL scripts come from db-migrations on the classpath -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-flyway</artifactId>
@@ -50,10 +50,22 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
+        <!-- All migration SQL scripts (V1–V9, V100) -->
+        <dependency>
+            <groupId>com.the3Cgrp.zupptrade</groupId>
+            <artifactId>db-migrations</artifactId>
+        </dependency>
+
         <!-- Shared DTOs and enums -->
         <dependency>
             <groupId>com.the3Cgrp.zupptrade</groupId>
             <artifactId>shared-domain</artifactId>
+        </dependency>
+
+        <!-- Append-only trade lifecycle audit ledger -->
+        <dependency>
+            <groupId>com.the3Cgrp.zupptrade</groupId>
+            <artifactId>ledger-module</artifactId>
         </dependency>
 
         <!-- Structured JSON logging -->

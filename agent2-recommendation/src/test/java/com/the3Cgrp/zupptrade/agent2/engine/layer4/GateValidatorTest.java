@@ -30,7 +30,9 @@ class GateValidatorTest {
 
     @Test
     void g1_sellSpread_popAboveThreshold_passes() {
-        RecommendationContext ctx = buildCreditContext(new BigDecimal("0.87"), new BigDecimal("0.90"));
+        // shortLeg.pop = Upstox buyer's PoP (P option expires ITM) = 0.13 (OTM put)
+        // seller's PoP = (1 - 0.13) × 100 = 87% ≥ 80% → passes
+        RecommendationContext ctx = buildCreditContext(new BigDecimal("0.13"), new BigDecimal("0.10"));
         gateValidator.execute(ctx);
 
         GateResultDto g1 = ctx.getGateResults().stream().filter(g -> g.gate().equals("G1")).findFirst().orElseThrow();
@@ -39,7 +41,8 @@ class GateValidatorTest {
 
     @Test
     void g1_sellSpread_popBelowThreshold_fails() {
-        RecommendationContext ctx = buildCreditContext(new BigDecimal("0.75"), new BigDecimal("0.80"));
+        // shortLeg.pop = buyer's PoP = 0.25 → seller's PoP = 75% < 80% → fails
+        RecommendationContext ctx = buildCreditContext(new BigDecimal("0.25"), new BigDecimal("0.20"));
         gateValidator.execute(ctx);
 
         GateResultDto g1 = ctx.getGateResults().stream().filter(g -> g.gate().equals("G1")).findFirst().orElseThrow();
@@ -119,9 +122,9 @@ class GateValidatorTest {
         ctx.setSpreadDirection(SpreadDirection.CREDIT);
 
         TradeLegDto shortLeg = new TradeLegDto(OptionType.PE, 23500,
-                new BigDecimal("34.50"), LegAction.SELL, new BigDecimal("-0.15"), shortPop);
+                new BigDecimal("34.50"), LegAction.SELL, new BigDecimal("-0.15"), shortPop, null);
         TradeLegDto longLeg = new TradeLegDto(OptionType.PE, 23450,
-                new BigDecimal("29.40"), LegAction.BUY, new BigDecimal("-0.12"), longPop);
+                new BigDecimal("29.40"), LegAction.BUY, new BigDecimal("-0.12"), longPop, null);
 
         ctx.setShortLeg(shortLeg);
         ctx.setLongLeg(longLeg);

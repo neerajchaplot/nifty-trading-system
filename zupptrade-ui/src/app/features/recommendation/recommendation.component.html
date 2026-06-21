@@ -1,0 +1,221 @@
+<div class="zone-header">
+  <span class="zone-title">Recommendation Engine</span>
+  <span class="zone-meta" *ngIf="signal">
+    Signal: {{ signal.bias }} · {{ signal.strength }} · {{ signal.confidence }}
+    <ng-container *ngIf="tradeCard">&nbsp;·&nbsp; Expiry {{ tradeCard.expiryDate }} (DTE {{ tradeCard.dte }})</ng-container>
+  </span>
+</div>
+
+<div class="left-content">
+
+  <!-- Error banner -->
+  <div class="error-banner" *ngIf="errorMessage">
+    ⚠ {{ errorMessage }}
+  </div>
+
+  <!-- ── STATE: READY ──────────────────────────────────────────────── -->
+  <ng-container *ngIf="state === 'ready'">
+    <div class="signal-summary-card" *ngIf="signal; else noSignal">
+      <div class="divider-label">Current Signal</div>
+
+      <div class="signal-row">
+        <span class="signal-key">Direction</span>
+        <app-bias-pill [bias]="signal.bias" [strength]="signal.strength"></app-bias-pill>
+      </div>
+      <div class="signal-row">
+        <span class="signal-key">Composite score</span>
+        <span class="signal-val" [style.color]="signal.compositeScore > 0 ? '#16A34A' : '#DC2626'">
+          {{ signal.compositeScore > 0 ? '+' : '' }}{{ signal.compositeScore | number:'1.3-3' }}
+        </span>
+      </div>
+      <div class="signal-row">
+        <span class="signal-key">Confidence</span>
+        <app-confidence-pill [confidence]="signal.confidence"></app-confidence-pill>
+      </div>
+      <div class="signal-row">
+        <span class="signal-key">VIX</span>
+        <span class="signal-val">
+          {{ signal.vixLevel | number:'1.2-2' }}
+          <span class="muted">({{ signal.vixRegime }})</span>
+        </span>
+      </div>
+    </div>
+
+    <ng-template #noSignal>
+      <div class="signal-summary-card muted-card">
+        <p>No market signal loaded. Please wait for the polling cycle or click Refresh.</p>
+      </div>
+    </ng-template>
+
+    <button class="btn-primary" (click)="generateRecommendation()" [disabled]="!signal">
+      ▶ &nbsp; Generate Recommendation
+    </button>
+    <p class="idle-note">Engine will run all 5 layers and populate the trade card below.</p>
+  </ng-container>
+
+  <!-- ── STATE: LOADING ────────────────────────────────────────────── -->
+  <ng-container *ngIf="state === 'loading'">
+    <div class="loading-container">
+      <mat-spinner diameter="36"></mat-spinner>
+      <p>Running 5-layer algorithm…</p>
+    </div>
+  </ng-container>
+
+  <!-- ── STATE: TRADE CARD ─────────────────────────────────────────── -->
+  <ng-container *ngIf="state === 'tradecard' && tradeCard">
+    <div class="trade-card-rec">
+      <div class="tc-header">
+        <span class="tc-strategy">✦ &nbsp;{{ strategyLabel(tradeCard.strategy) }}</span>
+        <span class="tc-conf-pill">{{ signal?.confidence }} CONF</span>
+      </div>
+      <div class="tc-body">
+
+        <div class="divider-label">Legs</div>
+        <div class="legs-grid">
+          <div class="leg-card leg-sell">
+            <div class="leg-badge">{{ tradeCard.shortLeg.action }} · SHORT LEG</div>
+            <div class="leg-strike">{{ tradeCard.shortLeg.strike | number }} {{ tradeCard.shortLeg.optionType }}</div>
+            <div class="leg-premium">LTP <span>₹ {{ tradeCard.shortLeg.ltp | number:'1.2-2' }}</span></div>
+            <div class="leg-premium" *ngIf="tradeCard.shortLeg.delta">
+              Δ <span>{{ tradeCard.shortLeg.delta | number:'1.3-3' }}</span>
+            </div>
+          </div>
+          <div class="leg-card leg-buy">
+            <div class="leg-badge">{{ tradeCard.longLeg.action }} · LONG LEG</div>
+            <div class="leg-strike">{{ tradeCard.longLeg.strike | number }} {{ tradeCard.longLeg.optionType }}</div>
+            <div class="leg-premium">LTP <span>₹ {{ tradeCard.longLeg.ltp | number:'1.2-2' }}</span></div>
+            <div class="leg-premium" *ngIf="tradeCard.longLeg.delta">
+              Δ <span>{{ tradeCard.longLeg.delta | number:'1.3-3' }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="divider-label">Position Metrics</div>
+        <div class="metrics-grid">
+          <app-metric-box label="Net Premium" [value]="'₹ ' + (tradeCard.netPremiumPerUnit | number:'1.2-2')" sub="per unit"></app-metric-box>
+          <app-metric-box label="Max Profit" [value]="formatInr(tradeCard.maxProfitTotal)" [sub]="tradeCard.lots + ' lots'" color="#16A34A"></app-metric-box>
+          <app-metric-box label="Max Loss" [value]="formatInr(tradeCard.theoreticalMaxLossTotal)" sub="theoretical" color="#DC2626"></app-metric-box>
+          <app-metric-box label="RoC" [value]="formatPct(tradeCard.roc)" [sub]="'ann. ' + formatPct(tradeCard.rocAnnualised)" color="#2563EB"></app-metric-box>
+          <app-metric-box label="PoP" [value]="formatPct(tradeCard.pop)" sub="min 80%" color="#16A34A"></app-metric-box>
+          <app-metric-box label="Lots" [value]="tradeCard.lots.toString()" [sub]="tradeCard.lotSize + ' units each'"></app-metric-box>
+        </div>
+
+        <div class="divider-label">Gate Results</div>
+        <div class="gate-list">
+          <div class="gate-row" *ngFor="let g of tradeCard.gateResults">
+            <app-gate-badge [state]="gateState(g.passed, g.gate === 'G2')"></app-gate-badge>
+            <span class="gate-name">{{ g.gate }}</span>
+            <span class="gate-desc">{{ g.description }}</span>
+            <span class="gate-value" [style.color]="g.passed ? '#16A34A' : '#DC2626'">
+              {{ g.value | number:'1.1-2' }}
+            </span>
+          </div>
+        </div>
+
+        <div class="divider-label">Monitor Thresholds</div>
+        <div class="monitor-config">
+          <div class="monitor-row">
+            <span class="monitor-key">T1 · Watch</span>
+            <span class="monitor-val t1">{{ tradeCard.thresholds.t1WatchNiftyLevel | number }}</span>
+          </div>
+          <div class="monitor-row">
+            <span class="monitor-key">T2 · Readjust</span>
+            <span class="monitor-val t2">{{ tradeCard.thresholds.t2ReadjustNiftyLevel | number }}</span>
+          </div>
+          <div class="monitor-row">
+            <span class="monitor-key">T3 · Exit (Short Strike)</span>
+            <span class="monitor-val t3">{{ tradeCard.thresholds.t3ExitNiftyLevel | number }}</span>
+          </div>
+        </div>
+
+        <div class="rationale" *ngIf="tradeCard.rationale">
+          💡 {{ tradeCard.rationale }}
+        </div>
+
+        <div class="action-row">
+          <button class="btn-confirm" (click)="confirmTrade()">✓ &nbsp;Confirm Trade</button>
+          <button class="btn-reject" (click)="rejectTrade()">✗ Reject</button>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- ── STATE: REJECTED ───────────────────────────────────────────── -->
+  <ng-container *ngIf="state === 'rejected' && tradeCard">
+    <div class="rejected-card">
+      <div class="rej-header">
+        <span class="rej-strategy">✦ &nbsp;{{ strategyLabel(tradeCard.strategy) }}</span>
+        <span class="rej-badge">REJECTED</span>
+      </div>
+      <div class="rej-body">
+        <div class="legs-grid">
+          <div class="leg-card leg-sell">
+            <div class="leg-badge">{{ tradeCard.shortLeg.action }}</div>
+            <div class="leg-strike">{{ tradeCard.shortLeg.strike | number }} {{ tradeCard.shortLeg.optionType }}</div>
+          </div>
+          <div class="leg-card leg-buy">
+            <div class="leg-badge">{{ tradeCard.longLeg.action }}</div>
+            <div class="leg-strike">{{ tradeCard.longLeg.strike | number }} {{ tradeCard.longLeg.optionType }}</div>
+          </div>
+        </div>
+
+        <div class="divider-label">Gate Results</div>
+        <div class="gate-list">
+          <div class="gate-row" *ngFor="let g of tradeCard.gateResults">
+            <app-gate-badge [state]="gateState(g.passed, g.gate === 'G2')"></app-gate-badge>
+            <span class="gate-name">{{ g.gate }}</span>
+            <span class="gate-desc">{{ g.description }}</span>
+            <span class="gate-value" [style.color]="g.passed ? '#16A34A' : '#DC2626'">{{ g.value | number:'1.1-2' }}</span>
+          </div>
+        </div>
+
+        <div class="rej-reason" *ngIf="tradeCard.rationale">
+          <strong>Why rejected: </strong>{{ tradeCard.rationale }}
+        </div>
+
+        <div class="rej-actions">
+          <button class="btn-retry" (click)="reset()">↺ &nbsp;Try Again</button>
+          <button class="btn-dismiss" (click)="reset()">✗ Dismiss</button>
+        </div>
+      </div>
+    </div>
+  </ng-container>
+
+  <!-- ── STATE: ACTIVE ENTRY ───────────────────────────────────────── -->
+  <ng-container *ngIf="state === 'active' && tradeCard">
+    <div class="fill-card">
+      <div class="fill-header">
+        <span class="fill-title">
+          {{ strategyLabel(tradeCard.strategy) }} &nbsp;·&nbsp;
+          {{ tradeCard.shortLeg.strike }}/{{ tradeCard.longLeg.strike }} {{ tradeCard.shortLeg.optionType }}
+        </span>
+        <span class="fill-status-badge">● CONFIRMED</span>
+      </div>
+      <div class="fill-body">
+        <div class="divider-label">Order Confirmed</div>
+        <div class="fill-row">
+          <span class="fill-key">Short leg</span>
+          <span class="fill-val">{{ tradeCard.shortLeg.strike }} {{ tradeCard.shortLeg.optionType }} &#64; ₹ {{ tradeCard.shortLeg.ltp | number:'1.2-2' }}</span>
+        </div>
+        <div class="fill-row">
+          <span class="fill-key">Long leg</span>
+          <span class="fill-val">{{ tradeCard.longLeg.strike }} {{ tradeCard.longLeg.optionType }} &#64; ₹ {{ tradeCard.longLeg.ltp | number:'1.2-2' }}</span>
+        </div>
+        <div class="fill-row">
+          <span class="fill-key">Net premium</span>
+          <span class="fill-val" style="color:#16A34A">₹ {{ tradeCard.netPremiumPerUnit | number:'1.2-2' }} / unit</span>
+        </div>
+        <div class="fill-row">
+          <span class="fill-key">Lots</span>
+          <span class="fill-val">{{ tradeCard.lots }} <span class="muted">({{ tradeCard.lots * tradeCard.lotSize }} units)</span></span>
+        </div>
+        <div class="fill-row">
+          <span class="fill-key">Expiry</span>
+          <span class="fill-val">{{ tradeCard.expiryDate }} <span class="muted">(DTE {{ tradeCard.dte }})</span></span>
+        </div>
+        <button class="btn-primary" style="margin-top:12px;" (click)="reset()">+ New Recommendation</button>
+      </div>
+    </div>
+  </ng-container>
+
+</div>

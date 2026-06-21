@@ -1,0 +1,91 @@
+spring:
+  application:
+    name: agent3-monitor
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/nifty_trading}
+    username: ${DB_USERNAME:nifty_user}
+    password: ${DB_PASSWORD:nifty_pass}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-test-query: SELECT 1
+      connection-timeout: 30000
+      max-lifetime: 1800000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        default_schema: public
+    show-sql: false
+
+  flyway:
+    # Migration scripts come from the db-migrations module on the classpath.
+    # Agent 3 runs Flyway on startup so it can operate independently of agent2
+    # (e.g. after a fresh DB restore or when spinning up for monitoring only).
+    # Flyway's built-in advisory lock prevents concurrent apply races with agent2.
+    enabled: true
+    locations: classpath:db/migration
+
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: 8083
+
+# Upstox connectivity — provided by core-module auto-configuration.
+# URLs are NOT secrets: live in yml. Tokens are env vars.
+upstox:
+  api:
+    base-url: ${UPSTOX_BASE_URL:https://api.upstox.com}
+    access-token: ${UPSTOX_ACCESS_TOKEN:}
+    token-encryption-key: ${TOKEN_ENCRYPTION_KEY:}
+    nifty-instrument-key: "NSE_INDEX|Nifty 50"
+    connect-timeout-seconds: 10
+    read-timeout-seconds: 15
+    retry-max: 3
+
+# Agent base URLs — used by Agent 3's readjustment clients.
+# URLs are NOT secrets: they live here, not in environment variables.
+# Override in application-local.yml for dev or in docker-compose for containers.
+agent1:
+  url: http://localhost:8081
+
+agent2:
+  url: http://localhost:8082
+
+agent5:
+  url: http://localhost:8085
+
+agent3:
+  monitoring:
+    # Scheduler — every 5 min during NSE market hours (9-15 block, filtered in code to 9:15-15:30 IST)
+    scheduler-cron: "0 */5 9-15 * * MON-FRI"
+    market-open-hour: 9
+    market-open-minute: 15
+    market-close-hour: 15
+    market-close-minute: 30
+    # VIX thresholds
+    vix-extreme-threshold: 24
+    vix-spike-intraday: 0.30
+    # PoP decision thresholds
+    pop-hold-minimum: 0.80
+    pop-watch-minimum: 0.75
+    pop-readjust-minimum: 0.65
+    # Debit spread theta exit
+    debit-theta-exit-dte: 2
+    # Expiry day (DTE=0) proximity buffers for credit spreads.
+    # PoP is binary on expiry day — use spot distance from short strike instead.
+    expiry-day-exit-buffer-pts: 75    # EXIT when spot is within 75 pts of short strike
+    expiry-day-watch-buffer-pts: 150  # WATCH when spot is within 150 pts of short strike
+    # Readjustment re-entry: relaxed G1 PoP gate split by VIX stress level.
+    readjust-pop-normal-vix: 65.0       # PoP floor when VIX ≤ 22
+    readjust-pop-stressed-vix: 70.0     # PoP floor when VIX > 22
+    readjust-vix-stress-threshold: 22   # VIX boundary between the two PoP floors
+    readjust-min-dte-days: 1            # No re-entry if DTE < 1 (expiry day or day-before)
+    # Black-Scholes
+    risk-free-rate: 0.065
+    nifty-instrument-key: "NSE_INDEX|Nifty 50"

@@ -2,6 +2,7 @@ package com.the3Cgrp.zupptrade.agent5.controller;
 
 import com.the3Cgrp.zupptrade.agent5.dto.*;
 import com.the3Cgrp.zupptrade.agent5.service.TradeExecutionService;
+import com.the3Cgrp.zupptrade.shared.dto.ExitTradeRequest;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,7 +10,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.List;
 import java.util.UUID;
 
 import static net.logstash.logback.argument.StructuredArguments.kv;
@@ -48,23 +48,20 @@ public class ExecutionController {
     }
 
     @PostMapping("/exit/{tradeId}")
-    public ResponseEntity<ExitResponse> exit(@PathVariable UUID tradeId,
-                                              @Valid @RequestBody ExitTradeRequest request) {
+    public ResponseEntity<ExitTradeResponse> exit(@PathVariable UUID tradeId,
+                                                   @Valid @RequestBody ExitTradeRequest request) {
         if (!request.tradeId().equals(tradeId)) {
             return ResponseEntity.badRequest().build();
         }
         log.info("api.exit", kv("tradeId", tradeId), kv("reason", request.reason()));
-        List<LegFillDto> fills = executionService.exit(request);
-        return ResponseEntity.ok(new ExitResponse(tradeId, "CLOSED", fills, LocalDateTime.now()));
+        ExitTradeResponse response = executionService.exit(request);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/health")
     public ResponseEntity<HealthResponse> health() {
         return ResponseEntity.ok(new HealthResponse("UP", LocalDateTime.now()));
     }
-
-    public record ExitResponse(UUID tradeId, String status,
-                                List<LegFillDto> exitFills, LocalDateTime closedAt) {}
 
     public record HealthResponse(String status, LocalDateTime timestamp) {}
 }

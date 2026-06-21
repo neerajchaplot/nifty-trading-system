@@ -21,5 +21,5 @@ target/
 .DS_Store
 Thumbs.db
 
-# Auth module — confidential, local only, never push to remote
+# Auth module — lives in separate repo: github.com/neerajchaplot/upstox-auth
 upstox-auth/

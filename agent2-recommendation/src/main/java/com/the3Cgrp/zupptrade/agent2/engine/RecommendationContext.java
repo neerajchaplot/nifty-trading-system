@@ -48,6 +48,7 @@ public class RecommendationContext {
     // ── Layer 4: Gate Validation ────────────────────────────────────────────
     private List<GateResultDto> gateResults = new ArrayList<>();
     private boolean allHardGatesPassed;
+    private BigDecimal relaxedGate1PopPct;  // null = standard threshold; set for readjustment re-entry
 
     // ── Layer 5: Position Sizing ────────────────────────────────────────────
     private int lots;
@@ -98,6 +99,8 @@ public class RecommendationContext {
     public void setGateResults(List<GateResultDto> gateResults) { this.gateResults = gateResults; }
     public boolean isAllHardGatesPassed() { return allHardGatesPassed; }
     public void setAllHardGatesPassed(boolean allHardGatesPassed) { this.allHardGatesPassed = allHardGatesPassed; }
+    public BigDecimal getRelaxedGate1PopPct() { return relaxedGate1PopPct; }
+    public void setRelaxedGate1PopPct(BigDecimal relaxedGate1PopPct) { this.relaxedGate1PopPct = relaxedGate1PopPct; }
     public int getLots() { return lots; }
     public void setLots(int lots) { this.lots = lots; }
     public BigDecimal getMaxProfitTotal() { return maxProfitTotal; }

@@ -494,7 +494,7 @@ class RecommendationE2ETest {
     // =========================================================================
 
     private TradeCardDto runRecommend(UUID signalId) {
-        RecommendRequestDto request = new RecommendRequestDto(userProfileId, signalId);
+        RecommendRequestDto request = RecommendRequestDto.standard(userProfileId, signalId);
         try {
             ResponseEntity<TradeCardDto> response = restClient()
                     .post()

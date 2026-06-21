@@ -85,11 +85,11 @@ class StrategySelectorTest {
 
         StrikeData atmCall = new StrikeData(24000, OptionType.CE, new BigDecimal("150"),
                 new BigDecimal("0.159"), new BigDecimal("0.50"), new BigDecimal("0.50"),
-                BigDecimal.valueOf(100000), new BigDecimal("149"), new BigDecimal("151"));
+                BigDecimal.valueOf(100000), new BigDecimal("149"), new BigDecimal("151"), null);
 
         StrikeData atmPut = new StrikeData(24000, OptionType.PE, new BigDecimal("148"),
                 new BigDecimal("0.159"), new BigDecimal("-0.50"), new BigDecimal("0.50"),
-                BigDecimal.valueOf(100000), new BigDecimal("147"), new BigDecimal("149"));
+                BigDecimal.valueOf(100000), new BigDecimal("147"), new BigDecimal("149"), null);
 
         OptionChainData chain = new OptionChainData(
                 new BigDecimal("24000"), LocalDate.now().plusDays(5),

@@ -89,5 +89,17 @@
             <artifactId>spring-boot-starter-web</artifactId>
             <scope>test</scope>
         </dependency>
+        <!--
+            Provides HikariCP + full JDBC auto-configuration for connectivity tests.
+            spring-jdbc is optional in main scope (JdbcTemplate class present) but
+            HikariCP is not — without it DataSourceAutoConfiguration cannot create
+            a DataSource bean, so JdbcTemplate is never created and ApiTokenDbLoader
+            cannot load the Upstox token from NeonDB.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

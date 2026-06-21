@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.the3Cgrp.zupptrade</groupId>
+        <artifactId>nifty-trading-system</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>agent3-monitor</artifactId>
+    <name>Agent 3 — Trade Monitor</name>
+    <description>Real-time trade monitoring using live PoP recalculation. Evaluates every 5 minutes and returns HOLD/WATCH/READJUST/EXIT/PAUSE.</description>
+
+    <dependencies>
+        <!-- Web -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- JPA + Hibernate (for monitoring_evaluations table) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <!-- JDBC template for reading trades table without duplicating entity -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+
+        <!-- Bean validation -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+
+        <!-- PostgreSQL -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Flyway engine — SQL scripts come from db-migrations on the classpath -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
+        <!-- All migration SQL scripts (V1–V9, V100) -->
+        <dependency>
+            <groupId>com.the3Cgrp.zupptrade</groupId>
+            <artifactId>db-migrations</artifactId>
+        </dependency>
+
+        <!-- Upstox clients (option chain, market quote, token management) -->
+        <dependency>
+            <groupId>com.the3Cgrp.zupptrade</groupId>
+            <artifactId>core-module</artifactId>
+        </dependency>
+
+        <!-- Shared DTOs and enums -->
+        <dependency>
+            <groupId>com.the3Cgrp.zupptrade</groupId>
+            <artifactId>shared-domain</artifactId>
+        </dependency>
+
+        <!-- Append-only trade lifecycle audit ledger -->
+        <dependency>
+            <groupId>com.the3Cgrp.zupptrade</groupId>
+            <artifactId>ledger-module</artifactId>
+        </dependency>
+
+        <!-- Structured JSON logging -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+        </dependency>
+
+        <!-- ShedLock — prevents duplicate monitoring cycles when a run overruns 5 min -->
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-spring</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-provider-jdbc-template</artifactId>
+        </dependency>
+
+        <!-- Test -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

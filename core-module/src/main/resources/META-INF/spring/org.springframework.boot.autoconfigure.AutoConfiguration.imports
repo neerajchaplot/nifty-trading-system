@@ -1,1 +1,2 @@
 com.the3Cgrp.zupptrade.core.upstox.config.UpstoxAutoConfiguration
+com.the3Cgrp.zupptrade.core.alert.AlertAutoConfiguration

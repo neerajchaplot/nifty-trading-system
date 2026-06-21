@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.the3Cgrp.zupptrade</groupId>
+        <artifactId>nifty-trading-system</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>db-migrations</artifactId>
+    <packaging>jar</packaging>
+    <name>DB Migrations — Flyway SQL Scripts</name>
+    <description>
+        Single source of truth for all Flyway SQL migration scripts.
+        No Java code — just SQL resources packaged into a JAR so that
+        any module adding this as a Maven dependency will automatically
+        have all migrations on its classpath at db/migration/*.sql.
+
+        Versioning:
+          V1–V9   — core trading system tables (owned by this project)
+          V100    — api_tokens (shared with upstox-auth, uses CREATE TABLE IF NOT EXISTS)
+
+        To add a new migration: drop a new Vn__description.sql here.
+        Do NOT duplicate SQL files in individual agent modules.
+    </description>
+
+    <!--
+        No dependencies, no Spring Boot plugin.
+        Maven's default jar packaging puts everything in src/main/resources
+        into the root of the JAR — Flyway scans classpath:db/migration
+        and finds them automatically.
+    -->
+    <dependencies/>
+
+</project>

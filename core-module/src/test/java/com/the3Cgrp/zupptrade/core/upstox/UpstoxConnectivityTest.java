@@ -39,7 +39,7 @@ class UpstoxConnectivityTest {
     @Autowired private UpstoxOptionChainClient optionChainClient;
     @Autowired private UpstoxMarketQuoteClient marketQuoteClient;
 
-    private static final LocalDate EXPIRY = LocalDate.of(2026, 5, 27); // Next Tuesday Nifty expiry
+    private static final LocalDate EXPIRY = LocalDate.of(2026, 6, 9); // Next Tuesday Nifty expiry
 
     // -------------------------------------------------------------------------
     // Test 1 — user profile (simplest auth check)

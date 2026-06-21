@@ -102,14 +102,22 @@ public class GateValidator {
         BigDecimal pop = isSellSpread
                 ? BigDecimal.ONE.subtract(ctx.getShortLeg().pop()).multiply(HUNDRED)
                 : ctx.getLongLeg().pop().multiply(HUNDRED);
-        BigDecimal threshold = isSellSpread
+
+        // Readjustment re-entry uses a relaxed PoP threshold (65% normal VIX, 70% stressed VIX).
+        // Null means standard gate (80% sell spread, 35% debit spread).
+        BigDecimal standardThreshold = isSellSpread
                 ? config.getMinPopSellSpread()
                 : config.getMinPopDebitSpread();
+        BigDecimal threshold = (ctx.getRelaxedGate1PopPct() != null)
+                ? ctx.getRelaxedGate1PopPct()
+                : standardThreshold;
 
         boolean passed = pop.compareTo(threshold) >= 0;
-        String description = isSellSpread
-                ? "PoP ≥ " + threshold + "% (sell spread minimum)"
-                : "Breakeven PoP ≥ " + threshold + "% (debit spread minimum)";
+        String description = (ctx.getRelaxedGate1PopPct() != null)
+                ? "PoP ≥ " + threshold + "% (READJUST relaxed gate)"
+                : (isSellSpread
+                        ? "PoP ≥ " + threshold + "% (sell spread minimum)"
+                        : "Breakeven PoP ≥ " + threshold + "% (debit spread minimum)");
 
         return new GateResultDto("G1", passed, description, pop.setScale(2, RoundingMode.HALF_UP), threshold);
     }

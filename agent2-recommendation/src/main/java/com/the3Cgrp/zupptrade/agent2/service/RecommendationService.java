@@ -19,6 +19,9 @@ import com.the3Cgrp.zupptrade.agent2.repository.ReferenceDataRepository;
 import com.the3Cgrp.zupptrade.agent2.repository.TradeRepository;
 import com.the3Cgrp.zupptrade.agent2.repository.UserProfileRepository;
 import com.the3Cgrp.zupptrade.agent2.util.JsonUtil;
+import com.the3Cgrp.zupptrade.ledger.LedgerEventType;
+import com.the3Cgrp.zupptrade.ledger.TradeLedgerService;
+import com.the3Cgrp.zupptrade.ledger.payload.*;
 import com.the3Cgrp.zupptrade.shared.dto.*;
 import com.the3Cgrp.zupptrade.shared.enums.SpreadDirection;
 import com.the3Cgrp.zupptrade.shared.enums.Strategy;
@@ -55,6 +58,7 @@ public class RecommendationService {
     private final RecommendationEngine engine;
     private final VolatilityService volatilityService;
     private final JsonUtil jsonUtil;
+    private final TradeLedgerService ledger;
 
     public RecommendationService(Agent1SignalRepository signalRepository,
                                   UserProfileRepository userProfileRepository,
@@ -64,7 +68,8 @@ public class RecommendationService {
                                   MarketDataClient marketDataClient,
                                   RecommendationEngine engine,
                                   VolatilityService volatilityService,
-                                  JsonUtil jsonUtil) {
+                                  JsonUtil jsonUtil,
+                                  TradeLedgerService ledger) {
         this.signalRepository = signalRepository;
         this.userProfileRepository = userProfileRepository;
         this.tradeRepository = tradeRepository;
@@ -74,6 +79,7 @@ public class RecommendationService {
         this.engine = engine;
         this.volatilityService = volatilityService;
         this.jsonUtil = jsonUtil;
+        this.ledger = ledger;
     }
 
     @Transactional
@@ -104,10 +110,35 @@ public class RecommendationService {
         ctx.setExpiryDate(signal.getExpiryDate());
         ctx.setDte(dte);
         ctx.setOptionChainData(optionChain);
+        ctx.setRelaxedGate1PopPct(request.relaxedGate1PopPct());  // null for normal flow; set by ReadjustmentService
 
         engine.execute(ctx);
 
         TradeEntity trade = buildAndPersistTrade(ctx, signal, userProfile, snapshot, optionChain);
+
+        // Ledger: TRADE_PENDING (gates passed) or TRADE_REJECTED (gate failure)
+        // Record joins the outer @Transactional — commits with the trade row (FK safe).
+        TradeSummary ledgerSummary = jsonUtil.fromJson(trade.getSummary(), TradeSummary.class);
+        if (trade.getStatus() == TradeStatus.PENDING_CONFIRM) {
+            ledger.record(trade.getId(), LedgerEventType.TRADE_PENDING,
+                    new TradePendingPayload(
+                            signal.getId(), userProfile.getId(),
+                            ctx.getStrategy(),
+                            signal.getCompositeScore(),
+                            signal.getBias() != null ? signal.getBias().name() : null,
+                            signal.getStrength() != null ? signal.getStrength().name() : null,
+                            ledgerSummary.netPremiumPerUnit(),
+                            ctx.getLots(), ctx.getLotSize(),
+                            ledgerSummary.maxProfitTotal(),
+                            ledgerSummary.theoreticalMaxLossTotal(),
+                            ledgerSummary.pop(),
+                            orZero(ctx.getRoc())),
+                    "AGENT2:SYSTEM");
+        } else {
+            ledger.record(trade.getId(), LedgerEventType.TRADE_REJECTED,
+                    new TradeRejectedPayload("GATE_FAILURE", trade.getCloseReason()),
+                    "AGENT2:SYSTEM");
+        }
 
         log.info("recommendation.generated",
                 kv("tradeId", trade.getId()),
@@ -149,6 +180,19 @@ public class RecommendationService {
         }
 
         tradeRepository.save(trade);
+
+        // Ledger: TRADE_APPROVED or TRADE_REJECTED (joins outer @Transactional)
+        if (request.action() == com.the3Cgrp.zupptrade.shared.enums.ConfirmAction.CONFIRM) {
+            ledger.record(trade.getId(), LedgerEventType.TRADE_APPROVED,
+                    new TradeApprovedPayload(
+                            trade.getUserProfile() != null ? trade.getUserProfile().getId() : null,
+                            request.overrideLots()),
+                    "AGENT2:USER");
+        } else {
+            ledger.record(trade.getId(), LedgerEventType.TRADE_REJECTED,
+                    new TradeRejectedPayload("USER", "USER_REJECTED"),
+                    "AGENT2:USER");
+        }
 
         log.info("trade.confirmed",
                 kv("tradeId", trade.getId()),
