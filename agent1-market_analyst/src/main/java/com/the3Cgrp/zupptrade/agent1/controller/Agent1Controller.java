@@ -32,6 +32,24 @@ public class Agent1Controller {
         return ResponseEntity.ok(agent1Service.latest(expiryDate));
     }
 
+    /**
+     * Returns the next upcoming Nifty expiry date.
+     * Reads from reference_data cache (TTL 7 days); fetches from Upstox when stale.
+     * The UI and Agent 2 use this to populate the expiry date selector.
+     */
+    @GetMapping("/next-expiry")
+    public ResponseEntity<java.util.Map<String, Object>> nextExpiry() {
+        LocalDate next = agent1Service.nextExpiry();
+        if (next == null) {
+            return ResponseEntity.status(503).body(java.util.Map.of(
+                    "error", "Expiry date unavailable — Upstox unreachable and no cached data"));
+        }
+        return ResponseEntity.ok(java.util.Map.of(
+                "nextExpiry", next,
+                "allUpcoming", agent1Service.allUpcomingExpiries()
+        ));
+    }
+
     @GetMapping("/health")
     public ResponseEntity<HealthDto> health() {
         return ResponseEntity.ok(agent1Service.health());

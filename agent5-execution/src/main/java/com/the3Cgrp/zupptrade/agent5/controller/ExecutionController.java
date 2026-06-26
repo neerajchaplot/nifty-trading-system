@@ -2,11 +2,13 @@ package com.the3Cgrp.zupptrade.agent5.controller;
 
 import com.the3Cgrp.zupptrade.agent5.dto.*;
 import com.the3Cgrp.zupptrade.agent5.service.TradeExecutionService;
+import com.the3Cgrp.zupptrade.agent5.service.UpstoxConnectionCheckService;
 import com.the3Cgrp.zupptrade.shared.dto.ExitTradeRequest;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -27,7 +29,12 @@ import static net.logstash.logback.argument.StructuredArguments.kv;
  *   Places reverse MARKET orders on all legs.
  *
  * GET /api/v1/agent5/health
- *   Liveness probe.
+ *   Liveness probe — includes DB ping and Upstox token status.
+ *   Does NOT call the Upstox API; use /upstox/status for a live connectivity check.
+ *
+ * GET /api/v1/agent5/upstox/status
+ *   Live Upstox connectivity check — calls GET /v2/user/profile.
+ *   Use before a trading session to confirm the token is valid and Upstox is reachable.
  */
 @RestController
 @RequestMapping("/api/v1/agent5")
@@ -35,10 +42,16 @@ public class ExecutionController {
 
     private static final Logger log = LoggerFactory.getLogger(ExecutionController.class);
 
-    private final TradeExecutionService executionService;
+    private final TradeExecutionService        executionService;
+    private final UpstoxConnectionCheckService connectionCheckService;
+    private final JdbcTemplate                 jdbc;
 
-    public ExecutionController(TradeExecutionService executionService) {
-        this.executionService = executionService;
+    public ExecutionController(TradeExecutionService executionService,
+                               UpstoxConnectionCheckService connectionCheckService,
+                               JdbcTemplate jdbc) {
+        this.executionService        = executionService;
+        this.connectionCheckService  = connectionCheckService;
+        this.jdbc                    = jdbc;
     }
 
     @PostMapping("/execute")
@@ -58,10 +71,42 @@ public class ExecutionController {
         return ResponseEntity.ok(response);
     }
 
+    /**
+     * Liveness probe — fast check, no external API calls.
+     * Returns DEGRADED if the DB is unreachable; the app is still running.
+     */
     @GetMapping("/health")
     public ResponseEntity<HealthResponse> health() {
-        return ResponseEntity.ok(new HealthResponse("UP", LocalDateTime.now()));
+        boolean dbOk         = pingDb();
+        boolean tokenLoaded  = connectionCheckService.isTokenLoaded();
+        String  status       = dbOk ? "UP" : "DEGRADED";
+        return ResponseEntity.ok(new HealthResponse(status, LocalDateTime.now(), dbOk, tokenLoaded));
     }
 
-    public record HealthResponse(String status, LocalDateTime timestamp) {}
+    /**
+     * Live Upstox connectivity check — calls GET /v2/user/profile (~200ms).
+     * Call this before starting a trading session to confirm the connection is healthy.
+     */
+    @GetMapping("/upstox/status")
+    public ResponseEntity<UpstoxStatusResponse> upstoxStatus() {
+        log.info("api.upstox.status");
+        return ResponseEntity.ok(connectionCheckService.check());
+    }
+
+    private boolean pingDb() {
+        try {
+            jdbc.queryForObject("SELECT 1", Integer.class);
+            return true;
+        } catch (Exception e) {
+            log.warn("health.db.ping.failed error={}", e.getMessage());
+            return false;
+        }
+    }
+
+    public record HealthResponse(
+            String status,
+            LocalDateTime timestamp,
+            boolean dbConnected,
+            boolean upstoxTokenLoaded
+    ) {}
 }

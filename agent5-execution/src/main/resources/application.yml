@@ -46,6 +46,10 @@ agent5:
     slippage-alert-threshold: "0.10"
     # Product type: D = Delivery/NRML. NEVER use I (Intraday) for weekly spreads.
     product: D
+    # Skip margin sufficiency check — false in production, true only in sandbox for testing
+    bypass-margin-check: false
+    # Skip Upstox order placement and inject synthetic fills at limitPrice — for sandbox only
+    simulate-fills: false
 
 logging:
   level:

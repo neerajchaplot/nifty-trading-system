@@ -11,6 +11,7 @@ import com.the3Cgrp.zupptrade.agent3.model.MonitorEvaluationContext;
 import com.the3Cgrp.zupptrade.agent3.model.TradeMonitorData;
 import com.the3Cgrp.zupptrade.agent3.repository.MonitoringEvaluationRepository;
 import com.the3Cgrp.zupptrade.agent3.util.JsonUtil;
+import com.the3Cgrp.zupptrade.agent3.dto.EvaluateOverrideRequest;
 import com.the3Cgrp.zupptrade.shared.dto.MonitorConfigDto;
 import com.the3Cgrp.zupptrade.shared.enums.MonitorAction;
 import com.the3Cgrp.zupptrade.shared.enums.ThresholdHit;
@@ -75,10 +76,33 @@ public class MonitorEvaluationService {
      */
     @Transactional
     public EvaluationResponse evaluate(UUID tradeId) {
+        return evaluate(tradeId, null);
+    }
+
+    /**
+     * REST endpoint path with optional override — used for offline/weekend testing.
+     * When overrides is non-null and has niftySpot set, a synthetic snapshot is built
+     * from the provided values instead of calling Upstox. All other fields in the
+     * override that are null default to zero (LTPs) or null (IV, VIX).
+     */
+    @Transactional
+    public EvaluationResponse evaluate(UUID tradeId, EvaluateOverrideRequest overrides) {
         TradeMonitorData trade = loadAndValidate(tradeId);
         MonitorConfigDto config = deserializeConfig(trade);
-        LiveMarketSnapshot liveData = marketDataService.fetchSnapshot(
-                config.shortLeg(), config.longLeg(), config.expiryDate());
+        LiveMarketSnapshot liveData;
+        if (overrides != null && overrides.hasOverrides()) {
+            log.warn("agent3.evaluation.override tradeId={} spot={} vix={} — OFFLINE/TEST MODE",
+                    tradeId, overrides.niftySpot(), overrides.vix());
+            liveData = new LiveMarketSnapshot(
+                    overrides.niftySpot(),
+                    overrides.vix(),
+                    overrides.shortLegLtp(),
+                    overrides.longLegLtp(),
+                    overrides.shortLegIv());
+        } else {
+            liveData = marketDataService.fetchSnapshot(
+                    config.shortLeg(), config.longLeg(), config.expiryDate());
+        }
         return doEvaluate(trade, config, liveData);
     }
 

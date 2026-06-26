@@ -1,7 +1,7 @@
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:21-jre-jammy
 WORKDIR /app
 
-COPY target/agent2-recommendation-1.0.0-SNAPSHOT.jar app.jar
+COPY target/agent2-recommendation-*.jar app.jar
 
 EXPOSE 8082
 

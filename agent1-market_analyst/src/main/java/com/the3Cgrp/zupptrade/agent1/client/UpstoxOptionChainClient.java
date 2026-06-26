@@ -49,16 +49,22 @@ public class UpstoxOptionChainClient {
                 coreClient.fetch(expiryDate);
         if (core == null) return null;
 
-        VixRegime regime = toVixRegime(core.vixLevel());
+        // Fall back to the previous session's VIX when live LTP is unavailable (market closed)
+        BigDecimal effectiveVix = core.vixLevel() != null ? core.vixLevel() : vixPrevLevel;
+        VixRegime regime = toVixRegime(effectiveVix);
         BigDecimal futuresPremium = computeFuturesPremium(core.spot());
+
+        if (core.vixLevel() == null && vixPrevLevel != null) {
+            log.debug("agent1.vix.using_prev_level prevVix={}", vixPrevLevel);
+        }
 
         return new OptionChainSummary(
                 core.spot(),
                 futuresPremium,
                 core.pcr(),
                 core.maxPain(),
-                core.vixLevel(),
-                vixPrevLevel,       // supplied by caller from last stored signal
+                effectiveVix,
+                vixPrevLevel,
                 regime,
                 core.callOiChange(),
                 core.putOiChange()

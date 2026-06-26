@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: agent4-backtest
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/nifty_trading}
+    username: ${DB_USERNAME:nifty_user}
+    password: ${DB_PASSWORD:nifty_pass}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connection-test-query: SELECT 1
+      connection-timeout: 30000
+      max-lifetime: 1800000
+
+  # Agent 4 is read-only — never runs DDL or migrations.
+  flyway:
+    enabled: false
+
+  mvc:
+    problemdetails:
+      enabled: true
+
+server:
+  port: 8084
+
+agent4:
+  analytics:
+    # Default page size for trade list when caller does not specify
+    default-page-size: 5
+    # Maximum date range (days) for a single query — prevents runaway scans
+    max-date-range-days: 365
+    # Schema for all DB view queries
+    db-schema: zupptrade_dev

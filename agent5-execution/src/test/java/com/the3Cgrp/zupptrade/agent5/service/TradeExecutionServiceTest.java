@@ -3,15 +3,19 @@ package com.the3Cgrp.zupptrade.agent5.service;
 import tools.jackson.databind.json.JsonMapper;
 import com.the3Cgrp.zupptrade.agent5.client.UpstoxOrderClient;
 import com.the3Cgrp.zupptrade.agent5.client.UpstoxOrderClient.UpstoxOrderException;
+import com.the3Cgrp.zupptrade.agent5.client.response.FundsAndMarginResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.MarginCheckResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.MarginCheckResponse.MarginData;
 import com.the3Cgrp.zupptrade.agent5.client.response.MultiOrderResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.MultiOrderResponse.Summary;
 import com.the3Cgrp.zupptrade.agent5.client.response.OrderStatusResponse;
 import com.the3Cgrp.zupptrade.agent5.config.Agent5ExecutionProperties;
+import com.the3Cgrp.zupptrade.agent5.client.request.MultiOrderRequest;
 import com.the3Cgrp.zupptrade.agent5.dto.ExecuteTradeRequest;
 import com.the3Cgrp.zupptrade.agent5.dto.ExecuteTradeResponse;
+import com.the3Cgrp.zupptrade.agent5.dto.ExitTradeResponse;
 import com.the3Cgrp.zupptrade.agent5.dto.LegOrderRequest;
+import com.the3Cgrp.zupptrade.shared.dto.ExitTradeRequest;
 import com.the3Cgrp.zupptrade.core.alert.AlertService;
 import com.the3Cgrp.zupptrade.ledger.TradeLedgerService;
 import com.the3Cgrp.zupptrade.shared.enums.LegAction;
@@ -20,6 +24,7 @@ import com.the3Cgrp.zupptrade.shared.enums.TradeStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -126,10 +131,11 @@ class TradeExecutionServiceTest {
     @Test
     void execute_insufficientMargin_returnsRejected() {
         givenConfirmedTrade(EXPECTED_NET);
-        // availableMargin (50k) < finalMargin (75k) → insufficient
-        MarginCheckResponse insufficientMargin = new MarginCheckResponse("success",
-                new MarginData(new BigDecimal("80000"), new BigDecimal("75000"), new BigDecimal("50000")));
-        when(orderClient.checkMargin(any())).thenReturn(insufficientMargin);
+        // finalMargin = 75k, availableFunds = 50k → insufficient
+        when(orderClient.checkMargin(any())).thenReturn(
+                new MarginCheckResponse("success", new MarginData(new BigDecimal("80000"), new BigDecimal("75000"))));
+        when(orderClient.getAvailableFunds()).thenReturn(
+                new FundsAndMarginResponse("success", new FundsAndMarginResponse.FundsData(new BigDecimal("50000"))));
 
         ExecuteTradeResponse response = service.execute(buildRequest());
 
@@ -238,16 +244,135 @@ class TradeExecutionServiceTest {
 
     @Test
     void execute_rejected_updatesTradeStatusToRejected() {
-        // Trigger rejection via insufficient margin
+        // Trigger rejection via insufficient margin (finalMargin = 75k, available = 10k)
         givenConfirmedTrade(EXPECTED_NET);
-        MarginCheckResponse insufficient = new MarginCheckResponse("success",
-                new MarginData(new BigDecimal("80000"), new BigDecimal("75000"), new BigDecimal("10000")));
-        when(orderClient.checkMargin(any())).thenReturn(insufficient);
+        when(orderClient.checkMargin(any())).thenReturn(
+                new MarginCheckResponse("success", new MarginData(new BigDecimal("80000"), new BigDecimal("75000"))));
+        when(orderClient.getAvailableFunds()).thenReturn(
+                new FundsAndMarginResponse("success", new FundsAndMarginResponse.FundsData(new BigDecimal("10000"))));
 
         service.execute(buildRequest());
 
         // DB must record the REJECTED status
         verify(jdbc).update(contains("status = 'REJECTED'"), anyString(), eq(TRADE_ID));
+    }
+
+    // ── Exit — happy path ─────────────────────────────────────────────────────
+
+    @Test
+    void exit_activeStatus_placesReverseMarketOrderAndReturnsClosed() {
+        givenCurrentTradeStatus("ACTIVE");
+        when(orderClient.placeMultiOrder(any())).thenReturn(exitOrderSuccess());
+
+        ExitTradeResponse response = service.exit(buildExitRequest());
+
+        assertThat(response.status()).isEqualTo(TradeStatus.CLOSED);
+        assertThat(response.failureReason()).isNull();
+        assertThat(response.closedAt()).isNotNull();
+        verify(orderClient).placeMultiOrder(any());
+    }
+
+    @Test
+    void exit_exitInProgressStatus_proceedsAndReturnsClosed() {
+        // EXIT_IN_PROGRESS = Agent 3 already set the guard; Agent 5 retries the placement
+        givenCurrentTradeStatus("EXIT_IN_PROGRESS");
+        when(orderClient.placeMultiOrder(any())).thenReturn(exitOrderSuccess());
+
+        ExitTradeResponse response = service.exit(buildExitRequest());
+
+        assertThat(response.status()).isEqualTo(TradeStatus.CLOSED);
+        verify(orderClient).placeMultiOrder(any());
+    }
+
+    @Test
+    void exit_exitFailedStatus_proceedsAndReturnsClosed() {
+        // EXIT_FAILED = previous cycle failed; Agent 3 retries on next cycle
+        givenCurrentTradeStatus("EXIT_FAILED");
+        when(orderClient.placeMultiOrder(any())).thenReturn(exitOrderSuccess());
+
+        ExitTradeResponse response = service.exit(buildExitRequest());
+
+        assertThat(response.status()).isEqualTo(TradeStatus.CLOSED);
+        verify(orderClient).placeMultiOrder(any());
+    }
+
+    // ── Exit — non-eligible statuses (early return) ───────────────────────────
+
+    @Test
+    void exit_closedStatus_returnsEarlyNoOrderPlaced() {
+        givenCurrentTradeStatus("CLOSED");
+
+        ExitTradeResponse response = service.exit(buildExitRequest());
+
+        assertThat(response.failureReason()).containsIgnoringCase("not in exit-eligible");
+        verifyNoInteractions(orderClient);
+    }
+
+    @Test
+    void exit_rejectedStatus_returnsEarlyNoOrderPlaced() {
+        givenCurrentTradeStatus("REJECTED");
+
+        ExitTradeResponse response = service.exit(buildExitRequest());
+
+        assertThat(response.failureReason()).containsIgnoringCase("not in exit-eligible");
+        verifyNoInteractions(orderClient);
+    }
+
+    @Test
+    void exit_tradeNotFoundInDb_returnsEarlyNoOrderPlaced() {
+        when(jdbc.queryForObject(anyString(), eq(String.class), any())).thenReturn(null);
+
+        ExitTradeResponse response = service.exit(buildExitRequest());
+
+        assertThat(response.failureReason()).containsIgnoringCase("not in exit-eligible");
+        verifyNoInteractions(orderClient);
+    }
+
+    // ── Exit — failure paths ──────────────────────────────────────────────────
+
+    @Test
+    void exit_orderPlacementFails_setsExitFailedAndAlerts() {
+        givenCurrentTradeStatus("ACTIVE");
+        when(orderClient.placeMultiOrder(any()))
+                .thenThrow(new UpstoxOrderException("connection refused"));
+
+        ExitTradeResponse response = service.exit(buildExitRequest());
+
+        assertThat(response.status()).isEqualTo(TradeStatus.EXIT_FAILED);
+        assertThat(response.failureReason()).isNotBlank();
+        // Critical alert must fire — user must know position may still be open
+        verify(alertService).critical(eq(TRADE_ID), anyString(), anyString());
+    }
+
+    @Test
+    void exit_payloadError_setsExitFailedAndAlerts() {
+        givenCurrentTradeStatus("ACTIVE");
+        MultiOrderResponse payloadErr = new MultiOrderResponse(
+                "success", List.of(), List.of(), new Summary(2, 0, 0, 2));
+        when(orderClient.placeMultiOrder(any())).thenReturn(payloadErr);
+
+        ExitTradeResponse response = service.exit(buildExitRequest());
+
+        assertThat(response.status()).isEqualTo(TradeStatus.EXIT_FAILED);
+        verify(alertService).critical(eq(TRADE_ID), anyString(), anyString());
+    }
+
+    // ── Exit — action reversal ────────────────────────────────────────────────
+
+    @Test
+    void exit_reversesLegActions_sellLegGetsBuyOrder_buyLegGetsSellOrder() {
+        givenCurrentTradeStatus("ACTIVE");
+        ArgumentCaptor<MultiOrderRequest> captor = ArgumentCaptor.forClass(MultiOrderRequest.class);
+        when(orderClient.placeMultiOrder(captor.capture())).thenReturn(exitOrderSuccess());
+
+        // buildExitRequest: leg 0 = SELL, leg 1 = BUY — both must be reversed to MARKET
+        service.exit(buildExitRequest());
+
+        MultiOrderRequest placed = captor.getValue();
+        assertThat(placed.orders()).hasSize(2);
+        assertThat(placed.orders().get(0).transactionType()).isEqualTo("BUY");  // SELL → BUY
+        assertThat(placed.orders().get(1).transactionType()).isEqualTo("SELL"); // BUY → SELL
+        assertThat(placed.orders()).allMatch(leg -> "MARKET".equals(leg.orderType()));
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -262,9 +387,10 @@ class TradeExecutionServiceTest {
     }
 
     private void givenSufficientMargin() {
-        MarginCheckResponse ok = new MarginCheckResponse("success",
-                new MarginData(new BigDecimal("80000"), new BigDecimal("75000"), new BigDecimal("200000")));
-        when(orderClient.checkMargin(any())).thenReturn(ok);
+        when(orderClient.checkMargin(any())).thenReturn(
+                new MarginCheckResponse("success", new MarginData(new BigDecimal("80000"), new BigDecimal("75000"))));
+        when(orderClient.getAvailableFunds()).thenReturn(
+                new FundsAndMarginResponse("success", new FundsAndMarginResponse.FundsData(new BigDecimal("200000"))));
     }
 
     private void givenMultiOrderPlaced(String sellOrderId, String buyOrderId) {
@@ -295,5 +421,22 @@ class TradeExecutionServiceTest {
                         "NFO_OPT|NIFTY|2026-06-09|24400|PE",
                         OptionType.PE, 24400, LegAction.BUY,  new BigDecimal("25.00"), 75)
         ));
+    }
+
+    private void givenCurrentTradeStatus(String status) {
+        when(jdbc.queryForObject(anyString(), eq(String.class), any())).thenReturn(status);
+    }
+
+    private ExitTradeRequest buildExitRequest() {
+        return new ExitTradeRequest(TRADE_ID, "T3_EXIT_BREACH", List.of(
+                new ExitTradeRequest.ExitLeg(
+                        "NFO_OPT|NIFTY|2026-06-09|24500|PE", LegAction.SELL, 75),
+                new ExitTradeRequest.ExitLeg(
+                        "NFO_OPT|NIFTY|2026-06-09|24400|PE", LegAction.BUY, 75)
+        ));
+    }
+
+    private MultiOrderResponse exitOrderSuccess() {
+        return new MultiOrderResponse("success", List.of(), List.of(), new Summary(2, 2, 0, 0));
     }
 }

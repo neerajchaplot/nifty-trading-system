@@ -5,6 +5,7 @@ import com.the3Cgrp.zupptrade.agent5.client.UpstoxOrderClient;
 import com.the3Cgrp.zupptrade.agent5.client.UpstoxOrderClient.UpstoxOrderException;
 import com.the3Cgrp.zupptrade.agent5.client.request.MarginCheckRequest;
 import com.the3Cgrp.zupptrade.agent5.client.request.MultiOrderRequest;
+import com.the3Cgrp.zupptrade.agent5.client.response.FundsAndMarginResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.MarginCheckResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.MultiOrderResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.OrderStatusResponse;
@@ -88,7 +89,7 @@ public class TradeExecutionService {
             return rejected(tradeId, null, "MARGIN_CHECK", "Trade not found or not in CONFIRMED status: " + tradeId);
         }
 
-        // ── Step 1: Margin check ─────────────────────────────────────────────
+        // ── Step 1: Margin check — required margin from /v2/charges/margin ────
         MarginCheckResponse margin;
         try {
             margin = orderClient.checkMargin(buildMarginRequest(request));
@@ -97,16 +98,37 @@ public class TradeExecutionService {
             return rejected(tradeId, expectedNet, "MARGIN_CHECK", "Margin check failed: " + e.getMessage());
         }
 
-        if (!margin.hasSufficientMargin()) {
-            String reason = String.format("Insufficient margin. Required: ₹%.2f  Available: ₹%.2f",
-                    margin.data().finalMargin(), margin.data().availableMargin());
-            log.warn("execution.margin.insufficient", kv("tradeId", tradeId),
-                    kv("required", margin.data().finalMargin()),
-                    kv("available", margin.data().availableMargin()));
-            return rejected(tradeId, expectedNet, "MARGIN_CHECK", reason);
+        BigDecimal requiredMargin = margin.data().finalMargin();
+
+        // ── Step 1b: Available funds check — /v2/user/fund-and-margin ─────────
+        if (props.isBypassMarginCheck()) {
+            log.warn("execution.margin.bypassed",
+                    kv("tradeId", tradeId), kv("required", requiredMargin),
+                    kv("note", "bypass-margin-check=true — NEVER use in production"));
+        } else {
+            FundsAndMarginResponse funds;
+            try {
+                funds = orderClient.getAvailableFunds();
+            } catch (UpstoxOrderException e) {
+                log.error("execution.funds.failed", kv("tradeId", tradeId), kv("error", e.getMessage()));
+                return rejected(tradeId, expectedNet, "MARGIN_CHECK", "Fund check failed: " + e.getMessage());
+            }
+            BigDecimal availableMargin = funds.availableMargin();
+            if (availableMargin.compareTo(requiredMargin) < 0) {
+                String reason = String.format("Insufficient margin. Required: ₹%.2f  Available: ₹%.2f",
+                        requiredMargin, availableMargin);
+                log.warn("execution.margin.insufficient", kv("tradeId", tradeId),
+                        kv("required", requiredMargin), kv("available", availableMargin));
+                return rejected(tradeId, expectedNet, "MARGIN_CHECK", reason);
+            }
         }
 
         // ── Step 2: multi/place — all legs simultaneously ────────────────────
+        // Upstox sandbox does not carry weekly NIFTY option contracts; simulate fills when flag set.
+        if (props.isSimulateFills()) {
+            return executeSimulated(tradeId, request, expectedNet);
+        }
+
         MultiOrderResponse placed;
         try {
             placed = orderClient.placeMultiOrder(buildMultiOrderRequest(request, tag));
@@ -398,12 +420,19 @@ public class TradeExecutionService {
         return sellTotal.subtract(buyTotal).setScale(2, RoundingMode.HALF_UP);
     }
 
+    // Detect spread direction from actual fill net (SELL_total - BUY_total):
+    //   Credit spread (received) → actual > 0 → slippage when actual < expected × (1 - threshold)
+    //   Debit spread (paid out)  → actual < 0 → slippage when abs(actual) > abs(expected) × (1 + threshold)
+    // Using actual sign (not expected sign) because Agent 2 always stores netPremiumPerUnit
+    // as a positive magnitude for both credit and debit spreads.
     private boolean isSlippage(BigDecimal actual, BigDecimal expected) {
         if (expected == null || expected.signum() == 0) return false;
         BigDecimal threshold = props.getSlippageAlertThreshold();
-        if (expected.signum() > 0) {
-            return actual.compareTo(expected.multiply(BigDecimal.ONE.subtract(threshold))) < 0;
+        if (actual.signum() >= 0) {
+            // Credit spread — slippage means receiving less than expected
+            return actual.compareTo(expected.abs().multiply(BigDecimal.ONE.subtract(threshold))) < 0;
         } else {
+            // Debit spread — slippage means paying more than expected
             return actual.abs().compareTo(expected.abs().multiply(BigDecimal.ONE.add(threshold))) > 0;
         }
     }
@@ -431,6 +460,67 @@ public class TradeExecutionService {
             log.error("execution.db.read.failed", kv("tradeId", tradeId), kv("error", e.getMessage()));
             return null;
         }
+    }
+
+    // ── Simulate fills (sandbox only) ─────────────────────────────────────────
+
+    /**
+     * Bypasses Upstox order placement entirely.
+     * Builds synthetic fills at each leg's limitPrice (zero slippage), then runs the
+     * normal downstream path: slippage check → persistFills → ACTIVE.
+     * Allows end-to-end execution flow testing when the sandbox doesn't support the instrument.
+     */
+    private ExecuteTradeResponse executeSimulated(UUID tradeId, ExecuteTradeRequest request,
+                                                  BigDecimal expectedNet) {
+        log.warn("execution.fills.simulated",
+                kv("tradeId", tradeId),
+                kv("legCount", request.legs().size()),
+                kv("note", "simulate-fills=true — NEVER use in production"));
+
+        List<LegFillDto> fills = buildSimulatedFills(request);
+
+        BigDecimal actualNet = computeActualNet(fills);
+        boolean slippage     = isSlippage(actualNet, expectedNet);
+        String slippageMsg   = null;
+        if (slippage) {
+            slippageMsg = String.format(
+                    "Slippage alert: actual net ₹%.2f vs expected ₹%.2f. Trade is live.",
+                    actualNet, expectedNet);
+            log.warn("execution.slippage", kv("tradeId", tradeId),
+                    kv("actual", actualNet), kv("expected", expectedNet));
+        }
+
+        persistFills(tradeId, fills);
+
+        recordSilently(tradeId, LedgerEventType.TRADE_EXECUTED,
+                buildTradeExecutedPayload(fills, actualNet, slippage, slippageMsg),
+                "AGENT5:SIMULATE");
+
+        log.info("execution.simulated.complete", kv("tradeId", tradeId),
+                kv("actualNet", actualNet), kv("slippageAlert", slippage));
+
+        return new ExecuteTradeResponse(tradeId, TradeStatus.ACTIVE, fills,
+                actualNet, expectedNet, slippage, slippageMsg, null, LocalDateTime.now());
+    }
+
+    private List<LegFillDto> buildSimulatedFills(ExecuteTradeRequest request) {
+        List<LegFillDto> fills = new ArrayList<>();
+        for (int i = 0; i < request.legs().size(); i++) {
+            LegOrderRequest leg = request.legs().get(i);
+            String simulatedOrderId = "SIM-" + request.tradeId().toString().substring(0, 8).toUpperCase() + "-L" + i;
+            fills.add(new LegFillDto(
+                    simulatedOrderId,
+                    OrderTagBuilder.correlationId(request.tradeId(), i),
+                    leg.instrumentKey(),
+                    leg.optionType(),
+                    leg.strike(),
+                    leg.action(),
+                    leg.quantity(),
+                    leg.limitPrice(),
+                    leg.limitPrice(),   // averageFillPrice = limitPrice (perfect fill, zero slippage)
+                    BigDecimal.ZERO));  // slippagePerUnit = 0
+        }
+        return fills;
     }
 
     private void persistFills(UUID tradeId, List<LegFillDto> fills) {

@@ -72,6 +72,10 @@ public class Agent1SignalEntity {
     @Column(name = "raw_inputs", columnDefinition = "jsonb")
     private String rawInputs;
 
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "data_gaps", columnDefinition = "jsonb")
+    private String dataGaps;
+
     @Column(nullable = false, length = 10)
     private String status = "ACTIVE";
 
@@ -107,6 +111,8 @@ public class Agent1SignalEntity {
     public void setKeyLevels(String v) { this.keyLevels = v; }
     public String getRawInputs() { return rawInputs; }
     public void setRawInputs(String v) { this.rawInputs = v; }
+    public String getDataGaps() { return dataGaps; }
+    public void setDataGaps(String v) { this.dataGaps = v; }
     public String getStatus() { return status; }
     public void setStatus(String v) { this.status = v; }
     public LocalDateTime getCreatedAt() { return createdAt; }

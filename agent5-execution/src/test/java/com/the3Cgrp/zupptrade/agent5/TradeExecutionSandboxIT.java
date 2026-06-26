@@ -137,11 +137,12 @@ class TradeExecutionSandboxIT {
         assertThat(response).isNotNull();
         assertThat(response.isApiSuccess()).isTrue();
         assertThat(response.data()).isNotNull();
+        assertThat(response.data().requiredMargin()).isNotNull().isGreaterThan(BigDecimal.ZERO);
         assertThat(response.data().finalMargin()).isNotNull().isGreaterThan(BigDecimal.ZERO);
-        assertThat(response.data().availableMargin()).isNotNull().isGreaterThanOrEqualTo(BigDecimal.ZERO);
+        // Available margin is fetched separately via GET /v2/user/fund-and-margin (see T1b)
 
-        log.info("sandbox.T1.margin.result finalMargin={} available={}",
-                response.data().finalMargin(), response.data().availableMargin());
+        log.info("sandbox.T1.margin.result requiredMargin={} finalMargin={}",
+                response.data().requiredMargin(), response.data().finalMargin());
     }
 
     // ── T2: multi/place (sandbox API) ────────────────────────────────────────

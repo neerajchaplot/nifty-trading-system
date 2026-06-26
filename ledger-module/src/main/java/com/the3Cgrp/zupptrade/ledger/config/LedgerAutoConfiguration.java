@@ -4,7 +4,7 @@ import com.the3Cgrp.zupptrade.ledger.TradeLedgerService;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -20,7 +20,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 public class LedgerAutoConfiguration {
 
     @Bean
-    @ConditionalOnBean(JdbcTemplate.class)
+    @ConditionalOnClass(JdbcTemplate.class)
     public TradeLedgerService tradeLedgerService(JdbcTemplate jdbc, ObjectMapper objectMapper) {
         return new TradeLedgerService(jdbc, objectMapper);
     }

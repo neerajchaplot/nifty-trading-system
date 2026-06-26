@@ -25,6 +25,14 @@ agent5:
     # Cancel on timeout in sandbox rather than converting to MARKET —
     # sandbox fills don't reflect real liquidity
     cancel-on-timeout-instead-of-market: true
+    # Bypass margin sufficiency check in sandbox — Upstox /v2/charges/margin does not return
+    # available_margin; account funds are checked via /v2/user/fund-and-margin in production.
+    # Set true here so the execution flow can be tested end-to-end without a funded account.
+    bypass-margin-check: true
+    # Upstox sandbox does not carry weekly NIFTY option contracts in its instrument master.
+    # When true: skip multi/place entirely and inject synthetic fills at limitPrice so the
+    # downstream flow (slippage check, fill persistence, ACTIVE status) can be exercised.
+    simulate-fills: true
 
 logging:
   level:

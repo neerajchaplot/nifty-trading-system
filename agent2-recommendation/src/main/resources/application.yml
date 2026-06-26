@@ -18,15 +18,14 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        default_schema: public
+        default_schema: zupptrade_dev
     show-sql: false
 
   flyway:
     enabled: true
     locations: classpath:db/migration
-    schemas: public
-    default-schema: public
-    init-sql: "SET search_path TO public"
+    default-schema: zupptrade_dev
+    init-sql: "SET search_path TO zupptrade_dev"
 
   mvc:
     problemdetails:

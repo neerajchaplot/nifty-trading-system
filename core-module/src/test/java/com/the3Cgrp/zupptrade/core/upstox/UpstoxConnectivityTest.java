@@ -10,8 +10,10 @@ import com.the3Cgrp.zupptrade.core.upstox.model.chain.UpstoxOptionChainSummary;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -38,8 +40,16 @@ class UpstoxConnectivityTest {
     @Autowired private UpstoxHistoricalDataClient historicalClient;
     @Autowired private UpstoxOptionChainClient optionChainClient;
     @Autowired private UpstoxMarketQuoteClient marketQuoteClient;
+    @Autowired @Qualifier("upstoxRestClient") private RestClient upstoxRestClient;
 
-    private static final LocalDate EXPIRY = LocalDate.of(2026, 6, 9); // Next Tuesday Nifty expiry
+    // Nearest Tuesday >= today — avoids hardcoded stale expiry that returns empty option chain
+    private static final LocalDate EXPIRY = nearestTuesday();
+
+    private static LocalDate nearestTuesday() {
+        LocalDate d = LocalDate.now();
+        while (d.getDayOfWeek() != java.time.DayOfWeek.TUESDAY) d = d.plusDays(1);
+        return d;
+    }
 
     // -------------------------------------------------------------------------
     // Test 1 — user profile (simplest auth check)
@@ -183,5 +193,28 @@ class UpstoxConnectivityTest {
             System.out.println("  Check logs: 'upstox.token.expired' = stale token; no such log = market closed");
             System.out.println("  Re-run with a fresh token on a trading day to verify the premium value.");
         }
+    }
+
+    // -------------------------------------------------------------------------
+    // Test 6 — option/contract expiry dates (raw response dump)
+    // Purpose: discover the exact JSON shape so we can build the model class.
+    // -------------------------------------------------------------------------
+
+    @Test
+    void optionContract_printsRawExpiryDatesResponse() {
+        String rawJson = upstoxRestClient.get()
+                .uri("/v2/option/contract?instrument_key={key}", "NSE_INDEX|Nifty 50")
+                .retrieve()
+                .body(String.class);
+
+        System.out.println("\n=== GET /v2/option/contract (raw response) ===");
+        System.out.println(rawJson);
+        System.out.println("=== end of response ===");
+
+        assertThat(rawJson)
+                .as("Response is null — check logs for 'upstox.token.expired'")
+                .isNotNull();
+        assertThat(rawJson).contains("status");
+        System.out.println("✓ option/contract endpoint responded — see raw JSON above to design the model class");
     }
 }

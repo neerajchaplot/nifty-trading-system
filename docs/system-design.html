@@ -1,0 +1,1180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZuppTrade — Nifty 50 Automated Options Trading System</title>
+<style>
+  :root {
+    --bg: #f8f9fb;
+    --surface: #ffffff;
+    --border: #e2e6ea;
+    --text: #1a1d23;
+    --muted: #5f6b7a;
+    --accent: #1e6ef0;
+    --accent-light: #e8f0fe;
+    --a1: #0f6b3d; --a1-bg: #e6f4ed;
+    --a2: #7b2fa0; --a2-bg: #f3e8fa;
+    --a3: #c47000; --a3-bg: #fff3e0;
+    --a5: #b3261e; --a5-bg: #fce8e6;
+    --core: #1e6ef0; --core-bg: #e8f0fe;
+    --pass: #0f6b3d; --fail: #b3261e; --warn: #c47000;
+    --code-bg: #f1f3f4;
+    --sidebar-w: 260px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 15px; line-height: 1.7; color: var(--text); background: var(--bg); }
+
+  /* ── SIDEBAR ── */
+  #sidebar {
+    position: fixed; top: 0; left: 0; width: var(--sidebar-w);
+    height: 100vh; background: var(--surface); border-right: 1px solid var(--border);
+    overflow-y: auto; padding: 0 0 40px; z-index: 100;
+  }
+  #sidebar .logo {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 700; font-size: 16px; color: var(--accent);
+  }
+  #sidebar .logo span { display: block; font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+  #sidebar nav { padding: 12px 0; }
+  #sidebar nav a {
+    display: block; padding: 6px 20px; font-size: 13px; color: var(--muted);
+    text-decoration: none; border-left: 3px solid transparent;
+    transition: all 0.15s;
+  }
+  #sidebar nav a:hover, #sidebar nav a.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-light); }
+  #sidebar nav .section-label {
+    padding: 14px 20px 4px; font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1px; color: var(--muted);
+  }
+  #sidebar nav a.sub { padding-left: 32px; font-size: 12px; }
+
+  /* ── MAIN CONTENT ── */
+  #main { margin-left: var(--sidebar-w); padding: 48px 56px 80px; max-width: calc(var(--sidebar-w) + 900px); }
+
+  /* ── COVER ── */
+  .cover {
+    background: linear-gradient(135deg, #1a2b50 0%, #1e6ef0 100%);
+    color: white; padding: 56px 48px; border-radius: 12px; margin-bottom: 56px;
+  }
+  .cover .tag { font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; opacity: 0.7; margin-bottom: 12px; }
+  .cover h1 { font-size: 36px; font-weight: 800; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 17px; opacity: 0.85; margin-bottom: 24px; }
+  .cover .meta { display: flex; gap: 32px; flex-wrap: wrap; }
+  .cover .meta-item { font-size: 13px; opacity: 0.75; }
+  .cover .meta-item strong { display: block; font-size: 15px; font-weight: 600; opacity: 1; color: white; }
+
+  /* ── SECTION HEADERS ── */
+  .section-header {
+    display: flex; align-items: center; gap: 14px;
+    margin: 56px 0 28px; padding-bottom: 14px;
+    border-bottom: 2px solid var(--border);
+  }
+  .section-header .num {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: var(--accent); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 700; flex-shrink: 0;
+  }
+  .section-header h2 { font-size: 24px; font-weight: 700; }
+  h3 { font-size: 17px; font-weight: 700; margin: 32px 0 12px; color: var(--text); }
+  h4 { font-size: 14px; font-weight: 700; margin: 20px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  p { margin-bottom: 12px; color: #2d3748; }
+
+  /* ── AGENT BADGES ── */
+  .agent-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
+  }
+  .a1 { color: var(--a1); background: var(--a1-bg); }
+  .a2 { color: var(--a2); background: var(--a2-bg); }
+  .a3 { color: var(--a3); background: var(--a3-bg); }
+  .a5 { color: var(--a5); background: var(--a5-bg); }
+  .core-badge { color: var(--core); background: var(--core-bg); }
+
+  /* ── AGENT CARDS ── */
+  .agent-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0; }
+  .agent-card {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; background: var(--surface);
+  }
+  .agent-card .agent-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+  .agent-card .agent-port { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+  .agent-card p { font-size: 13px; margin-bottom: 6px; color: var(--muted); }
+  .agent-card ul { padding-left: 16px; }
+  .agent-card ul li { font-size: 13px; color: #444; margin-bottom: 3px; }
+
+  /* ── FLOW DIAGRAM ── */
+  .flow { display: flex; align-items: flex-start; gap: 0; margin: 24px 0; flex-wrap: wrap; }
+  .flow-step {
+    display: flex; flex-direction: column; align-items: center;
+    min-width: 110px;
+  }
+  .flow-box {
+    width: 100px; min-height: 56px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    text-align: center; font-size: 12px; font-weight: 600;
+    padding: 8px; border: 1px solid transparent;
+  }
+  .flow-arrow {
+    display: flex; align-items: center; padding-top: 18px; color: var(--muted); font-size: 18px; margin: 0 2px;
+  }
+  .flow-label { font-size: 10px; color: var(--muted); margin-top: 6px; text-align: center; max-width: 100px; }
+
+  /* ── TABLES ── */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 13.5px; }
+  th { background: #f1f3f4; text-align: left; padding: 9px 14px; font-weight: 600; border-bottom: 2px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); }
+  td { padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fafbfc; }
+  .pass-cell { color: var(--pass); font-weight: 600; }
+  .fail-cell { color: var(--fail); font-weight: 600; }
+  .warn-cell { color: var(--warn); font-weight: 600; }
+
+  /* ── CODE BLOCKS ── */
+  pre, code { font-family: 'SF Mono', 'Consolas', monospace; }
+  code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-size: 12.5px; color: #c7254e; }
+  pre { background: #1e2433; color: #cdd6f4; padding: 20px 24px; border-radius: 8px; overflow-x: auto; font-size: 13px; line-height: 1.6; margin: 16px 0; }
+  pre .c { color: #6c7086; }
+  pre .k { color: #cba6f7; }
+  pre .s { color: #a6e3a1; }
+  pre .n { color: #89b4fa; }
+  pre .v { color: #fab387; }
+
+  /* ── CALLOUT BOXES ── */
+  .callout {
+    border-radius: 8px; padding: 14px 18px; margin: 16px 0;
+    border-left: 4px solid; font-size: 14px;
+  }
+  .callout.info { background: #e8f0fe; border-color: var(--accent); }
+  .callout.warn { background: #fff8e1; border-color: var(--warn); }
+  .callout.rule { background: #e6f4ed; border-color: var(--pass); }
+  .callout strong { display: block; margin-bottom: 4px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* ── SCORE TABLE ── */
+  .tier-table td:last-child { text-align: right; font-weight: 700; }
+  .weight-bar {
+    display: inline-block; height: 8px; border-radius: 4px;
+    background: var(--accent); vertical-align: middle; margin-right: 8px;
+  }
+
+  /* ── DB SCHEMA ── */
+  .schema-box {
+    background: #1e2433; color: #cdd6f4; border-radius: 8px;
+    padding: 20px 24px; font-family: 'SF Mono', monospace; font-size: 12.5px;
+    line-height: 1.7; margin: 12px 0; overflow-x: auto;
+  }
+  .schema-box .col-name { color: #89b4fa; }
+  .schema-box .col-type { color: #fab387; }
+  .schema-box .col-comment { color: #6c7086; }
+  .schema-box .table-header { color: #cba6f7; font-weight: 700; font-size: 13px; }
+
+  /* ── ARCHITECTURE DIAGRAM ── */
+  .arch-diagram {
+    border: 1px solid var(--border); border-radius: 10px;
+    padding: 28px; background: white; margin: 20px 0;
+  }
+  .arch-row { display: flex; gap: 12px; margin-bottom: 12px; align-items: stretch; }
+  .arch-box {
+    flex: 1; border-radius: 8px; padding: 14px 16px; font-size: 13px; font-weight: 600;
+    border: 1.5px solid; text-align: center;
+  }
+  .arch-box .sub { font-size: 11px; font-weight: 400; color: var(--muted); margin-top: 3px; display: block; }
+  .arch-arrow-down { text-align: center; color: var(--muted); font-size: 20px; margin: 2px 0; }
+  .arch-label { font-size: 11px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .ext-box { border-color: #b0bec5; background: #f8f9fa; color: #546e7a; }
+  .int-box-a1 { border-color: var(--a1); background: var(--a1-bg); color: var(--a1); }
+  .int-box-a2 { border-color: var(--a2); background: var(--a2-bg); color: var(--a2); }
+  .int-box-a3 { border-color: var(--a3); background: var(--a3-bg); color: var(--a3); }
+  .int-box-a5 { border-color: var(--a5); background: var(--a5-bg); color: var(--a5); }
+  .int-box-core { border-color: var(--core); background: var(--core-bg); color: var(--core); }
+  .int-box-db { border-color: #455a64; background: #eceff1; color: #455a64; }
+
+  /* ── SCORING FORMULA ── */
+  .formula {
+    background: #1e2433; color: #cdd6f4; border-radius: 8px;
+    padding: 20px 28px; font-family: 'SF Mono', monospace; font-size: 14px;
+    line-height: 2; margin: 16px 0; text-align: center;
+  }
+  .formula .highlight { color: #f9e2af; }
+  .formula .operator { color: #89dceb; }
+  .formula .label { color: #a6e3a1; font-size: 12px; }
+
+  /* ── GATE CARDS ── */
+  .gate-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+  .gate-card { border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .gate-card .gate-num { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  .gate-card .gate-name { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .gate-card .gate-rule { font-size: 13px; color: #444; }
+  .gate-card .gate-type { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; margin-top: 8px; }
+  .hard { background: #fce8e6; color: var(--a5); }
+  .indicative { background: #fff3e0; color: var(--a3); }
+
+  /* ── THRESHOLD ── */
+  .threshold-diagram {
+    display: flex; gap: 0; margin: 20px 0; border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden; font-size: 13px;
+  }
+  .th-zone {
+    flex: 1; padding: 16px 12px; text-align: center;
+  }
+  .th-t1 { background: #fffde7; border-right: 1px solid var(--border); }
+  .th-t2 { background: #fff3e0; border-right: 1px solid var(--border); }
+  .th-t3 { background: #fce8e6; }
+  .th-zone .zone-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .th-zone .zone-trigger { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .th-zone .zone-action { font-size: 13px; font-weight: 600; }
+
+  /* ── TIMELINE ── */
+  .timeline { margin: 20px 0; }
+  .tl-item { display: flex; gap: 16px; margin-bottom: 20px; }
+  .tl-time { min-width: 80px; font-size: 12px; font-weight: 700; color: var(--accent); padding-top: 2px; }
+  .tl-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); flex-shrink: 0; margin-top: 5px; border: 2px solid white; box-shadow: 0 0 0 2px var(--accent); }
+  .tl-content { flex: 1; }
+  .tl-content strong { display: block; font-size: 14px; margin-bottom: 3px; }
+  .tl-content p { font-size: 13px; margin: 0; color: var(--muted); }
+
+  /* ── API TABLE ── */
+  .method { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: monospace; }
+  .get { background: #e8f0fe; color: #1e6ef0; }
+  .post { background: #e6f4ed; color: #0f6b3d; }
+
+  /* ── FOOTER ── */
+  .doc-footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; }
+
+  @media (max-width: 900px) {
+    #sidebar { display: none; }
+    #main { margin-left: 0; padding: 24px 20px; }
+    .agent-grid, .gate-grid, .arch-row { grid-template-columns: 1fr; flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav id="sidebar">
+  <div class="logo">ZuppTrade <span>Nifty 50 Automated Options System</span></div>
+  <nav>
+    <div class="section-label">Overview</div>
+    <a href="#domain">1. Domain</a>
+    <a href="#what-is-nifty" class="sub">Nifty 50 &amp; NSE</a>
+    <a href="#options-basics" class="sub">Options Concepts</a>
+    <a href="#strategies" class="sub">Trading Strategies</a>
+    <a href="#risk-concepts" class="sub">Risk Metrics</a>
+
+    <div class="section-label">Functional Design</div>
+    <a href="#functional">2. Functional Design</a>
+    <a href="#system-purpose" class="sub">System Purpose</a>
+    <a href="#user-journey" class="sub">Daily User Journey</a>
+    <a href="#agents-overview" class="sub">The Five Agents</a>
+    <a href="#business-rules" class="sub">Key Business Rules</a>
+
+    <div class="section-label">Technical Design</div>
+    <a href="#hld">3. High-Level Design</a>
+    <a href="#architecture" class="sub">Architecture</a>
+    <a href="#tech-stack" class="sub">Technology Stack</a>
+    <a href="#integrations" class="sub">External Integrations</a>
+    <a href="#data-flow" class="sub">Data Flow</a>
+
+    <div class="section-label">Low-Level Design</div>
+    <a href="#lld">4. Low-Level Design</a>
+    <a href="#database" class="sub">Database Schema</a>
+    <a href="#agent1-lld" class="sub">Agent 1 — Scoring</a>
+    <a href="#agent2-lld" class="sub">Agent 2 — Recommendation</a>
+    <a href="#agent3-lld" class="sub">Agent 3 — Monitor</a>
+    <a href="#agent5-lld" class="sub">Agent 5 — Execution</a>
+    <a href="#api-reference" class="sub">REST API Reference</a>
+  </nav>
+</nav>
+
+<!-- MAIN CONTENT -->
+<main id="main">
+
+<!-- COVER -->
+<div class="cover">
+  <div class="tag">System Design Document</div>
+  <h1>ZuppTrade</h1>
+  <div class="subtitle">Automated Nifty 50 Weekly Options Trading System</div>
+  <div class="meta">
+    <div class="meta-item"><strong>Market</strong>NSE India — Nifty 50 Index</div>
+    <div class="meta-item"><strong>Instrument</strong>Weekly Options (Tuesday Expiry)</div>
+    <div class="meta-item"><strong>Capital Range</strong>₹5 Lakhs – ₹1 Crore</div>
+    <div class="meta-item"><strong>Architecture</strong>Multi-Agent Microservices</div>
+    <div class="meta-item"><strong>Stack</strong>Spring Boot 4 · Java 21 · PostgreSQL</div>
+    <div class="meta-item"><strong>Broker</strong>Upstox v2 API</div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 1 — DOMAIN
+═══════════════════════════════════════════════ -->
+<div id="domain">
+  <div class="section-header">
+    <div class="num">1</div>
+    <h2>Domain</h2>
+  </div>
+  <p>This section explains the financial domain the system operates in. You do not need to be a trader to understand this — every concept is explained from first principles.</p>
+
+  <!-- 1.1 -->
+  <h3 id="what-is-nifty">1.1 What is Nifty 50 and NSE?</h3>
+  <p><strong>NSE (National Stock Exchange of India)</strong> is India's largest stock exchange by trading volume. It operates from 9:15 AM to 3:30 PM, Monday to Friday (excluding market holidays).</p>
+  <p><strong>Nifty 50</strong> is NSE's flagship stock market index. It tracks the performance of 50 of the largest and most liquid companies listed on NSE — companies like Reliance, HDFC Bank, TCS, and Infosys. When traders or news say "the market is up 1%", they usually mean the Nifty 50 moved up 1%.</p>
+  <p>The current value of Nifty 50 is called the <strong>spot price</strong> (e.g., 24,013 points). This is what ZuppTrade monitors continuously.</p>
+
+  <!-- 1.2 -->
+  <h3 id="options-basics">1.2 Options Trading — Core Concepts</h3>
+  <p>ZuppTrade trades <strong>options</strong> on the Nifty 50 index. An option is a financial contract that gives the buyer the right (but not the obligation) to buy or sell Nifty at a specific price on a specific date.</p>
+
+  <table>
+    <tr><th>Term</th><th>Plain Language Meaning</th><th>Example</th></tr>
+    <tr><td><strong>Strike Price</strong></td><td>The agreed price at which the option can be exercised</td><td>23,750 — the Nifty level at which this option becomes relevant</td></tr>
+    <tr><td><strong>Expiry Date</strong></td><td>The date the option contract ends — Nifty options expire every Tuesday</td><td>24 June 2026</td></tr>
+    <tr><td><strong>Call Option (CE)</strong></td><td>Profits if Nifty goes UP. Buyer bets market rises.</td><td>Buy 24,200 CE — profits if Nifty goes above 24,200</td></tr>
+    <tr><td><strong>Put Option (PE)</strong></td><td>Profits if Nifty goes DOWN. Buyer bets market falls.</td><td>Buy 23,500 PE — profits if Nifty goes below 23,500</td></tr>
+    <tr><td><strong>Premium</strong></td><td>The price you pay to buy (or receive to sell) an option. Like an insurance premium.</td><td>₹68 per unit</td></tr>
+    <tr><td><strong>Lot Size</strong></td><td>Nifty options trade in fixed bundles. Currently 65 units per lot.</td><td>1 lot = 65 units. Premium of ₹68 × 65 = ₹4,420 per lot</td></tr>
+    <tr><td><strong>LTP</strong></td><td>Last Traded Price — the most recent premium paid for an option</td><td>₹68.40</td></tr>
+    <tr><td><strong>OI (Open Interest)</strong></td><td>Total number of contracts currently open (not yet closed). High OI = strong conviction</td><td>5,00,000 contracts at 24,000 CE</td></tr>
+    <tr><td><strong>ITM / OTM / ATM</strong></td><td>In The Money (profitable now) / Out of The Money (not yet profitable) / At The Money (at current Nifty price)</td><td>If Nifty = 24,000: 23,500 PE is ITM, 24,500 PE is OTM</td></tr>
+  </table>
+
+  <h4>Option Greeks — How Premium Changes</h4>
+  <table>
+    <tr><th>Greek</th><th>What it Measures</th><th>Practical Meaning for the System</th></tr>
+    <tr><td><strong>Delta (δ)</strong></td><td>How much the premium changes per 1-point Nifty move</td><td>Delta ≤ 0.20 on the sold option means Nifty must move significantly before we lose money</td></tr>
+    <tr><td><strong>Theta (θ)</strong></td><td>How much premium decays each day (time decay)</td><td>When we SELL options, theta works in our favour — premium falls toward zero as expiry approaches</td></tr>
+    <tr><td><strong>Vega (v)</strong></td><td>How much premium changes when market volatility changes</td><td>High vega = risky when VIX spikes</td></tr>
+    <tr><td><strong>IV (Implied Volatility)</strong></td><td>Market's expectation of future Nifty volatility embedded in the option price</td><td>High IV = expensive premiums = better to sell</td></tr>
+  </table>
+
+  <!-- 1.3 -->
+  <h3 id="strategies">1.3 Trading Strategies Used</h3>
+  <p>ZuppTrade does not take naked (unlimited risk) positions. It always trades <strong>spreads</strong> — simultaneously buying and selling options to limit maximum loss.</p>
+
+  <table>
+    <tr><th>Strategy</th><th>When Used</th><th>How it Works</th><th>Risk Profile</th></tr>
+    <tr>
+      <td><strong>Bull Put Spread</strong></td>
+      <td>Market is bullish or mildly bullish</td>
+      <td>SELL a put at strike K1, BUY a put at lower strike K2. Collect net premium upfront. Profit if Nifty stays above K1.</td>
+      <td>Max profit = net premium collected. Max loss = spread width minus net premium.</td>
+    </tr>
+    <tr>
+      <td><strong>Bear Call Spread</strong></td>
+      <td>Market is bearish</td>
+      <td>SELL a call at strike K1, BUY a call at higher strike K2. Collect net premium. Profit if Nifty stays below K1.</td>
+      <td>Max profit = net premium collected. Max loss = spread width minus net premium.</td>
+    </tr>
+    <tr>
+      <td><strong>Bull Call Spread</strong></td>
+      <td>Market is strongly bullish (Extreme)</td>
+      <td>BUY a call at K1, SELL a call at higher K2. Pay net premium. Profit if Nifty rises above K1.</td>
+      <td>Max loss = premium paid. Max profit = spread width minus net premium.</td>
+    </tr>
+    <tr>
+      <td><strong>Iron Condor</strong></td>
+      <td>Market is neutral (sideways expected)</td>
+      <td>Combines a Bull Put Spread and Bear Call Spread. Profit if Nifty stays within a range.</td>
+      <td>Limited profit, limited loss. Works best in low-volatility range-bound markets.</td>
+    </tr>
+    <tr>
+      <td><strong>SKIP</strong></td>
+      <td>Market conditions are unclear or VIX is extreme (&gt;24)</td>
+      <td>No trade placed. System alerts user.</td>
+      <td>No risk, no reward. Safety first.</td>
+    </tr>
+  </table>
+
+  <!-- 1.4 -->
+  <h3 id="risk-concepts">1.4 Key Risk and Probability Metrics</h3>
+
+  <table>
+    <tr><th>Metric</th><th>Full Name</th><th>What it Means</th><th>System Threshold</th></tr>
+    <tr><td><strong>VIX</strong></td><td>India Volatility Index</td><td>Market's fear gauge. Low VIX = calm market. High VIX = fearful/volatile market.</td><td>&lt;13 Low, 13–18 Normal, 18–24 High, &gt;24 Extreme (no trade)</td></tr>
+    <tr><td><strong>PCR</strong></td><td>Put-Call Ratio</td><td>Total put OI ÷ Total call OI. &gt;1 means more puts than calls — typically bullish (contrarian indicator).</td><td>&gt;1.2 = bullish signal, &lt;0.8 = bearish signal</td></tr>
+    <tr><td><strong>PoP</strong></td><td>Probability of Profit</td><td>Statistical probability the trade expires profitably (i.e., the sold option expires worthless). Calculated using Black-Scholes formula.</td><td>≥ 80% required to enter a credit trade</td></tr>
+    <tr><td><strong>PoPP</strong></td><td>Probability of Premium Profit</td><td>Probability that at expiry we retain the full premium collected. Slightly different from PoP for spread positions.</td><td>|PoP − PoPP| ≤ 15%</td></tr>
+    <tr><td><strong>RoC</strong></td><td>Return on Capital</td><td>Profit as a % of the margin (capital) required to hold the position.</td><td>≥ 0.5% × (DTE ÷ 5)</td></tr>
+    <tr><td><strong>DTE</strong></td><td>Days to Expiry</td><td>How many days until the option contract expires.</td><td>Nifty options expire every Tuesday</td></tr>
+    <tr><td><strong>FII</strong></td><td>Foreign Institutional Investors</td><td>Large overseas funds (hedge funds, pension funds). Their buying/selling moves markets significantly.</td><td>Net buy &gt;₹500Cr = bullish, Net sell &gt;₹500Cr = bearish</td></tr>
+    <tr><td><strong>DII</strong></td><td>Domestic Institutional Investors</td><td>Indian mutual funds, insurance companies. Often counter-trade FIIs.</td><td>Same ±₹500Cr threshold</td></tr>
+    <tr><td><strong>Gift Nifty</strong></td><td>NSE's international futures</td><td>Nifty futures traded on GIFT City exchange overnight. Indicates opening direction for Indian markets.</td><td>Premium &gt;50pts = bullish open, Discount &gt;50pts = bearish open</td></tr>
+  </table>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 2 — FUNCTIONAL DESIGN
+═══════════════════════════════════════════════ -->
+<div id="functional">
+  <div class="section-header">
+    <div class="num">2</div>
+    <h2>Functional Design</h2>
+  </div>
+
+  <!-- 2.1 -->
+  <h3 id="system-purpose">2.1 What the System Does and Why</h3>
+  <p>ZuppTrade is an <strong>automated decision-support and execution system</strong> for trading Nifty 50 weekly options. It replaces hours of manual market analysis with a disciplined, algorithm-driven workflow.</p>
+
+  <div class="callout rule">
+    <strong>Core Philosophy</strong>
+    Consistency over return maximisation. Every trade decision must be explainable from its inputs. No gut feel. No overrides without a reason. The system aims to produce the same trade recommendation given the same market data — every single time.
+  </div>
+
+  <p><strong>What it does:</strong></p>
+  <ul style="padding-left:20px; margin-bottom:12px;">
+    <li style="margin-bottom:6px;">Collects market data from multiple sources: Upstox (option chain, live prices), NSE India (FII/DII flows), Marketaux (news sentiment), and AI-assisted commentary extraction</li>
+    <li style="margin-bottom:6px;">Analyses data through a 5-tier scoring model to determine the market direction (Bullish/Bearish/Neutral)</li>
+    <li style="margin-bottom:6px;">If conditions are right, selects a strategy, finds the optimal strike prices, validates risk gates, and sizes the position</li>
+    <li style="margin-bottom:6px;">Presents a trade card to the user for confirmation</li>
+    <li style="margin-bottom:6px;">On confirmation, executes both legs of the spread on Upstox simultaneously</li>
+    <li style="margin-bottom:6px;">Monitors the live trade every 5 minutes and alerts or auto-exits based on predefined thresholds</li>
+  </ul>
+  <p><strong>What it does NOT do:</strong> It does not trade without user confirmation (semi-automatic). It does not place trades when VIX is extreme (&gt;24). It does not chase high returns at the cost of high risk.</p>
+
+  <!-- 2.2 -->
+  <h3 id="user-journey">2.2 Daily User Journey</h3>
+  <div class="timeline">
+    <div class="tl-item">
+      <div class="tl-time">8:30 AM</div>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>Token Refresh (Automated)</strong>
+        <p>upstox-auth module automatically fetches a fresh Upstox access token and stores it in the database. Required before any API calls.</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-time">9:00 AM</div>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>Phase 1 Scoring — End-of-Day Data (Automated)</strong>
+        <p>Agent 1 runs automatically. Downloads previous day's FII/DII data from NSE, fetches historical candles from Upstox, calculates EMAs/RSI/MACD, checks Gift Nifty. Produces an initial market signal and saves to database.</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-time">9:20 AM</div>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>Phase 2 Scoring — Live Market Data (Automated)</strong>
+        <p>Agent 1 re-runs with live open data: current spot price, live VIX, PCR, real-time option chain. Overwrites Phase 1 signal with a more accurate reading. User can optionally add commentary text for LLM analysis.</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-time">9:30 AM</div>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>User Reviews Signal &amp; Requests Trade Recommendation</strong>
+        <p>User opens the ZuppTrade UI (Angular web app). Reviews the market signal — Bias (Bullish/Bearish/Neutral), Strength (Extreme/Mild/Weak), Confidence score, and breakdown by tier. If satisfied, clicks "Get Recommendation".</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-time">9:31 AM</div>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>Agent 2 Generates Trade Card</strong>
+        <p>Agent 2 runs the 5-layer algorithm: selects strategy → calculates expected move → selects strike prices → validates 4 gates → sizes lots. Presents a trade card valid for 20 minutes.</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-time">9:32 AM</div>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>User Confirms or Rejects</strong>
+        <p>User reviews trade card: strategy, strikes, expected premium, max profit, max loss, PoP, lot count. Can optionally change the number of lots. Clicks CONFIRM to execute or REJECT to skip.</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-time">9:33 AM</div>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>Agent 5 Executes the Trade</strong>
+        <p>Agent 5 checks available margin, places both legs simultaneously via Upstox multi-leg order API. Polls for fills (30s timeout). If both legs fill — trade is ACTIVE. If one leg fails, the other is rolled back.</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-time">Every 5 min<br>9:15–3:30 PM</div>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>Agent 3 Monitors Live Trade</strong>
+        <p>Checks live Nifty spot against T1/T2/T3 thresholds. Updates live P&amp;L. Sends alerts on WATCH/READJUST. Automatically exits via Agent 5 if T3 (exit threshold) is breached.</p>
+      </div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-time">Tuesday 3:30 PM</div>
+      <div class="tl-dot"></div>
+      <div class="tl-content">
+        <strong>Expiry</strong>
+        <p>If the trade was not exited earlier, options expire. OTM options expire worthless — the net premium collected is the profit. ITM options are settled by NSE automatically.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2.3 -->
+  <h3 id="agents-overview">2.3 The Five Agents</h3>
+  <div class="agent-grid">
+    <div class="agent-card" style="border-color: var(--a1);">
+      <div class="agent-title" style="color:var(--a1);">Agent 1 — Market Analyst</div>
+      <div class="agent-port">Port 8081</div>
+      <p>The "brain" that reads the market. Collects data from 5 independent sources, scores each signal +1/0/-1, weights them, and produces a composite market direction signal.</p>
+      <ul>
+        <li>5-tier scoring: Price Structure, Technical, Institutional, Volatility, Sentiment</li>
+        <li>Outputs: Bias, Strength, Confidence, composite score (−1 to +1)</li>
+        <li>Writes signal to database; Agent 2 reads from there</li>
+      </ul>
+    </div>
+    <div class="agent-card" style="border-color: var(--a2);">
+      <div class="agent-title" style="color:var(--a2);">Agent 2 — Recommender</div>
+      <div class="agent-port">Port 8082</div>
+      <p>The "strategist". Takes Agent 1's signal and live market data, runs a 5-layer algorithm to produce an actionable trade card with specific strikes, lot count, and risk/reward.</p>
+      <ul>
+        <li>Selects strategy based on bias + VIX + IV regime</li>
+        <li>Calculates expected move using Black-Scholes + straddle price</li>
+        <li>Validates 4 hard gates (PoP, max loss, PoPP gap, RoC)</li>
+        <li>Sizes lots based on capital and risk limits</li>
+      </ul>
+    </div>
+    <div class="agent-card" style="border-color: var(--a3);">
+      <div class="agent-title" style="color:var(--a3);">Agent 3 — Monitor</div>
+      <div class="agent-port">Port 8083</div>
+      <p>The "watchdog". Runs every 5 minutes during market hours. Checks live Nifty against pre-set exit thresholds. Orchestrates readjustments and automated exits.</p>
+      <ul>
+        <li>T1 Watch → recalculate live PoP</li>
+        <li>T2 Readjust → roll to a safer strike</li>
+        <li>T3 Exit → close all legs immediately</li>
+        <li>Pauses automatically when VIX &gt; 24</li>
+      </ul>
+    </div>
+    <div class="agent-card" style="border-color: var(--a5);">
+      <div class="agent-title" style="color:var(--a5);">Agent 5 — Executor</div>
+      <div class="agent-port">Port 8085</div>
+      <p>The "hands". Interfaces directly with Upstox order APIs. Places, monitors, modifies, and cancels orders. Handles fill confirmation and slippage detection.</p>
+      <ul>
+        <li>Margin check before any order</li>
+        <li>Simultaneous multi-leg entry via Upstox multi/place</li>
+        <li>30-second fill polling with LIMIT→MARKET fallback</li>
+        <li>Rollback if one leg fails</li>
+      </ul>
+    </div>
+  </div>
+  <div class="agent-card" style="border-color: var(--core); margin-top:0;">
+    <div class="agent-title" style="color:var(--core);">Supporting Modules</div>
+    <div class="agent-port">Shared Libraries</div>
+    <ul>
+      <li><strong>core-module</strong> — Upstox REST client, AlertService, ExpiryDateService. Shared as a Maven library by all agents.</li>
+      <li><strong>shared-domain</strong> — All enums, DTOs, constants, custom exceptions. The "common language" of the system.</li>
+      <li><strong>ledger-module</strong> — Event-sourcing audit trail. Every trade state change is immutably recorded.</li>
+      <li><strong>db-migrations</strong> — Single source of Flyway SQL migrations. All agents share the same schema.</li>
+    </ul>
+  </div>
+
+  <!-- 2.4 -->
+  <h3 id="business-rules">2.4 Key Business Rules</h3>
+  <div class="callout warn">
+    <strong>Non-Negotiable System Rules</strong>
+    These rules cannot be overridden by configuration or user action.
+  </div>
+  <table>
+    <tr><th>#</th><th>Rule</th><th>Why</th></tr>
+    <tr><td>1</td><td>No trade when VIX &gt; 24 (Extreme regime)</td><td>Options are mispriced in panic markets; risk/reward breaks down</td></tr>
+    <tr><td>2</td><td>Gate 1 (PoP ≥ 80%) is a hard reject. No override.</td><td>Below 80% means we lose money more than 20% of the time. Not acceptable for a weekly income strategy.</td></tr>
+    <tr><td>3</td><td>Both legs must fill before trade is ACTIVE. One-leg failure triggers immediate rollback.</td><td>A naked position (one leg only) has unlimited risk on spreads</td></tr>
+    <tr><td>4</td><td>Lot size is always fetched from the database, never hardcoded</td><td>SEBI occasionally changes Nifty lot size; hardcoding would cause position sizing errors</td></tr>
+    <tr><td>5</td><td>Maximum loss per trade: 1.5% of capital</td><td>Protects capital from a single losing trade wiping out multiple months of gains</td></tr>
+    <tr><td>6</td><td>T3 exit is automatic — no user confirmation required</td><td>At T3, delay costs money. The system must act immediately.</td></tr>
+    <tr><td>7</td><td>All money calculations use BigDecimal (not float/double)</td><td>Float arithmetic rounds incorrectly for financial calculations. ₹0.01 errors compound over many trades.</td></tr>
+    <tr><td>8</td><td>LLM (AI) failure never blocks trade execution</td><td>If Claude API is unavailable, the commentary tier scores 0 (neutral). The other 90% of the model still runs.</td></tr>
+  </table>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 3 — HIGH-LEVEL DESIGN
+═══════════════════════════════════════════════ -->
+<div id="hld">
+  <div class="section-header">
+    <div class="num">3</div>
+    <h2>High-Level Technical Design</h2>
+  </div>
+
+  <!-- 3.1 -->
+  <h3 id="architecture">3.1 System Architecture</h3>
+  <p>ZuppTrade is built as a <strong>multi-agent microservices system</strong>. Each agent is an independent Spring Boot application with its own REST API, deployed as a Docker container. They communicate via HTTP REST calls and share a single PostgreSQL database.</p>
+
+  <div class="arch-diagram">
+    <div class="arch-label">External Data Sources</div>
+    <div class="arch-row">
+      <div class="arch-box ext-box">Upstox API<span class="sub">Option chain · Prices · Orders</span></div>
+      <div class="arch-box ext-box">NSE India<span class="sub">FII/DII CSV · SPAN margin</span></div>
+      <div class="arch-box ext-box">Marketaux<span class="sub">News sentiment</span></div>
+      <div class="arch-box ext-box">Anthropic Claude<span class="sub">LLM commentary extraction</span></div>
+    </div>
+    <div class="arch-arrow-down">↓ ↓ ↓ ↓</div>
+
+    <div class="arch-label" style="margin-top:8px;">Agent Layer (each = independent Spring Boot app)</div>
+    <div class="arch-row">
+      <div class="arch-box int-box-a1">Agent 1<span class="sub">Market Analyst · :8081</span></div>
+      <div class="arch-box int-box-a2">Agent 2<span class="sub">Recommender · :8082</span></div>
+      <div class="arch-box int-box-a3">Agent 3<span class="sub">Monitor · :8083</span></div>
+      <div class="arch-box int-box-a5">Agent 5<span class="sub">Executor · :8085</span></div>
+    </div>
+    <div class="arch-arrow-down">↓ reads/writes</div>
+
+    <div class="arch-label" style="margin-top:8px;">Shared Infrastructure</div>
+    <div class="arch-row">
+      <div class="arch-box int-box-core">core-module<span class="sub">Upstox client · Alerts · Expiry service</span></div>
+      <div class="arch-box int-box-core">ledger-module<span class="sub">Immutable audit trail</span></div>
+      <div class="arch-box int-box-db">PostgreSQL (NeonDB)<span class="sub">All persistent state</span></div>
+    </div>
+    <div class="arch-arrow-down">↑ UI polling every 5–10s</div>
+
+    <div class="arch-label" style="margin-top:8px;">User Interface</div>
+    <div class="arch-row">
+      <div class="arch-box" style="border-color:#5c6bc0; background:#ede7f6; color:#3949ab;">Angular 18 UI<span class="sub">Dashboard · :4200 (dev) / :80 (prod)</span></div>
+    </div>
+  </div>
+
+  <div class="callout info">
+    <strong>No Orchestrator Module</strong>
+    There is no central coordinator. Each agent owns its own schedule and calls other agents directly. Agent 1 runs its own cron at 9:00 AM and 9:20 AM. Agent 3 runs its own 5-minute monitoring loop. This prevents a single point of failure.
+  </div>
+
+  <!-- 3.2 -->
+  <h3 id="tech-stack">3.2 Technology Stack</h3>
+  <table>
+    <tr><th>Concern</th><th>Choice</th><th>Reason</th></tr>
+    <tr><td>Language</td><td>Java 21</td><td>Mature, performant, strong type system critical for financial accuracy</td></tr>
+    <tr><td>Framework</td><td>Spring Boot 4</td><td>Auto-configuration, dependency injection, comprehensive ecosystem</td></tr>
+    <tr><td>HTTP REST</td><td>Spring MVC (blocking)</td><td>Low traffic system — reactive complexity is unnecessary overhead</td></tr>
+    <tr><td>HTTP Client</td><td>Spring RestClient</td><td>Modern fluent API for calling Upstox, Marketaux, NSE</td></tr>
+    <tr><td>Database ORM</td><td>Spring Data JPA + Hibernate</td><td>Handles entity mapping; native JDBC used for ledger (append-only)</td></tr>
+    <tr><td>Database</td><td>PostgreSQL (NeonDB cloud)</td><td>JSONB support for flexible trade data; strong ACID guarantees</td></tr>
+    <tr><td>Schema Migrations</td><td>Flyway</td><td>Version-controlled, repeatable schema changes</td></tr>
+    <tr><td>Technical Indicators</td><td>TA4J library</td><td>Proven library for EMA, RSI, MACD, candlestick patterns</td></tr>
+    <tr><td>Statistics (Black-Scholes)</td><td>Apache Commons Math</td><td>NormalDistribution CDF for PoP calculation</td></tr>
+    <tr><td>AI/LLM</td><td>Spring AI → Anthropic Claude</td><td>Commentary extraction for Tier 4 scoring</td></tr>
+    <tr><td>Decimal Arithmetic</td><td>Java BigDecimal</td><td>Float/double cause rounding errors in financial calculations — never used</td></tr>
+    <tr><td>Scheduling</td><td>Spring @Scheduled + ShedLock</td><td>Prevents duplicate scheduled runs across instances</td></tr>
+    <tr><td>Serialisation</td><td>Jackson 3 (tools.jackson)</td><td>JSON serialisation for API responses and JSONB DB columns</td></tr>
+    <tr><td>Logging</td><td>SLF4J + Logback</td><td>Structured JSON logs in production; readable text in development</td></tr>
+    <tr><td>Containerisation</td><td>Docker + Docker Compose</td><td>Consistent local and production deployment</td></tr>
+    <tr><td>UI</td><td>Angular 18 (standalone components)</td><td>Single-page app with real-time polling for live trade monitoring</td></tr>
+    <tr><td>Build</td><td>Maven multi-module</td><td>All version management centralised in parent pom</td></tr>
+  </table>
+
+  <!-- 3.3 -->
+  <h3 id="integrations">3.3 External Integrations</h3>
+  <table>
+    <tr><th>System</th><th>What We Use It For</th><th>Auth Method</th><th>Reliability Strategy</th></tr>
+    <tr>
+      <td><strong>Upstox v2 API</strong><br><code>api.upstox.com</code></td>
+      <td>Option chain data (strikes, IV, Greeks, OI), historical OHLC candles, live spot price, India VIX, order placement, margin check, position query</td>
+      <td>OAuth2 access token. Refreshed daily at 8:30 AM by upstox-auth module.</td>
+      <td>3 retries with logging. Token expiry returns 401 → structured error response. Never retries auth failures.</td>
+    </tr>
+    <tr>
+      <td><strong>Upstox HFT API</strong><br><code>api-hft.upstox.com</code></td>
+      <td>Order placement only (lower latency endpoint for order operations)</td>
+      <td>Same OAuth2 token as above</td>
+      <td>Same as above. Rollback on partial fill failure.</td>
+    </tr>
+    <tr>
+      <td><strong>NSE India (Direct Download)</strong><br>Public URLs</td>
+      <td>FII/DII activity CSV (daily, published ~7 PM previous day). SPAN margin files. Holiday calendar.</td>
+      <td>No auth (public files)</td>
+      <td>Downloaded and stored in DB. If download fails, previous day's data used. Never blocks scoring.</td>
+    </tr>
+    <tr>
+      <td><strong>Marketaux API</strong></td>
+      <td>News sentiment for Nifty 50 (^NSEI symbol). Fetches 3 latest articles. Extracts entity sentiment score.</td>
+      <td>API key (env variable MARKETAUX_API_KEY)</td>
+      <td>Results cached aggressively (24h). Free tier: 100 requests/day. Failure = score 0, not error.</td>
+    </tr>
+    <tr>
+      <td><strong>Anthropic Claude API</strong></td>
+      <td>LLM-based commentary extraction. User-provided text (broker reports, news) → structured JSON (bias + key Nifty levels).</td>
+      <td>API key (env variable ANTHROPIC_API_KEY)</td>
+      <td>Parse failure or API error → CommentarySignal.neutral() (score 0). LLM failure NEVER propagates.</td>
+    </tr>
+  </table>
+
+  <!-- 3.4 -->
+  <h3 id="data-flow">3.4 Trade Data Flow</h3>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="flow-box int-box-a1">Agent 1<br>Scores Market</div>
+      <div class="flow-label">Writes signal to agent1_signals table</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-box int-box-a2">Agent 2<br>Recommends</div>
+      <div class="flow-label">Reads signal. Writes trade to trades table (PENDING_CONFIRM)</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-box" style="border:1.5px solid #3949ab; background:#ede7f6; color:#3949ab;">User<br>Confirms</div>
+      <div class="flow-label">CONFIRM → Agent 2 updates to CONFIRMED</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-box int-box-a5">Agent 5<br>Executes</div>
+      <div class="flow-label">Places orders. Writes fills to entry_fills. Status → ACTIVE</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="flow-box int-box-a3">Agent 3<br>Monitors</div>
+      <div class="flow-label">Every 5 min. May trigger exit → Agent 5. Status → CLOSED</div>
+    </div>
+  </div>
+  <p style="margin-top:8px; font-size:13px; color:var(--muted);">Every state transition is recorded in the <code>trade_ledger</code> table with a typed payload — providing a full audit trail from recommendation to close.</p>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════
+     SECTION 4 — LOW-LEVEL DESIGN
+═══════════════════════════════════════════════ -->
+<div id="lld">
+  <div class="section-header">
+    <div class="num">4</div>
+    <h2>Low-Level Design</h2>
+  </div>
+
+  <!-- 4.1 DATABASE -->
+  <h3 id="database">4.1 Database Schema</h3>
+  <p>All data is stored in PostgreSQL (NeonDB cloud). Schema is managed by <strong>Flyway</strong> migrations in the <code>db-migrations</code> module. All agents share the same database and schema (<code>zupptrade_dev</code>).</p>
+
+  <h4>Core Tables</h4>
+  <table>
+    <tr><th>Table</th><th>Purpose</th><th>Key Columns</th></tr>
+    <tr>
+      <td><code>agent1_signals</code></td>
+      <td>Every market scoring run. Agent 2 reads from this to get the current market direction.</td>
+      <td>bias, strength, composite_score, confidence_label, vix_level, score_breakdown (JSONB), raw_inputs (JSONB)</td>
+    </tr>
+    <tr>
+      <td><code>trades</code></td>
+      <td>Full trade lifecycle — from recommendation through execution to close. Central table for the entire system.</td>
+      <td>status, strategy, expiry_date, legs (JSONB), summary (JSONB), market_context (JSONB), gate_results (JSONB), thresholds (JSONB), entry_fills (JSONB), actual_pnl</td>
+    </tr>
+    <tr>
+      <td><code>trade_ledger</code></td>
+      <td>Immutable event-sourcing audit trail. Every state change is appended here — never updated, never deleted.</td>
+      <td>trade_id (FK), event_type, payload (JSONB), occurred_by, occurred_at</td>
+    </tr>
+    <tr>
+      <td><code>trade_executions</code></td>
+      <td>Per-leg fill records from Agent 5.</td>
+      <td>trade_id (FK), leg_index, order_id, fill_price, fill_quantity, slippage_pct</td>
+    </tr>
+    <tr>
+      <td><code>monitoring_evaluations</code></td>
+      <td>Agent 3 cycle results — every 5-min check recorded.</td>
+      <td>trade_id (FK), action (HOLD/WATCH/READJUST/EXIT), current_spot, current_pnl, reason</td>
+    </tr>
+    <tr>
+      <td><code>user_profiles</code></td>
+      <td>User's risk preferences. One row per user in v1.</td>
+      <td>capital, min_pop, max_loss_pct, max_pop_popp_gap</td>
+    </tr>
+    <tr>
+      <td><code>reference_data</code></td>
+      <td>Key-value store for dynamic config: Nifty lot size, expiry dates, holiday calendar. TTL-based cache.</td>
+      <td>key (PK), value (JSONB), ttl_hours, fetched_at</td>
+    </tr>
+    <tr>
+      <td><code>fii_dii_snapshots</code></td>
+      <td>Daily FII/DII institutional flow data downloaded from NSE.</td>
+      <td>snapshot_date, fii_net_futures, fii_long_ratio, dii_net_cash, 5-day trend fields</td>
+    </tr>
+    <tr>
+      <td><code>api_tokens</code></td>
+      <td>Stores the Upstox access token encrypted at rest. Written by upstox-auth module daily.</td>
+      <td>provider, encrypted_token, expires_at</td>
+    </tr>
+    <tr>
+      <td><code>notifications</code></td>
+      <td>All system alerts (critical/warning/info) for display in UI.</td>
+      <td>level, title, message, trade_id, acknowledged_at</td>
+    </tr>
+  </table>
+
+  <div class="callout info">
+    <strong>Why JSONB for trade data?</strong>
+    Trade legs, summaries, and Greeks vary by strategy (a Bull Put Spread has 2 legs, an Iron Condor has 4). Using JSONB avoids wide nullable columns and allows flexible querying while maintaining full auditability. All JSONB fields are also logged to scoring_audit_log for traceability.
+  </div>
+
+  <!-- 4.2 AGENT 1 -->
+  <h3 id="agent1-lld">4.2 Agent 1 — Scoring Engine (Low-Level)</h3>
+
+  <h4>5-Tier Scoring Model</h4>
+  <p>Each tier collects signals, scores each +1 (bullish), 0 (neutral), or −1 (bearish), and computes an average. Missing data scores 0 — the system never throws an error for missing data.</p>
+
+  <table class="tier-table">
+    <tr><th>Tier</th><th>Data Sources</th><th>Signals</th><th>Weight</th></tr>
+    <tr>
+      <td><strong>1A — Price Structure</strong></td>
+      <td>Upstox OHLC candles, Option chain (PCR, max pain), Upstox futures LTP</td>
+      <td>Spot vs 20/50/200 EMA, Higher Highs/Lows pattern (3 days), Futures premium (±20pts), PCR (&gt;1.2/&lt;0.8), Max pain vs spot (±100pts)</td>
+      <td><span class="weight-bar" style="width:90px"></span><strong>30%</strong></td>
+    </tr>
+    <tr>
+      <td><strong>1B — Technical Indicators</strong></td>
+      <td>Upstox OHLC candles → TA4J library</td>
+      <td>20 EMA vs 50 EMA crossover, 50 EMA vs 200 EMA crossover, RSI(14) &gt;60/&lt;40, MACD crossover, Candlestick pattern (TA4J)</td>
+      <td><span class="weight-bar" style="width:60px"></span><strong>20%</strong></td>
+    </tr>
+    <tr>
+      <td><strong>2 — Institutional Flow</strong></td>
+      <td>NSE FII/DII CSV (previous day EOD)</td>
+      <td>FII net in index futures (±₹500Cr), FII long/short ratio (&gt;60%/&lt;40%), FII net in options, DII net cash (±₹500Cr)</td>
+      <td><span class="weight-bar" style="width:90px"></span><strong>30%</strong></td>
+    </tr>
+    <tr>
+      <td><strong>3 — Volatility &amp; Macro</strong></td>
+      <td>Upstox VIX LTP, Option chain OI changes, Gift Nifty (Upstox)</td>
+      <td>VIX 1-day % change (&lt;−2% bullish, &gt;+10% bearish), Call vs Put OI change direction, Gift Nifty premium/discount (±50pts)</td>
+      <td><span class="weight-bar" style="width:30px"></span><strong>10%</strong></td>
+    </tr>
+    <tr>
+      <td><strong>4 — Sentiment &amp; Commentary</strong></td>
+      <td>Marketaux API (news), Anthropic Claude LLM (user-provided text)</td>
+      <td>Marketaux avg entity sentiment (&gt;0.30/&lt;−0.30), LLM-extracted market bias from commentary text</td>
+      <td><span class="weight-bar" style="width:30px"></span><strong>10%</strong></td>
+    </tr>
+  </table>
+
+  <h4>Composite Score Formula</h4>
+  <div class="formula">
+    <div><span class="highlight">composite_score</span> <span class="operator">=</span></div>
+    <div>(tier1a_avg <span class="operator">×</span> <span class="highlight">0.30</span>) <span class="operator">+</span> (tier1b_avg <span class="operator">×</span> <span class="highlight">0.20</span>)</div>
+    <div><span class="operator">+</span> (tier2_avg <span class="operator">×</span> <span class="highlight">0.30</span>) <span class="operator">+</span> (tier3_avg <span class="operator">×</span> <span class="highlight">0.10</span>) <span class="operator">+</span> (tier4_avg <span class="operator">×</span> <span class="highlight">0.10</span>)</div>
+    <div style="margin-top:12px; font-size:12px;" class="label">Range: −1.0 (strong bearish) to +1.0 (strong bullish)</div>
+  </div>
+
+  <h4>Bias and Strength Mapping</h4>
+  <table>
+    <tr><th>Score Range</th><th>Bias</th><th>Strength</th><th>Agent 2 Treatment</th></tr>
+    <tr><td>&gt; 0.50</td><td class="pass-cell">Bullish</td><td>Extreme</td><td>Trade eligible</td></tr>
+    <tr><td>0.25 to 0.50</td><td class="pass-cell">Bullish</td><td>Mild</td><td>Trade eligible</td></tr>
+    <tr><td>0.10 to 0.25</td><td class="pass-cell">Bullish</td><td>Weak</td><td>Treated as Neutral — skip or Iron Condor only</td></tr>
+    <tr><td>−0.10 to 0.10</td><td>Neutral</td><td>Weak</td><td>Iron Condor / Strangle if IV is rich</td></tr>
+    <tr><td>−0.25 to −0.10</td><td class="fail-cell">Bearish</td><td>Weak</td><td>Treated as Neutral — skip or Iron Condor only</td></tr>
+    <tr><td>−0.50 to −0.25</td><td class="fail-cell">Bearish</td><td>Mild</td><td>Trade eligible</td></tr>
+    <tr><td>&lt; −0.50</td><td class="fail-cell">Bearish</td><td>Extreme</td><td>Trade eligible</td></tr>
+  </table>
+
+  <h4>Confidence Modifiers</h4>
+  <table>
+    <tr><th>Modifier</th><th>Condition</th><th>Effect</th></tr>
+    <tr><td>VIX Low (&lt;13)</td><td>Calm market, options cheap</td><td>× 1.10 (boost confidence)</td></tr>
+    <tr><td>VIX Normal (13–18)</td><td>Standard conditions</td><td>× 1.00 (no change)</td></tr>
+    <tr><td>VIX High (18–24)</td><td>Elevated uncertainty</td><td>× 0.85 (reduce confidence)</td></tr>
+    <tr><td>VIX Extreme (&gt;24)</td><td>Panic/extreme fear</td><td class="fail-cell">× 0.60 — NO AUTO-TRADE, flag to user</td></tr>
+    <tr><td>ADX &gt; 30</td><td>Strong directional trend confirmed</td><td>× 1.15 (strong trend boost)</td></tr>
+    <tr><td>ADX 20–30</td><td>Moderate trend</td><td>× 1.00</td></tr>
+    <tr><td>ADX &lt; 20</td><td>Sideways/weak trend</td><td>× 0.80</td></tr>
+    <tr><td>Commentary diverges</td><td>Tier 4 direction ≠ overall bias</td><td>× 0.80 (divergence penalty)</td></tr>
+  </table>
+
+  <h4>Design Pattern: Strategy Pattern for Tier Scorers</h4>
+  <pre><span class="c">// Each tier is an independent Strategy — easy to test, easy to extend</span>
+<span class="k">public interface</span> <span class="n">TierScorer</span> {
+    <span class="n">TierScore</span> calculate(<span class="n">MarketInputs</span> inputs);
+    <span class="n">String</span> getTierName();
+    <span class="n">BigDecimal</span> getWeight();
+}
+
+<span class="c">// Implementations: PriceStructureTierScorer, TechnicalIndicatorTierScorer,</span>
+<span class="c">//   InstitutionalFlowTierScorer, VolatilityMacroTierScorer, CommentarySentimentTierScorer</span>
+
+<span class="c">// ScoringPipeline.run() template method:</span>
+<span class="c">//   1. Fetch inputs (Upstox, NSE, Marketaux, LLM)</span>
+<span class="c">//   2. Score each tier via the strategy list</span>
+<span class="c">//   3. Calculate composite using weights</span>
+<span class="c">//   4. Apply VIX + ADX modifiers</span>
+<span class="c">//   5. Map to Bias + Strength + Confidence</span>
+<span class="c">//   6. Persist to agent1_signals + scoring_audit_log</span></pre>
+
+
+  <!-- 4.3 AGENT 2 -->
+  <h3 id="agent2-lld">4.3 Agent 2 — Recommendation Engine (Low-Level)</h3>
+
+  <h4>Layer 1: Strategy Selection Matrix</h4>
+  <table>
+    <tr><th>Market Bias</th><th>Strength</th><th>VIX Regime</th><th>IV Regime</th><th>Strategy Selected</th></tr>
+    <tr><td>Bullish</td><td>Extreme</td><td>Any</td><td>Any</td><td>Bull Call Spread (debit)</td></tr>
+    <tr><td>Bullish</td><td>Mild</td><td>High / Normal</td><td>Rich / Fair</td><td>Bull Put Spread (credit)</td></tr>
+    <tr><td>Bearish</td><td>Mild / Strong</td><td>High</td><td>Rich</td><td>Bear Call Spread (credit)</td></tr>
+    <tr><td>Neutral</td><td>Weak</td><td>High</td><td>Rich</td><td>Iron Condor</td></tr>
+    <tr><td>Neutral</td><td>Weak</td><td>Normal</td><td>Rich</td><td>Short Strangle</td></tr>
+    <tr><td>Any</td><td>Weak</td><td>Low</td><td>Cheap</td><td class="warn-cell">SKIP (IV too low to sell)</td></tr>
+    <tr><td>Any</td><td>Any</td><td>Extreme (&gt;24)</td><td>Any</td><td class="fail-cell">SKIP — alert user</td></tr>
+  </table>
+  <p style="font-size:13px; color:var(--muted);">IV Regime: IV/HV ratio &gt;1.20 = Rich, &lt;0.85 = Cheap, else Fair.</p>
+
+  <h4>Layer 2: Expected Move Calculation</h4>
+  <p>Two methods are computed and cross-checked:</p>
+  <pre><span class="c">// Method 1 — Straddle price (market consensus)</span>
+market_expected_move = ATM_CE_LTP + ATM_PE_LTP
+
+<span class="c">// Method 2 — Black-Scholes (mathematical)</span>
+EM = spot × IV × √(DTE / 365)
+<span class="n">one_four_sd_boundary</span> = spot ± (EM × 1.4)   <span class="c">// 84% probability zone</span>
+
+<span class="c">// If divergence between methods > 15%: flag, use more conservative boundary</span></pre>
+
+  <h4>Layer 3: Strike Selection Rules</h4>
+  <ul style="padding-left:20px; margin-bottom:12px; font-size:14px; line-height:2;">
+    <li>Short strike: at or beyond the 1.4 SD boundary, delta ≤ 0.20, rounded to nearest 50</li>
+    <li>Spread width: 50–150 points for ₹5L capital; proportionally wider for larger capital</li>
+    <li>Long strike: short_strike ± spread_width (direction depends on strategy)</li>
+    <li>Verify |PoP − PoPP| ≤ 15% — if not, try next strike</li>
+  </ul>
+
+  <h4>Layer 4: Gate Validation (Chain of Responsibility Pattern)</h4>
+  <div class="gate-grid">
+    <div class="gate-card">
+      <div class="gate-num">Gate 1</div>
+      <div class="gate-name">PoP — Probability of Profit</div>
+      <div class="gate-rule">Black-Scholes seller's probability ≥ 80%. Computed as N(d2) from the short strike's IV.</div>
+      <div class="gate-type hard">HARD REJECT — no trade if fails</div>
+    </div>
+    <div class="gate-card">
+      <div class="gate-num">Gate 2</div>
+      <div class="gate-name">Max Loss vs Capital</div>
+      <div class="gate-rule">Real expected loss (50% of max theoretical loss) ≤ 1.5% of capital. Used for lot sizing, not rejection.</div>
+      <div class="gate-type indicative">INDICATIVE — sizes lots, never rejects</div>
+    </div>
+    <div class="gate-card">
+      <div class="gate-num">Gate 3</div>
+      <div class="gate-name">PoP–PoPP Gap</div>
+      <div class="gate-rule">|PoP − PoPP| ≤ 15%. Prevents selecting strikes where profit probability degrades sharply inside the spread.</div>
+      <div class="gate-type hard">HARD REJECT — no trade if fails</div>
+    </div>
+    <div class="gate-card">
+      <div class="gate-num">Gate 4</div>
+      <div class="gate-name">Minimum Return on Capital</div>
+      <div class="gate-rule">RoC ≥ 0.5% × (DTE ÷ 5). Adjusted for time to expiry — short DTE trades need proportionally less premium.</div>
+      <div class="gate-type hard">HARD REJECT — no trade if fails</div>
+    </div>
+  </div>
+
+  <h4>Black-Scholes PoP Formula</h4>
+  <pre><span class="c">// d1, d2 from Black-Scholes model:</span>
+d1 = (ln(S/K) + (r + 0.5σ²) × t) / (σ × √t)
+d2 = d1 − σ × √t
+
+<span class="c">// PoP for SHORT PUT (seller's probability = put expires OTM):</span>
+PoP = <span class="n">N(d2)</span>     <span class="c">// N = standard normal CDF, Apache Commons Math</span>
+
+<span class="c">// Where:</span>
+<span class="c">// S = Nifty spot price</span>
+<span class="c">// K = strike price of the short put</span>
+<span class="c">// r = 0.065 (India repo rate, risk-free rate)</span>
+<span class="c">// σ = IV of the strike (from Upstox option chain, divided by 100)</span>
+<span class="c">// t = DTE / 365</span>
+<span class="c">// All inputs/outputs BigDecimal. Convert to double only for Math.log/sqrt calls.</span></pre>
+
+  <h4>Layer 5: Position Sizing</h4>
+  <pre>real_expected_loss_per_lot = max_loss_per_lot × <span class="v">0.50</span>
+<span class="c">// (Agent 3 exits at T2 = 50% of max loss, so we size to that, not theoretical max)</span>
+
+max_loss_allowed = capital × <span class="v">0.015</span>      <span class="c">// 1.5% max loss rule</span>
+lots_from_loss   = floor(max_loss_allowed / real_expected_loss_per_lot)
+lots_from_margin = floor(capital / SPAN_margin_per_lot)
+
+final_lots = min(lots_from_loss, lots_from_margin)</pre>
+
+
+  <!-- 4.4 AGENT 3 -->
+  <h3 id="agent3-lld">4.4 Agent 3 — Monitoring Engine (Low-Level)</h3>
+
+  <p>Agent 3 runs every 5 minutes between 9:15 AM and 3:30 PM using Spring <code>@Scheduled</code> with ShedLock to prevent overlapping runs.</p>
+
+  <h4>Monitoring Thresholds for Credit Spreads (Bull Put / Bear Call)</h4>
+  <div class="threshold-diagram">
+    <div class="th-zone th-t1">
+      <div class="zone-label" style="color:var(--warn);">T1 — Watch</div>
+      <div class="zone-trigger">Nifty reaches short_strike + 150 pts</div>
+      <div class="zone-action">Recalculate live PoP.<br>HOLD if PoP ≥ 75%</div>
+    </div>
+    <div class="th-zone th-t2">
+      <div class="zone-label" style="color:#e65100;">T2 — Readjust</div>
+      <div class="zone-trigger">Nifty reaches short_strike + 75 pts<br>OR MTM loss = 50% of max loss</div>
+      <div class="zone-action">Roll short strike lower<br>OR tighten spread</div>
+    </div>
+    <div class="th-zone th-t3">
+      <div class="zone-label" style="color:var(--a5);">T3 — Exit</div>
+      <div class="zone-trigger">Nifty breaches short_strike<br>OR MTM loss = real_expected_loss</div>
+      <div class="zone-action">Close ALL legs — market order<br>Agent 5 executes immediately</div>
+    </div>
+  </div>
+
+  <h4>Dynamic Overrides</h4>
+  <table>
+    <tr><th>Condition</th><th>Override</th></tr>
+    <tr><td>VIX spikes &gt; 30% intraday</td><td class="fail-cell">Force T3 EXIT regardless of Nifty price</td></tr>
+    <tr><td>VIX &gt; 24 (Extreme)</td><td class="warn-cell">PAUSE monitoring — alert user to decide manually</td></tr>
+  </table>
+
+  <h4>Readjustment Flow (T2 Action)</h4>
+  <p>When T2 is triggered and the system decides to readjust rather than exit:</p>
+  <ol style="padding-left:20px; line-height:2; font-size:14px; margin-bottom:12px;">
+    <li>Check DTE ≥ 2 days (if DTE &lt; 2, exit instead — too close to expiry to readjust)</li>
+    <li>Call Agent 5 to exit the current trade (reverse market order)</li>
+    <li>Fetch fresh Agent 1 signal (on-demand call)</li>
+    <li>Calculate relaxed Gate 1 threshold: 65% if VIX ≤ 22, 70% if VIX &gt; 22</li>
+    <li>Call Agent 2 /recommend with the relaxed PoP gate</li>
+    <li>Auto-confirm and call Agent 5 to execute the new trade</li>
+  </ol>
+
+  <!-- 4.5 AGENT 5 -->
+  <h3 id="agent5-lld">4.5 Agent 5 — Execution Engine (Low-Level)</h3>
+
+  <h4>Order Execution Sequence</h4>
+  <ol style="padding-left:20px; line-height:2.2; font-size:14px; margin-bottom:16px;">
+    <li>Receive <code>ExecuteTradeRequest</code> (trade ID, legs with instrument key, action, limit price, quantity)</li>
+    <li>Verify trade status is CONFIRMED in database</li>
+    <li>Margin check: <code>POST /v2/charges/margin</code> on production Upstox API. Reject if insufficient.</li>
+    <li>Place both legs simultaneously: <code>POST /v2/order/multi/place</code> on HFT Upstox endpoint</li>
+    <li>Poll both order statuses every 5 seconds for up to 30 seconds</li>
+    <li>If still open after 30 seconds: modify order from LIMIT → MARKET (or cancel in sandbox mode)</li>
+    <li>If one leg fails after the other fills: place reverse MARKET order on the filled leg (rollback). Alert user.</li>
+    <li>Both fills confirmed → compute actual net premium</li>
+    <li>Slippage check: actual premium &lt; expected × 90% → set slippage alert flag (trade still proceeds)</li>
+    <li>Write fill data to <code>trades.entry_fills</code>, update status to ACTIVE</li>
+  </ol>
+
+  <h4>Order Identification Tags</h4>
+  <table>
+    <tr><th>Tag Type</th><th>Format</th><th>Purpose</th></tr>
+    <tr><td>Trade tag (shared)</td><td><code>ZUPP_{tradeId_first8_uppercase}</code></td><td>Query all legs of one trade from Upstox by tag</td></tr>
+    <tr><td>Leg correlation ID</td><td><code>ZUPP_{id8}_L{legIndex}</code></td><td>Map each order ID back to its leg without state</td></tr>
+    <tr><td>Exit trade tag</td><td><code>ZUPP_{id8}_X</code></td><td>Distinguish exit orders from entry orders</td></tr>
+  </table>
+
+  <!-- 4.6 API REFERENCE -->
+  <h3 id="api-reference">4.6 REST API Reference</h3>
+
+  <h4>Agent 1 — Market Analyst (:8081)</h4>
+  <table>
+    <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+    <tr>
+      <td><span class="method post">POST</span></td>
+      <td><code>/api/v1/agent1/score</code></td>
+      <td>Trigger a full scoring run. Body: <code>{ "expiryDate": "2026-07-01" (optional), "commentary": "...", "fetchMarketaux": true }</code>. If expiryDate is omitted, the next Tuesday expiry is auto-resolved from Upstox.</td>
+    </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/api/v1/agent1/latest?expiry_date=2026-07-01</code></td>
+      <td>Returns the most recent Agent 1 signal for a given expiry. Used by UI for polling.</td>
+    </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/api/v1/agent1/next-expiry</code></td>
+      <td>Returns the next upcoming Tuesday expiry date and all upcoming expiries from Upstox option contract data.</td>
+    </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/api/v1/agent1/health</code></td>
+      <td>Returns service health: status, last run timestamp, data freshness.</td>
+    </tr>
+  </table>
+
+  <h4>Agent 2 — Recommender (:8082)</h4>
+  <table>
+    <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+    <tr>
+      <td><span class="method post">POST</span></td>
+      <td><code>/api/v1/agent2/recommend</code></td>
+      <td>Generate a trade recommendation. Body: <code>{ "agent1SignalId": "uuid", "userProfileId": "uuid" }</code>. Returns a full trade card valid for 20 minutes.</td>
+    </tr>
+    <tr>
+      <td><span class="method post">POST</span></td>
+      <td><code>/api/v1/agent2/confirm</code></td>
+      <td>Confirm or reject a pending trade. Body: <code>{ "tradeId": "uuid", "action": "CONFIRM|REJECT", "overrideLots": null }</code>.</td>
+    </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/api/v1/agent2/monitor-config/{tradeId}</code></td>
+      <td>Returns full monitoring configuration for Agent 3. Called after fills confirmed. Headers: <code>X-Short-Fill-Price</code>, <code>X-Long-Fill-Price</code>.</td>
+    </tr>
+  </table>
+
+  <h4>Agent 3 — Monitor (:8083)</h4>
+  <table>
+    <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+    <tr>
+      <td><span class="method post">POST</span></td>
+      <td><code>/api/v1/agent3/evaluate/{tradeId}</code></td>
+      <td>Manual trigger for one monitoring evaluation cycle on a specific trade. Returns: <code>{ action, reason, currentPnl }</code>.</td>
+    </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/api/v1/agent3/active-trades</code></td>
+      <td>Returns all currently ACTIVE trades with their latest monitoring evaluation snapshot. Polled every 5 seconds by the UI.</td>
+    </tr>
+  </table>
+
+  <h4>Agent 5 — Executor (:8085)</h4>
+  <table>
+    <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+    <tr>
+      <td><span class="method post">POST</span></td>
+      <td><code>/api/v1/agent5/execute</code></td>
+      <td>Execute a confirmed trade. Body: <code>ExecuteTradeRequest</code> with trade ID and leg details.</td>
+    </tr>
+    <tr>
+      <td><span class="method post">POST</span></td>
+      <td><code>/api/v1/agent5/exit/{tradeId}</code></td>
+      <td>Exit all legs of an active trade with reverse market orders. Called by Agent 3 on T3 trigger.</td>
+    </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/api/v1/agent5/health</code></td>
+      <td>Health check: <code>{ status, dbConnected, upstoxTokenLoaded, timestamp }</code>.</td>
+    </tr>
+    <tr>
+      <td><span class="method get">GET</span></td>
+      <td><code>/api/v1/agent5/upstox/status</code></td>
+      <td>Live Upstox connectivity check: token status (LOADED/ABSENT/EXPIRED/UNREACHABLE), production API reachable, user ID confirmed.</td>
+    </tr>
+  </table>
+
+  <h4>Authentication</h4>
+  <div class="callout info">
+    <strong>v1 — API Key</strong>
+    All inter-agent calls use the <code>X-API-Key</code> header. The key is stored in the environment variable <code>X_API_KEY</code> on each agent. OAuth2 for end-user login is planned for v2 and the security layer is designed to be swappable without touching business logic.
+  </div>
+</div>
+
+<div class="doc-footer">
+  <p><strong>ZuppTrade System Design</strong> — Generated for onboarding and handover purposes.</p>
+  <p style="margin-top:4px;">Questions? Refer to <code>CLAUDE.md</code> (specification) and <code>IMPL_STATUS.md</code> (current build state) in the repository root.</p>
+</div>
+
+</main>
+
+<script>
+  // Active sidebar link on scroll
+  const links = document.querySelectorAll('#sidebar nav a');
+  const sections = [];
+  links.forEach(a => {
+    const id = a.getAttribute('href').replace('#','');
+    const el = document.getElementById(id);
+    if (el) sections.push({ el, a });
+  });
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const match = sections.find(s => s.el === entry.target);
+        if (match) match.a.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  sections.forEach(s => observer.observe(s.el));
+</script>
+</body>
+</html>

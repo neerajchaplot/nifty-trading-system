@@ -47,8 +47,8 @@ public class UpstoxMarketQuoteClient {
 
             if (response == null || !response.isSuccess() || response.data() == null
                     || response.data().isEmpty()) {
-                // Normal during weekends/holidays — market closed, LTP not available
-                log.warn("upstox.ltp.unavailable instrument={} status={} reason=market_closed_or_empty_response",
+                // Normal on weekends/holidays — live LTP not served outside market hours
+                log.debug("upstox.ltp.unavailable instrument={} status={} reason=market_closed_or_empty_response",
                         instrumentKey, response != null ? response.status() : "null");
                 return null;
             }

@@ -1,0 +1,196 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Nifty Trading System — Docker Compose
+#
+# Usage:
+#   1. cp .env.example .env  and fill in all secrets
+#   2. Build all JARs first:  mvn clean package -DskipTests
+#   3. docker compose up -d
+#   4. Angular UI:  cd zupptrade-ui && npm start   (runs on host at :4200)
+#
+# Service ports:
+#   postgres         : 5432
+#   agent1           : 8081
+#   agent2           : 8082
+#   agent3           : 8083
+#   agent4           : 8084
+#   agent5           : 8085
+#   upstox-auth      : (no port — batch job, runs once daily via docker exec or restart)
+# ──────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: nifty_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: nifty_trading
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d nifty_trading"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # ── Agent 1 — Market Direction Scoring ───────────────────────────────────────
+  agent1:
+    build:
+      context: ./agent1-market_analyst
+    container_name: nifty_agent1
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/nifty_trading
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
+      MARKETAUX_API_KEY: ${MARKETAUX_API_KEY}
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      X_API_KEY: ${INTERNAL_API_KEY}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8081/api/v1/agent1/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 45s
+
+  # ── Agent 2 — Trade Recommendation ───────────────────────────────────────────
+  agent2:
+    build:
+      context: ./agent2-recommendation
+    container_name: nifty_agent2
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      agent1:
+        condition: service_started
+    ports:
+      - "8082:8082"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/nifty_trading
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      X_API_KEY: ${INTERNAL_API_KEY}
+
+  # ── Agent 3 — Trade Monitoring ────────────────────────────────────────────────
+  agent3:
+    build:
+      context: ./agent3-monitor
+    container_name: nifty_agent3
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      agent1:
+        condition: service_started
+      agent2:
+        condition: service_started
+      agent5:
+        condition: service_started
+    ports:
+      - "8083:8083"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/nifty_trading
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      X_API_KEY: ${INTERNAL_API_KEY}
+      # Override agent URLs to use Docker service names
+      AGENT1_URL: http://agent1:8081
+      AGENT2_URL: http://agent2:8082
+      AGENT5_URL: http://agent5:8085
+
+  # ── Agent 4 — Trade Analytics & Audit (read-only) ────────────────────────────
+  agent4:
+    build:
+      context: ./agent4-backtest
+    container_name: nifty_agent4
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8084:8084"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/nifty_trading
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8084/api/v1/agent4/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ── Agent 5 — Trade Execution ─────────────────────────────────────────────────
+  agent5:
+    build:
+      context: ./agent5-execution
+    container_name: nifty_agent5
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8085:8085"
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/nifty_trading
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
+      UPSTOX_API_KEY: ${UPSTOX_API_KEY}
+      UPSTOX_API_SECRET: ${UPSTOX_API_SECRET}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      X_API_KEY: ${INTERNAL_API_KEY}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8085/api/v1/agent5/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ── Upstox Auth — Daily Token Refresh (batch job, no web server) ──────────────
+  # NOTE: upstox-auth/ lives in a separate git repo (gitignored in this repo).
+  # This service only works when that repo is checked out at ./upstox-auth/ locally.
+  # Runs once at startup and again on an 08:30 AM IST schedule via its internal @Scheduled.
+  # Does NOT restart automatically — use "docker compose restart upstox-auth" each morning
+  # if the container exited cleanly after the startup run.
+  upstox-auth:
+    build:
+      context: ./upstox-auth
+    container_name: nifty_upstox_auth
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/nifty_trading
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      UPSTOX_API_KEY: ${UPSTOX_API_KEY}
+      UPSTOX_API_SECRET: ${UPSTOX_API_SECRET}
+      UPSTOX_USERNAME: ${UPSTOX_USERNAME}
+      UPSTOX_PASSWORD: ${UPSTOX_PASSWORD}
+      UPSTOX_TOTP_SEED: ${UPSTOX_TOTP_SEED}
+      TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      UPSTOX_REDIRECT_URI: ${UPSTOX_REDIRECT_URI:-http://localhost:8080/callback}
+
+volumes:
+  postgres_data:
+    driver: local

@@ -13,6 +13,7 @@ import com.the3Cgrp.zupptrade.agent2.domain.model.MarketContext;
 import com.the3Cgrp.zupptrade.agent2.domain.model.TradeSummary;
 import com.the3Cgrp.zupptrade.agent2.engine.RecommendationContext;
 import com.the3Cgrp.zupptrade.agent2.engine.RecommendationEngine;
+import com.the3Cgrp.zupptrade.agent2.exception.MarketDataUnavailableException;
 import com.the3Cgrp.zupptrade.agent2.exception.TradeNotFoundException;
 import com.the3Cgrp.zupptrade.agent2.repository.Agent1SignalRepository;
 import com.the3Cgrp.zupptrade.agent2.repository.ReferenceDataRepository;
@@ -91,8 +92,21 @@ public class RecommendationService {
                 .orElseThrow(() -> new IllegalArgumentException("User profile not found: " + request.userProfileId()));
 
         int lotSize = fetchLotSize();
-        MarketSnapshot snapshot = marketDataClient.fetchSnapshot();
+        // Option chain comes first — underlying_spot_price is available 24/7 (last-session data).
         OptionChainData optionChain = optionChainClient.fetch(signal.getExpiryDate());
+
+        // Live market quote is only available during market hours.
+        // On weekends/holidays it returns empty data, so we catch and fall back gracefully.
+        MarketSnapshot snapshot = null;
+        try {
+            snapshot = marketDataClient.fetchSnapshot();
+        } catch (MarketDataUnavailableException ex) {
+            log.warn("market.snapshot.unavailable reason=market_closed_or_holiday fallback=option_chain_spot_and_signal_vix");
+        }
+        BigDecimal spot = (snapshot != null && snapshot.spot().compareTo(BigDecimal.ZERO) > 0)
+                ? snapshot.spot() : optionChain.spot();
+        BigDecimal vix = (snapshot != null && snapshot.vix().compareTo(BigDecimal.ZERO) > 0)
+                ? snapshot.vix() : (signal.getVixLevel() != null ? signal.getVixLevel() : BigDecimal.ZERO);
 
         int dte = (int) ChronoUnit.DAYS.between(LocalDate.now(), signal.getExpiryDate());
 
@@ -100,8 +114,8 @@ public class RecommendationService {
         ctx.setSignal(signal);
         ctx.setUserProfile(userProfile);
         ctx.setLotSize(lotSize);
-        ctx.setSpot(snapshot.spot());
-        ctx.setVix(snapshot.vix());
+        ctx.setSpot(spot);
+        ctx.setVix(vix);
         // Compute 20-day annualised Historical Volatility from Upstox daily closes.
         // Returns null if Upstox is unavailable or there is insufficient data (e.g. holiday).
         // StrategySelector treats null/zero HV as IV regime = FAIR (no ratio computation).
@@ -114,7 +128,13 @@ public class RecommendationService {
 
         engine.execute(ctx);
 
-        TradeEntity trade = buildAndPersistTrade(ctx, signal, userProfile, snapshot, optionChain);
+        // Layer 1 selected NO_TRADE or SKIP — engine exits before strike selection;
+        // shortLeg/longLeg remain null and List.of(null, null) in buildAndPersistTrade would NPE.
+        if (ctx.getStrategy() == Strategy.NO_TRADE || ctx.getStrategy() == Strategy.SKIP) {
+            return handleNoTrade(ctx, signal, userProfile);
+        }
+
+        TradeEntity trade = buildAndPersistTrade(ctx, signal, userProfile, optionChain);
 
         // Ledger: TRADE_PENDING (gates passed) or TRADE_REJECTED (gate failure)
         // Record joins the outer @Transactional — commits with the trade row (FK safe).
@@ -278,7 +298,7 @@ public class RecommendationService {
     }
 
     private TradeEntity buildAndPersistTrade(RecommendationContext ctx, Agent1SignalEntity signal,
-                                              UserProfileEntity userProfile, MarketSnapshot snapshot,
+                                              UserProfileEntity userProfile,
                                               OptionChainData optionChain) {
         LocalDateTime now = LocalDateTime.now();
         SpreadDirection direction = ctx.getSpreadDirection();
@@ -306,7 +326,7 @@ public class RecommendationService {
                 : BigDecimal.ZERO;
 
         MarketContext marketContext = new MarketContext(
-                snapshot.spot(), snapshot.vix(), atmIv,
+                ctx.getSpot(), ctx.getVix(), atmIv,
                 ctx.getHistoricalVolatility(), ivHvRatio,
                 ctx.getIvRegime(), signal.getVixRegime(),
                 ctx.getExpectedMove(), ctx.getOneFourSdBoundary()
@@ -342,7 +362,10 @@ public class RecommendationService {
                 + "-" + String.format("%04d", seqVal);
         trade.setTradeCode(tradeCode);
 
-        return tradeRepository.save(trade);
+        // saveAndFlush forces JPA to send the INSERT to the DB immediately (within the current connection/tx).
+        // Without this, the ledger's JdbcTemplate INSERT on trade_ledger sees an unflushed trade row and
+        // triggers a FK violation even though both are in the same @Transactional.
+        return tradeRepository.saveAndFlush(trade);
     }
 
     private MonitorThresholdsDto buildThresholds(RecommendationContext ctx) {
@@ -396,6 +419,65 @@ public class RecommendationService {
                 .map(g -> g.gate() + "_FAILED")
                 .reduce((a, b) -> a + "," + b)
                 .orElse(ctx.getStrategy().name());
+    }
+
+    private TradeCardDto handleNoTrade(RecommendationContext ctx,
+                                       Agent1SignalEntity signal,
+                                       UserProfileEntity userProfile) {
+        LocalDateTime now = LocalDateTime.now();
+        String reason = ctx.getStrategy().name();
+
+        TradeSummary summary = new TradeSummary(
+                BigDecimal.ZERO, 0, ctx.getLotSize(),
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO);
+
+        MarketContext marketContext = new MarketContext(
+                ctx.getSpot(), ctx.getVix(), BigDecimal.ZERO,
+                ctx.getHistoricalVolatility(), BigDecimal.ZERO,
+                ctx.getIvRegime(), signal.getVixRegime(),
+                null, null);
+
+        MonitorThresholdsDto thresholds = new MonitorThresholdsDto(
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                BigDecimal.ZERO, BigDecimal.ZERO);
+
+        TradeEntity trade = new TradeEntity();
+        trade.setAgent1Signal(signal);
+        trade.setUserProfile(userProfile);
+        trade.setStatus(TradeStatus.REJECTED);
+        trade.setStrategy(ctx.getStrategy());
+        trade.setSpreadDirection(null);
+        trade.setExpiryDate(signal.getExpiryDate());
+        trade.setDte(ctx.getDte());
+        trade.setLegs(jsonUtil.toJson(List.of()));
+        trade.setSummary(jsonUtil.toJson(summary));
+        trade.setMarketContext(jsonUtil.toJson(marketContext));
+        trade.setThresholds(jsonUtil.toJson(thresholds));
+        trade.setGateResults(jsonUtil.toJson(List.of()));
+        trade.setGeneratedAt(now);
+        trade.setValidUntil(now);
+        trade.setCloseReason(reason);
+
+        long seqVal = tradeRepository.nextTradeCodeSeq();
+        String tradeCode = "T-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
+                + "-" + String.format("%04d", seqVal);
+        trade.setTradeCode(tradeCode);
+
+        tradeRepository.saveAndFlush(trade);
+
+        ledger.record(trade.getId(), LedgerEventType.TRADE_REJECTED,
+                new TradeRejectedPayload(reason, reason),
+                "AGENT2:SYSTEM");
+
+        log.info("recommendation.no_trade",
+                kv("tradeId", trade.getId()),
+                kv("strategy", ctx.getStrategy()),
+                kv("vixRegime", signal.getVixRegime()),
+                kv("reason", reason));
+
+        return toTradeCardDtoFromEntity(trade);
     }
 
     private TradeCardDto toTradeCardDto(TradeEntity trade, RecommendationContext ctx) {

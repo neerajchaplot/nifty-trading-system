@@ -38,7 +38,7 @@
         <module>agent1-market_analyst</module>
         <module>agent2-recommendation</module>
         <module>agent3-monitor</module>
-        <!--<module>agent4-backtest</module> -->
+        <module>agent4-backtest</module>
         <module>agent5-execution</module>
         <!--<module>orchestrator</module> -->
     </modules>

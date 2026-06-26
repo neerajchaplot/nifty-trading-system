@@ -18,16 +18,17 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        default_schema: public
+        default_schema: zupptrade_dev
     show-sql: false
 
   flyway:
     # Migration scripts come from the db-migrations module on the classpath.
-    # Agent 3 runs Flyway on startup so it can operate independently of agent2
-    # (e.g. after a fresh DB restore or when spinning up for monitoring only).
+    # Agent 3 runs Flyway on startup so it can operate independently of agent2.
     # Flyway's built-in advisory lock prevents concurrent apply races with agent2.
     enabled: true
     locations: classpath:db/migration
+    default-schema: zupptrade_dev
+    init-sql: "SET search_path TO zupptrade_dev"
 
   mvc:
     problemdetails:

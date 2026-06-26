@@ -53,6 +53,24 @@
             <artifactId>spring-web</artifactId>
         </dependency>
 
+        <!--
+            spring-webmvc: optional compile-time dependency for GlobalExceptionHandler
+            (NoResourceFoundException, @RestControllerAdvice MVC classes).
+            Not transitive — each agent provides this via spring-boot-starter-web at runtime.
+        -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Jakarta Servlet API: required by spring-webmvc at compile time -->
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Jackson 3 databind (tools.jackson) — managed by Spring Boot BOM -->
         <dependency>
             <groupId>tools.jackson.core</groupId>

@@ -1,6 +1,7 @@
 package com.the3Cgrp.zupptrade.shared.dto;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonRawValue;
 import com.the3Cgrp.zupptrade.shared.enums.Bias;
 import com.the3Cgrp.zupptrade.shared.enums.Confidence;
 import com.the3Cgrp.zupptrade.shared.enums.Strength;
@@ -24,7 +25,8 @@ public record Agent1SignalDto(
         BigDecimal vixLevel,
         VixRegime vixRegime,
         String vixDirection,
-        String scoreBreakdown,
+        @JsonRawValue String scoreBreakdown,
         Boolean commentaryDivergence,
-        String keyLevels
+        @JsonRawValue String keyLevels,
+        @JsonRawValue String dataGaps
 ) {}

@@ -42,6 +42,20 @@ public class Agent5ExecutionProperties {
      */
     private boolean cancelOnTimeoutInsteadOfMarket = false;
 
+    /**
+     * When true: skip the margin sufficiency check entirely and proceed to order placement.
+     * Use ONLY in sandbox profile to test execution flow without a funded Upstox account.
+     * NEVER set true in production — you will place orders without verifying available funds.
+     */
+    private boolean bypassMarginCheck = false;
+
+    /**
+     * When true: skip Upstox order placement entirely and inject synthetic fills at limitPrice.
+     * Use ONLY in sandbox profile — Upstox sandbox does not carry weekly NIFTY option contracts.
+     * NEVER set true in production — no real orders will be placed.
+     */
+    private boolean simulateFills = false;
+
     public int getFillPollIntervalMs() { return fillPollIntervalMs; }
     public void setFillPollIntervalMs(int v) { this.fillPollIntervalMs = v; }
 
@@ -56,4 +70,10 @@ public class Agent5ExecutionProperties {
 
     public boolean isCancelOnTimeoutInsteadOfMarket() { return cancelOnTimeoutInsteadOfMarket; }
     public void setCancelOnTimeoutInsteadOfMarket(boolean v) { this.cancelOnTimeoutInsteadOfMarket = v; }
+
+    public boolean isBypassMarginCheck() { return bypassMarginCheck; }
+    public void setBypassMarginCheck(boolean v) { this.bypassMarginCheck = v; }
+
+    public boolean isSimulateFills() { return simulateFills; }
+    public void setSimulateFills(boolean v) { this.simulateFills = v; }
 }

@@ -20,6 +20,7 @@ import com.the3Cgrp.zupptrade.agent1.repository.Agent1SignalRepository;
 import com.the3Cgrp.zupptrade.agent1.scoring.TierScorer;
 import com.the3Cgrp.zupptrade.agent1.service.CommentaryExtractorService;
 import com.the3Cgrp.zupptrade.agent1.service.TechnicalIndicatorService;
+import com.the3Cgrp.zupptrade.core.expiry.ExpiryDateService;
 import com.the3Cgrp.zupptrade.shared.enums.VixRegime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,8 +28,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static net.logstash.logback.argument.StructuredArguments.kv;
 
@@ -58,6 +62,7 @@ public class ScoringPipeline {
     private final GiftNiftyClient giftNiftyClient;
     private final CommentaryExtractorService commentaryExtractor;
     private final TechnicalIndicatorService technicalIndicatorService;
+    private final ExpiryDateService expiryDateService;
 
     public ScoringPipeline(List<TierScorer> tierScorers,
                            SignalComposer composer,
@@ -68,7 +73,8 @@ public class ScoringPipeline {
                            MarketauxClient marketauxClient,
                            GiftNiftyClient giftNiftyClient,
                            CommentaryExtractorService commentaryExtractor,
-                           TechnicalIndicatorService technicalIndicatorService) {
+                           TechnicalIndicatorService technicalIndicatorService,
+                           ExpiryDateService expiryDateService) {
         this.tierScorers = tierScorers;
         this.composer = composer;
         this.repository = repository;
@@ -79,14 +85,24 @@ public class ScoringPipeline {
         this.giftNiftyClient = giftNiftyClient;
         this.commentaryExtractor = commentaryExtractor;
         this.technicalIndicatorService = technicalIndicatorService;
+        this.expiryDateService = expiryDateService;
     }
 
     /** Step 1-4 outside transaction (no DB writes during external API calls). Step 5 in transaction. */
     public Agent1SignalEntity run(ScoreRequestDto request) {
         LocalDateTime runTime = LocalDateTime.now();
 
+        // Resolve expiry date: use caller-supplied value if present, otherwise auto-fetch next Tuesday expiry
+        LocalDate effectiveExpiry = request.expiryDate() != null
+                ? request.expiryDate()
+                : expiryDateService.nextExpiry();
+        if (effectiveExpiry == null) {
+            throw new IllegalStateException("Cannot determine expiry date — Upstox unavailable and no expiry supplied");
+        }
+        log.info("pipeline.expiry resolved={} supplied={}", effectiveExpiry, request.expiryDate() != null);
+
         // Step 1: Fetch all inputs — each client handles its own errors, returns null on failure
-        MarketInputs inputs = fetchInputs(request);
+        MarketInputs inputs = fetchInputs(request, effectiveExpiry);
 
         // Step 2: Score each tier
         List<TierScore> tierScores = tierScorers.stream()
@@ -99,13 +115,16 @@ public class ScoringPipeline {
         // Step 4: Attach JSON audit data
         signal.setScoreBreakdown(buildScoreBreakdownJson(tierScores));
         signal.setRawInputs(buildRawInputsJson(inputs));
-        signal.setKeyLevels(buildKeyLevelsJson(inputs.getCommentarySignal()));
+        // BUG-05 fix: only persist key_levels when commentary was actually provided
+        boolean hasCommentary = request.commentary() != null && !request.commentary().isBlank();
+        signal.setKeyLevels(hasCommentary ? buildKeyLevelsJson(inputs.getCommentarySignal()) : null);
+        signal.setDataGaps(buildDataGapsJson(inputs, hasCommentary && request.shouldFetchMarketaux()));
 
         // Step 5: Persist
         return persist(signal);
     }
 
-    private MarketInputs fetchInputs(ScoreRequestDto request) {
+    private MarketInputs fetchInputs(ScoreRequestDto request, LocalDate expiryDate) {
         // Historical candles for TA4J (200+ days)
         List<OhlcCandle> candles = safeGet(() -> historicalClient.fetchDailyCandles(200), List.of());
 
@@ -122,13 +141,13 @@ public class ScoringPipeline {
 
         // Option chain: spot, PCR, max pain, futures premium from Upstox
         // Pass lastVix so VolatilityMacroScorer can calculate vix_daily_change (Tier 3)
-        var chain = safeGet(() -> optionChainClient.fetch(request.expiryDate(), lastVix), null);
+        var chain = safeGet(() -> optionChainClient.fetch(expiryDate, lastVix), null);
 
         // Upstox FII/DII data — fetch, persist daily snapshots, and compute 5-day trend
         FiiDiiData fiiDii = safeGet(fiiDiiService::fetchAndPersist, null);
 
         // Marketaux news sentiment — fetch once, split into score (for scorer) + details (for audit/display)
-        NseiSentiment marketauxResult = request.fetchMarketaux()
+        NseiSentiment marketauxResult = request.shouldFetchMarketaux()
                 ? safeGet(marketauxClient::fetchNiftySentiment, null)
                 : null;
         BigDecimal marketauxSentiment = marketauxResult != null ? marketauxResult.averageScore() : null;
@@ -171,7 +190,7 @@ public class ScoringPipeline {
                 .commentaryBias(commentarySignal.bias())
                 .commentarySignal(commentarySignal)
                 .indicators(indicators)
-                .expiryDate(request.expiryDate())
+                .expiryDate(expiryDate)
                 .build();
     }
 
@@ -283,6 +302,27 @@ public class ScoringPipeline {
                 + ",\"daysNegative\":" + trend.daysNegative()
                 + ",\"snapshotCount\":" + trend.snapshotCount()
                 + "}";
+    }
+
+    /**
+     * Builds a JSON array of input names that were null/unavailable during this scoring run.
+     * Only checks top-level inputs; TA4J NaN indicators are tracked per-scorer.
+     * Returns null (not stored) when all inputs were available.
+     *
+     * @param fetchedMarketaux true when marketaux fetch was requested (so a null value is a gap)
+     */
+    private static String buildDataGapsJson(MarketInputs inputs, boolean fetchedMarketaux) {
+        List<String> gaps = new ArrayList<>();
+        if (inputs.getSpot() == null)             gaps.add("SPOT");
+        if (inputs.getVixLevel() == null)         gaps.add("VIX");
+        if (inputs.getPcr() == null)              gaps.add("PCR");
+        if (inputs.getFiiNetFutures() == null)    gaps.add("FII_FUTURES");
+        if (inputs.getFiiNetOptions() == null)    gaps.add("FII_OPTIONS");
+        if (inputs.getDiiNet() == null)           gaps.add("DII");
+        if (inputs.getGiftNiftyPremium() == null) gaps.add("GIFT_NIFTY");
+        if (fetchedMarketaux && inputs.getMarketauxSentiment() == null) gaps.add("MARKETAUX");
+        if (gaps.isEmpty()) return null;
+        return "[" + gaps.stream().map(g -> "\"" + g + "\"").collect(Collectors.joining(",")) + "]";
     }
 
     private static String escapeJson(String s) {

@@ -2,6 +2,7 @@ package com.the3Cgrp.zupptrade.agent5.client;
 
 import com.the3Cgrp.zupptrade.agent5.client.request.MarginCheckRequest;
 import com.the3Cgrp.zupptrade.agent5.client.request.MultiOrderRequest;
+import com.the3Cgrp.zupptrade.agent5.client.response.FundsAndMarginResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.MarginCheckResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.MultiOrderResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.OrderStatusResponse;
@@ -37,6 +38,7 @@ public class UpstoxOrderClient {
     private static final String MODIFY_ORDER_URI = "/v2/order/modify";
     private static final String CANCEL_ORDER_URI = "/v2/order/cancel";
     private static final String MARGIN_CHECK_URI = "/v2/charges/margin";
+    private static final String FUNDS_MARGIN_URI  = "/v2/user/fund-and-margin";
 
     private final RestClient marketRestClient;  // for margin check
     private final RestClient orderRestClient;   // for order placement / modify / cancel
@@ -65,10 +67,28 @@ public class UpstoxOrderClient {
         }
 
         log.info("upstox.margin.result",
-                kv("finalMargin", response.data().finalMargin()),
-                kv("available", response.data().availableMargin()),
-                kv("sufficient", response.hasSufficientMargin()));
+                kv("requiredMargin", response.data().requiredMargin()),
+                kv("finalMargin", response.data().finalMargin()));
 
+        return response;
+    }
+
+    // ── Available funds check (api.upstox.com) ─────────────────────────────
+
+    public FundsAndMarginResponse getAvailableFunds() {
+        log.info("upstox.funds.check");
+
+        FundsAndMarginResponse response = withRetry("getAvailableFunds",
+                () -> marketRestClient.get()
+                        .uri(FUNDS_MARGIN_URI + "?segment=SEC")
+                        .retrieve()
+                        .body(FundsAndMarginResponse.class));
+
+        if (response == null || !response.isApiSuccess()) {
+            throw new UpstoxOrderException("Fund-and-margin check returned null or error response");
+        }
+
+        log.info("upstox.funds.result", kv("availableMargin", response.availableMargin()));
         return response;
     }
 

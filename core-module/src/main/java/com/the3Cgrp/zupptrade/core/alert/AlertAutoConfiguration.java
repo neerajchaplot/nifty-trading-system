@@ -2,7 +2,7 @@ package com.the3Cgrp.zupptrade.core.alert;
 
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -17,7 +17,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 public class AlertAutoConfiguration {
 
     @Bean
-    @ConditionalOnBean(JdbcTemplate.class)
+    @ConditionalOnClass(JdbcTemplate.class)
     public AlertService alertService(JdbcTemplate jdbc) {
         return new AlertService(jdbc);
     }

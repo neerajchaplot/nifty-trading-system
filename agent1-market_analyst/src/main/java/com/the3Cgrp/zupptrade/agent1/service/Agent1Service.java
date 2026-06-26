@@ -5,20 +5,26 @@ import com.the3Cgrp.zupptrade.agent1.dto.HealthDto;
 import com.the3Cgrp.zupptrade.agent1.dto.ScoreRequestDto;
 import com.the3Cgrp.zupptrade.agent1.pipeline.ScoringPipeline;
 import com.the3Cgrp.zupptrade.agent1.repository.Agent1SignalRepository;
+import com.the3Cgrp.zupptrade.core.expiry.ExpiryDateService;
 import com.the3Cgrp.zupptrade.shared.dto.Agent1SignalDto;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @Service
 public class Agent1Service {
 
     private final ScoringPipeline pipeline;
     private final Agent1SignalRepository repository;
+    private final ExpiryDateService expiryDateService;
 
-    public Agent1Service(ScoringPipeline pipeline, Agent1SignalRepository repository) {
+    public Agent1Service(ScoringPipeline pipeline,
+                         Agent1SignalRepository repository,
+                         ExpiryDateService expiryDateService) {
         this.pipeline = pipeline;
         this.repository = repository;
+        this.expiryDateService = expiryDateService;
     }
 
     public Agent1SignalDto score(ScoreRequestDto request) {
@@ -32,6 +38,19 @@ public class Agent1Service {
                 .map(this::toDto)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No active signal found for expiry: " + expiryDate));
+    }
+
+    /** Returns the next upcoming Nifty expiry date from the DB cache (or Upstox if cache is stale). */
+    public LocalDate nextExpiry() {
+        return expiryDateService.nextExpiry();
+    }
+
+    /** Returns all upcoming Nifty expiry dates (sorted ascending). */
+    public List<LocalDate> allUpcomingExpiries() {
+        LocalDate today = LocalDate.now();
+        return expiryDateService.allExpiries().stream()
+                .filter(d -> !d.isBefore(today))
+                .toList();
     }
 
     public HealthDto health() {
@@ -48,7 +67,8 @@ public class Agent1Service {
                 e.getBias(), e.getStrength(),
                 e.getCompositeScore(), e.getConfidenceScore(), e.getConfidence(),
                 e.getVixLevel(), e.getVixRegime(), e.getVixDirection(),
-                e.getScoreBreakdown(), e.getCommentaryDivergence(), e.getKeyLevels()
+                e.getScoreBreakdown(), e.getCommentaryDivergence(), e.getKeyLevels(),
+                e.getDataGaps()
         );
     }
 }

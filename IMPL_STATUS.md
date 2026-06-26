@@ -17,8 +17,7 @@ nifty-trading-system/
 ├── agent2-recommendation/  ← Trade recommendation — COMPLETE
 ├── agent3-monitor/         ← Monitoring + ReadjustmentService — COMPLETE
 ├── agent5-execution/       ← Upstox order execution — MOSTLY COMPLETE
-├── orchestrator/           ← Flow control — NOT IMPLEMENTED (scaffold only)
-├── agent4-backtest/        ← Backtesting — NOT IMPLEMENTED (scaffold only)
+├── agent4-backtest/        ← Trade Analytics & Audit — COMPLETE (read-only, port 8084)
 ├── upstox-auth/            ← Daily token refresh — STATE UNKNOWN (not reviewed)
 ├── ui-design/              ← HTML wireframe (source of truth for UI design)
 └── zupptrade-ui/           ← Angular 18 UI app — COMPLETE (see below)
@@ -42,9 +41,11 @@ nifty-trading-system/
 | V7__create_trade_pnl.sql | trade_pnl table |
 | V8__create_monitoring_evaluations.sql | monitoring_evaluations table (Agent 3 cycle results) |
 | V9__create_notifications_shedlock.sql | notifications + shedlock tables |
+| V100__create_api_tokens.sql | api_tokens table (written by upstox-auth) |
+| V101__seed_reference_data.sql | Seeds NIFTY_LOT_SIZE = 65 into reference_data |
 
-**Next migration:** V10 (when needed)
-**Migration location:** `db-migrations/src/main/resources/db/migration/` — single source of truth; agent2 and agent3 pull scripts via Maven dependency
+**Next migration: V102** ⚠️ NEVER use V10–V99 — those versions are numerically < V100 which is already applied; Flyway rejects them as out-of-order.
+**Migration location:** `db-migrations/src/main/resources/db/migration/` — single source of truth; agent1, agent2, and agent3 pull scripts via Maven dependency
 
 ---
 
@@ -119,10 +120,13 @@ When `RecommendRequestDto.relaxedGate1PopPct` is non-null, GateValidator uses th
 ### agent5-execution (port 8085)
 - `UpstoxOrderClient` — POST /v2/order/multi/place, GET status, PUT modify, DELETE cancel
 - `TradeExecutionService` — entry (multi-leg simultaneous) + exit (reverse MARKET order)
-- `ExecutionController` — POST /api/v1/agent5/execute, POST /api/v1/agent5/exit/{tradeId}
+- `ExecutionController` — POST /api/v1/agent5/execute, POST /api/v1/agent5/exit/{tradeId}; **enhanced health** returns `{status, timestamp, dbConnected, upstoxTokenLoaded}`; **new** `GET /api/v1/agent5/upstox/status` returns live Upstox connectivity response (tokenStatus, productionApiReachable, userId, sandboxTokenConfigured, orderGateway)
+- `UpstoxConnectionCheckService` — calls `GET /v2/user/profile`; returns `UpstoxStatusResponse` with LOADED/ABSENT/EXPIRED/UNREACHABLE; never throws; exposes `isTokenLoaded()` for health endpoint
+- `TradeExecutionRequestMapper` — static utility: converts Agent2 `TradeCardDto` → Agent5 `ExecuteTradeRequest`; quantity = lots × lotSize per leg; shortLeg first (SELL), longLeg second (BUY); called by the UI (or Agent2 directly) after `/confirm`
 - Order tag format: `ZUPP_{tradeId_first8}` (shared across legs), `ZUPP_{id8}_L{n}` per leg
 - Product `"D"` (NRML) for all spread legs — never `"I"` (intraday)
-- **Verify:** sandbox end-to-end test not confirmed complete
+- Unit tests: **40 green** (8 OrderTagBuilder + 8 execute + 11 exit + 4 mapper + 9 connection-check)
+- Sandbox IT (`TradeExecutionSandboxIT` T1–T5) written and ready — needs live tokens to run
 
 ### zupptrade-ui (Angular 18, port 4200)
 - Standalone components, Angular Material, SCSS
@@ -146,19 +150,23 @@ When `RecommendRequestDto.relaxedGate1PopPct` is non-null, GateValidator uses th
 - **#9** — Expired token response: when Upstox returns 401, return a structured 503 response (not a stack trace); log the event; do NOT retry (token refresh is manual in v1)
 
 ### Session B — Agent5 verify + sandbox (independent)
-- **Verify** TradeExecutionService complete: margin check, 30s fill poll, LIMIT→MARKET fallback on timeout, rollback if one leg fails, slippage alert
-- **Sandbox test** with `spring.profiles.active=sandbox` — needs UPSTOX_SANDBOX_TOKEN env var
-- Check `upstox-auth` module state — it should handle daily token refresh before 9 AM
+- ✅ **Verified** TradeExecutionService: margin check, 30s fill poll, LIMIT→MARKET fallback, rollback on leg failure, slippage alert — all implemented and unit tested
+- ✅ **Exit flow unit tests** added to `TradeExecutionServiceTest`: 11 new tests covering ACTIVE/EXIT_IN_PROGRESS/EXIT_FAILED happy paths, CLOSED/REJECTED/null early returns, placement failure, payload error, action reversal (27 unit tests total, all green)
+- ✅ **upstox-auth checked**: `TokenRefreshScheduler` runs at startup (ApplicationRunner) + scheduled at 08:30 AM IST weekdays — complete
+- ✅ **Session 2 additions (40 tests total, all green):**
+  - `UpstoxConnectionCheckService` + `UpstoxStatusResponse` (LOADED/ABSENT/EXPIRED/UNREACHABLE; 9 unit tests)
+  - `TradeExecutionRequestMapper` — Agent2 TradeCardDto → Agent5 ExecuteTradeRequest (4 unit tests)
+  - `ExecutionController` enhanced: `/health` includes `dbConnected` + `upstoxTokenLoaded`; new `GET /upstox/status` live check
+- ⏳ **Sandbox test** (`TradeExecutionSandboxIT` T1–T5) written and ready; requires live env vars: `UPSTOX_ACCESS_TOKEN`, `UPSTOX_SANDBOX_TOKEN` + NeonDB. Run: `mvn test -pl agent5-execution "-Dexcluded.test.groups=" -Dgroups=sandbox -Dspring.profiles.active=sandbox,local`
 
-### Session C — Orchestrator (needs A+B done first)
-- **#18** — Pre-Agent-2 candle check: before calling Agent 2, verify that the current 5-min candle is not an anomaly (spike/gap); if anomaly detected, skip this cycle and alert
-- Wire morning flow: 9:00 AM (Agent1 Phase1) → 9:20 AM (Agent1 Phase2) → 9:25 AM (Agent2 recommend)
-- Wire monitor flow: every 5 min, delegate to Agent3
-- Wire confirmation flow: user CONFIRM → Agent2 confirm → Agent5 execute
+### Session C — Scheduling & wiring (each agent owns its own schedule; no orchestrator)
+- **#18** — Pre-Agent-2 candle check: Agent2 itself (or UI before calling Agent2) verifies the current 5-min candle is not an anomaly (spike/gap); if anomaly detected, reject with 422 and alert
+- Morning scheduled runs are owned by each agent (Agent1 @Scheduled 9:00 AM + 9:20 AM; Agent3 @Scheduled every 5 min market hours) — no central coordinator
+- Confirmation flow: UI → Agent2 /confirm → Agent5 /execute (direct call, no middleman)
 
 ### Session D — Agent1 data quality (independent)
 - **#5** — Backtest scenario validation: run POST /api/v1/agent1/score with mocked inputs (spot=23412.60, 20EMA=23900, 50EMA=23690, PCR=1.17, FII long ratio=0.11, DII net=684Cr, VIX=18.61, VIX prev=19.43, Gift Nifty +70pts, Marketaux=-0.335); expected: NEUTRAL/WEAK, score≈0.067, confidence=LOW
-- **#11** — Fetch and store valid Nifty weekly expiry dates from Upstox option chain API; cache in reference_data table with weekly refresh; expose as a utility used by Agent1 + Agent2
+- ~~**#11**~~ — **DONE**: `ExpiryDateService` in core-module reads from `reference_data` (key=`NIFTY_EXPIRY_DATES`, TTL=7 days); falls back to `UpstoxExpiryClient` (`GET /v2/option/contract`). `ScoreRequestDto.expiryDate` now optional — auto-resolved when absent. New endpoint: `GET /api/v1/agent1/next-expiry`.
 - **#16** — Evaluate Highest OI strike (Call Wall / Put Wall): fetch strikes with top 3 OI from option chain; if spot is within 100pts of a Call Wall → bearish signal; if within 100pts of a Put Wall → bullish signal; add as optional Tier 1A or Tier 3 signal
 
 ### Session E — Refactors (independent, low risk)
@@ -166,8 +174,8 @@ When `RecommendRequestDto.relaxedGate1PopPct` is non-null, GateValidator uses th
 - **#12** — Agent1SignalEntity: exists separately in agent1 and agent2; create one shared entity in shared-domain or agent1; agent2 reads via DTO (already the case via agent1_signals table)
 - ~~**#13**~~ — DONE: `db-migrations` module created; V1–V9 + V100 consolidated; agent2 + agent3 both depend on it; agent2 local SQL files deleted; agent3 flyway enabled
 
-### Session F — Backtest (last, independent)
-- **agent4-backtest** — run historical trade scenarios using stored agent1_signals + trades data; compute P&L vs theoretical; generate weekly report
+### Session F — Backtest ✅ COMPLETE
+- **agent4-backtest** — DONE. Read-only analytics. 5 REST endpoints (/summary, /trades, /trades/{id}/audit, /signal-quality, /health). 37 unit tests + integration tests. Angular "Audit" tab wired. docker-compose service: `agent4`.
 
 ### Parked indefinitely
 - OAuth2 auth (replace X-API-Key) — design allows swap without touching business logic
@@ -182,6 +190,9 @@ Tell Claude: **"Read CLAUDE.md and IMPL_STATUS.md, then work on Session X — [t
 Claude will load the spec + this file and have full context without needing conversation history.
 Update the "What's Built" section and cross off tasks from Pending when a session completes.
 
+**For integration testing:** Tell Claude: *"Read CLAUDE.md, IMPL_STATUS.md, and INTEGRATION_TEST_GUIDE.md, then help me run integration tests."*
+`INTEGRATION_TEST_GUIDE.md` contains pre-flight DB checks, per-agent test scenarios (S1.1–S5.3), DB seed SQL for Agent 3 scenarios, end-to-end flow test, and cleanup SQL.
+
 ---
 
-*Last updated: 2026-06-17 — GAP 5 (ShedLock) wired + GAP 1 (monitor_config seeding) implemented + #13 db-migrations module done; 58 agent3 tests green*
+*Last updated: 2026-06-25 — agent4-backtest fully implemented (analytics/audit, 5 REST endpoints, 37 unit tests, integration tests, Angular Audit tab, docker-compose wired). New Dockerfiles: agent1, agent5, upstox-auth. agent2/agent3 Dockerfiles updated to eclipse-temurin:21-jre-jammy. docker-compose.yml created. V102 migration adds data_gaps column. V103 adds spread_direction column. V104 adds DB views v_agent4_trade_list and v_agent4_signal_quality.*

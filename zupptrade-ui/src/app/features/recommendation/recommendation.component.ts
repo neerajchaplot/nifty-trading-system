@@ -13,7 +13,7 @@ import { catchError, of } from 'rxjs';
 
 type PanelState = 'ready' | 'loading' | 'tradecard' | 'rejected' | 'active';
 
-const DEFAULT_USER_PROFILE_ID = '00000000-0000-0000-0000-000000000001';
+const DEFAULT_USER_PROFILE_ID = '90412ca3-1e3f-4c75-9444-ca1ebfd92348';
 
 @Component({
   selector: 'app-recommendation',

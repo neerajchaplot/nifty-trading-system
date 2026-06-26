@@ -24,11 +24,14 @@ public class ActiveTradesService {
 
     private final TradeMonitorReader tradeMonitorReader;
     private final MonitoringEvaluationRepository evaluationRepository;
+    private final JsonUtil jsonUtil;
 
     public ActiveTradesService(TradeMonitorReader tradeMonitorReader,
-                               MonitoringEvaluationRepository evaluationRepository) {
+                               MonitoringEvaluationRepository evaluationRepository,
+                               JsonUtil jsonUtil) {
         this.tradeMonitorReader = tradeMonitorReader;
         this.evaluationRepository = evaluationRepository;
+        this.jsonUtil = jsonUtil;
     }
 
     public List<ActiveTradeDto> findAllActive() {
@@ -65,7 +68,7 @@ public class ActiveTradesService {
             return null;
         }
         try {
-            return JsonUtil.parse(data.monitorConfigJson(), MonitorConfigDto.class);
+            return jsonUtil.fromJson(data.monitorConfigJson(), MonitorConfigDto.class);
         } catch (Exception e) {
             log.warn("Failed to parse monitor_config for trade {}: {}", data.tradeId(), e.getMessage());
             return null;

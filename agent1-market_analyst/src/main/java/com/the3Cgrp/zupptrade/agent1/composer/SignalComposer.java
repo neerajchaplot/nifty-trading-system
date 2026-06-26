@@ -177,7 +177,7 @@ public class SignalComposer {
     }
 
     private String computeVixDirection(BigDecimal vixToday, BigDecimal vixPrev) {
-        if (vixToday == null || vixPrev == null) return "Unknown";
+        if (vixToday == null || vixPrev == null) return null;
         int cmp = vixToday.compareTo(vixPrev);
         if (cmp > 0) return "Rising";
         if (cmp < 0) return "Falling";

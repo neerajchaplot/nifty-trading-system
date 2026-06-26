@@ -1,10 +1,12 @@
 package com.the3Cgrp.zupptrade.agent3.controller;
 
 import com.the3Cgrp.zupptrade.agent3.dto.ActiveTradeDto;
+import com.the3Cgrp.zupptrade.agent3.dto.EvaluateOverrideRequest;
 import com.the3Cgrp.zupptrade.agent3.dto.EvaluationResponse;
 import com.the3Cgrp.zupptrade.agent3.service.ActiveTradesService;
 import com.the3Cgrp.zupptrade.agent3.service.MonitorEvaluationService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -31,12 +33,16 @@ public class MonitorEvaluationController {
 
     /**
      * Evaluate a specific active trade.
-     * @param tradeId UUID of the trade to evaluate
-     * @return EvaluationResponse with action, reason, P&L, and live PoP
+     *
+     * Optional request body: EvaluateOverrideRequest with niftySpot, vix, shortLegLtp,
+     * longLegLtp, shortLegIv. When provided, these values replace the live Upstox fetch.
+     * Intended for offline/weekend testing only — omit the body in production.
      */
     @PostMapping("/evaluate/{tradeId}")
-    public ResponseEntity<EvaluationResponse> evaluate(@PathVariable UUID tradeId) {
-        EvaluationResponse response = evaluationService.evaluate(tradeId);
+    public ResponseEntity<EvaluationResponse> evaluate(
+            @PathVariable UUID tradeId,
+            @RequestBody(required = false) @Nullable EvaluateOverrideRequest overrides) {
+        EvaluationResponse response = evaluationService.evaluate(tradeId, overrides);
         return ResponseEntity.ok(response);
     }
 

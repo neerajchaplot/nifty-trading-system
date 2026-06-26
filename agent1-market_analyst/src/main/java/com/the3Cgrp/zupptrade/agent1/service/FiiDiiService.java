@@ -68,7 +68,7 @@ public class FiiDiiService {
             }
         } catch (Exception ex) {
             // Non-fatal: live data still usable for scoring even if persistence fails
-            log.warn("fii.dii.snapshots.persist_failed", kv("error", ex.getMessage()));
+            log.warn("fii.dii.snapshots.persist_failed", kv("error", ex.getMessage()), ex);
         }
 
         // --- Step 3: latest entry per segment for scoring ---
@@ -166,10 +166,21 @@ public class FiiDiiService {
     private void toEntities(List<FiiDiiSnapshotEntity> result,
                             List<MarketFlowEntry> entries,
                             String segment) {
+        // Min timestamp for a valid millisecond epoch: 2020-01-01 in millis = 1577836800000
+        // If value is below this it was sent in seconds — log and convert.
+        final long MIN_EPOCH_MILLIS = 1_577_836_800_000L;
+
         for (MarketFlowEntry entry : entries) {
             if (entry.timeStamp() == null) continue;
 
-            LocalDate tradingDate = Instant.ofEpochMilli(entry.timeStamp())
+            long ts = entry.timeStamp();
+            if (ts < MIN_EPOCH_MILLIS) {
+                log.warn("fii.dii.timestamp.looks_like_seconds segment={} raw_ts={} — multiplying by 1000",
+                        segment, ts);
+                ts = ts * 1000L;
+            }
+
+            LocalDate tradingDate = Instant.ofEpochMilli(ts)
                     .atZone(IST).toLocalDate();
 
             FiiDiiSnapshotEntity e = new FiiDiiSnapshotEntity();
