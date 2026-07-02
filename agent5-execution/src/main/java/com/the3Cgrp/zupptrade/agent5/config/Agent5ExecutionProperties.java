@@ -56,6 +56,13 @@ public class Agent5ExecutionProperties {
      */
     private boolean simulateFills = false;
 
+    /**
+     * When true: skip Upstox exit order placement and mark the trade CLOSED directly.
+     * Use ONLY in sandbox profile — mirrors simulate-fills for the exit path.
+     * NEVER set true in production — no exit orders will be placed.
+     */
+    private boolean simulateExit = false;
+
     public int getFillPollIntervalMs() { return fillPollIntervalMs; }
     public void setFillPollIntervalMs(int v) { this.fillPollIntervalMs = v; }
 
@@ -76,4 +83,7 @@ public class Agent5ExecutionProperties {
 
     public boolean isSimulateFills() { return simulateFills; }
     public void setSimulateFills(boolean v) { this.simulateFills = v; }
+
+    public boolean isSimulateExit() { return simulateExit; }
+    public void setSimulateExit(boolean v) { this.simulateExit = v; }
 }

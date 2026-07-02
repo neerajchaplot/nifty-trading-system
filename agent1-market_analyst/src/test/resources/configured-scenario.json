@@ -1,0 +1,50 @@
+{
+  "_help": {
+    "vixRegime":        "LOW | NORMAL | HIGH | EXTREME",
+    "commentaryBias":   "BULLISH | BEARISH | NEUTRAL | null  (null = not provided, scores 0)",
+    "expiryDate":       "YYYY-MM-DD",
+    "fiiNetFutures":    "Crore — bullish >500, bearish <-500, neutral in between, null = unavailable",
+    "fiiLongRatio":     "0.0–1.0 — bullish >0.60, bearish <0.40, neutral 0.40–0.60",
+    "giftNiftyPremium": "points vs prev close — bullish >50, bearish <-50, neutral within ±50",
+    "marketauxSentiment": "bullish >0.30, bearish <-0.30, neutral in between",
+    "adx14":            "null = no modifier (×1.00); >30 = strong trend ×1.15; <20 = weak ×0.80",
+    "null_means":       "Any null field → score 0 (data unavailable), pipeline never throws"
+  },
+
+  "scenarioName": "15 May 2026 backtest — expected: NEUTRAL WEAK LOW",
+
+  "spot":           23412.60,
+  "futuresPremium": null,
+  "pcr":            1.17,
+  "vixLevel":       18.61,
+  "vixPrevLevel":   19.43,
+  "vixRegime":      "HIGH",
+
+  "fiiNetFutures":  null,
+  "fiiLongRatio":   0.11,
+  "fiiNetOptions":  null,
+  "diiNet":         684,
+
+  "callOiChange":   null,
+  "putOiChange":    null,
+  "giftNiftyPremium": 70,
+
+  "marketauxSentiment": -0.335,
+  "commentaryBias": null,
+
+  "expiryDate": "2026-07-07",
+
+  "indicators": {
+    "ema20":                23900,
+    "ema50":                23690,
+    "ema200":               null,
+    "rsi14":                null,
+    "macdLine":             null,
+    "macdSignal":           null,
+    "adx14":                null,
+    "bullishCandlePattern": false,
+    "bearishCandlePattern": false,
+    "higherHighs":          null,
+    "higherLows":           null
+  }
+}

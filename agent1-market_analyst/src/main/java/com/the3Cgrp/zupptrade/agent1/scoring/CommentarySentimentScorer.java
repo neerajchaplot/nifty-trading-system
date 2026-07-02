@@ -5,6 +5,9 @@ import com.the3Cgrp.zupptrade.agent1.domain.model.MarketInputs;
 import com.the3Cgrp.zupptrade.agent1.domain.model.TierScore;
 import org.springframework.stereotype.Component;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.LinkedHashMap;
@@ -17,6 +20,8 @@ import java.util.Map;
  */
 @Component
 public class CommentarySentimentScorer implements TierScorer {
+
+    private static final Logger log = LoggerFactory.getLogger(CommentarySentimentScorer.class);
 
     private final TradingProperties props;
 
@@ -32,11 +37,24 @@ public class CommentarySentimentScorer implements TierScorer {
 
     @Override
     public TierScore calculate(MarketInputs inputs) {
+        int vMktx = voteMarketaux(inputs.getMarketauxSentiment());
+        int vLlm  = voteCommentary(inputs.getCommentaryBias());
+
+        log.info("agent1.tier4 marketaux_sentiment: score={} (>{}=bull, <{}=bear)  → {}",
+                inputs.getMarketauxSentiment(),
+                props.getScoring().getMarketauxBullish(), props.getScoring().getMarketauxBearish(),
+                vLabel(vMktx));
+        log.info("agent1.tier4 llm_commentary:      bias={}  → {}", inputs.getCommentaryBias(), vLabel(vLlm));
+
         Map<String, Integer> signals = new LinkedHashMap<>();
-        signals.put("marketaux_sentiment", voteMarketaux(inputs.getMarketauxSentiment()));
-        signals.put("llm_commentary",      voteCommentary(inputs.getCommentaryBias()));
+        signals.put("marketaux_sentiment", vMktx);
+        signals.put("llm_commentary",      vLlm);
 
         return buildTierScore(signals);
+    }
+
+    private static String vLabel(int v) {
+        return v == 1 ? "+1 (BULLISH)" : v == -1 ? "-1 (BEARISH)" : "0 (NEUTRAL)";
     }
 
     // --- package-private vote methods ---

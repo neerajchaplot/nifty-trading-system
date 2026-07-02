@@ -23,11 +23,13 @@
         <logstash-logback-encoder.version>8.0</logstash-logback-encoder.version>
         <shedlock.version>6.3.0</shedlock.version>
         <!--
-            Default: exclude integration-tagged tests from normal mvn test runs.
-            Override to empty string to enable them:
+            Default: exclude integration and token-print tagged tests from normal mvn test runs.
+            To run integration tests:
               mvn test -pl agent1-market_analyst "-Dexcluded.test.groups=" -Dgroups=integration
+            To print the Upstox token for capture_friday.sh:
+              mvn test -pl agent1-market_analyst "-Dexcluded.test.groups=" -Dgroups=token-print
         -->
-        <excluded.test.groups>integration</excluded.test.groups>
+        <excluded.test.groups>integration,token-print</excluded.test.groups>
     </properties>
 
     <modules>
@@ -40,6 +42,7 @@
         <module>agent3-monitor</module>
         <module>agent4-backtest</module>
         <module>agent5-execution</module>
+        <module>agent-user</module>
         <!--<module>orchestrator</module> -->
     </modules>
 

@@ -39,6 +39,7 @@ public class CommentaryExtractorService {
 
             JSON schema (all fields required):
             {
+              "isRelevant":      true | false,
               "bias":            "BULLISH" | "BEARISH" | "NEUTRAL",
               "conviction":      "HIGH" | "MEDIUM" | "LOW",
               "niftySupport":    [integer, ...],
@@ -46,7 +47,16 @@ public class CommentaryExtractorService {
               "keyInsight":      "one-sentence summary, max 20 words"
             }
 
-            Rules:
+            RELEVANCE CHECK — evaluate this FIRST:
+            Set "isRelevant": false if the input:
+            - Is not about the Indian stock market or Nifty 50 (e.g. US stocks, crypto, forex, commodities)
+            - Is gibberish, random characters, or clearly not market commentary
+            - Contains no meaningful information about Indian market direction
+            If isRelevant is false, you MUST return:
+              bias=NEUTRAL, conviction=LOW, niftySupport=[], niftyResistance=[], keyInsight=null
+            Do NOT attempt to extract or infer a signal from irrelevant input. When in doubt, set isRelevant=false.
+
+            Rules (apply only when isRelevant is true):
             - bias and conviction must be UPPERCASE exactly as shown.
             - All Nifty levels must be integers rounded to the nearest 50.
               If a range is given, take the midpoint rounded to nearest 50.
@@ -128,6 +138,14 @@ public class CommentaryExtractorService {
 
         LlmSignalDto dto = OBJECT_MAPPER.readValue(json, LlmSignalDto.class);
 
+        // Relevance gate: if LLM flagged the commentary as unrelated to Nifty/India markets,
+        // return neutral immediately — do not attempt to score irrelevant or gibberish input.
+        // null isRelevant (older response without the field) is treated as relevant.
+        if (Boolean.FALSE.equals(dto.isRelevant())) {
+            log.warn("commentary.extractor.irrelevant — input not related to Nifty/India market, scoring as neutral");
+            return CommentarySignal.neutral();
+        }
+
         // Validate mandatory enum values — fall back to neutral on bad data
         String bias = dto.bias() != null ? dto.bias().toUpperCase().strip() : null;
         if (!VALID_BIASES.contains(bias)) {
@@ -157,6 +175,7 @@ public class CommentaryExtractorService {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record LlmSignalDto(
+            Boolean isRelevant,         // null treated as true (backwards-compatible)
             String bias,
             String conviction,
             List<Integer> niftySupport,

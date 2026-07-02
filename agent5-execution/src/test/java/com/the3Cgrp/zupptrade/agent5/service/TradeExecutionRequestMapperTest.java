@@ -87,6 +87,25 @@ class TradeExecutionRequestMapperTest {
         assertThat(request.legs().get(1).action()).isEqualTo(LegAction.BUY);   // long
     }
 
+    @Test
+    void from_ironCondor_maps4LegsInOrder() {
+        TradeCardDto card = buildIronCondorTradeCard();
+
+        ExecuteTradeRequest request = TradeExecutionRequestMapper.from(card);
+
+        assertThat(request.legs()).hasSize(4);
+        assertThat(request.legs().get(0).action()).isEqualTo(LegAction.SELL);   // PE short
+        assertThat(request.legs().get(0).optionType()).isEqualTo(OptionType.PE);
+        assertThat(request.legs().get(1).action()).isEqualTo(LegAction.BUY);    // PE long
+        assertThat(request.legs().get(1).optionType()).isEqualTo(OptionType.PE);
+        assertThat(request.legs().get(2).action()).isEqualTo(LegAction.SELL);   // CE short
+        assertThat(request.legs().get(2).optionType()).isEqualTo(OptionType.CE);
+        assertThat(request.legs().get(3).action()).isEqualTo(LegAction.BUY);    // CE long
+        assertThat(request.legs().get(3).optionType()).isEqualTo(OptionType.CE);
+        // All legs same quantity
+        assertThat(request.legs()).allMatch(leg -> leg.quantity() == TOTAL_QTY);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private TradeCardDto buildTradeCard() {
@@ -98,7 +117,7 @@ class TradeExecutionRequestMapperTest {
                 OptionType.PE, 24400, new BigDecimal("45.20"), LegAction.BUY,
                 new BigDecimal("-0.142"), new BigDecimal("0.142"), LONG_KEY);
 
-        MonitorThresholdsDto thresholds = new MonitorThresholdsDto(
+        MonitorThresholdsDto thresholds = MonitorThresholdsDto.twoLeg(
                 new BigDecimal("24650"), new BigDecimal("24575"), new BigDecimal("-67138"),
                 new BigDecimal("24500"), new BigDecimal("-134277"));
 
@@ -110,6 +129,7 @@ class TradeExecutionRequestMapperTest {
                 3,
                 shortLeg,
                 longLeg,
+                null, null,              // shortLeg2, longLeg2 — 2-leg spread
                 new BigDecimal("23.20"),
                 LOTS,
                 LOT_SIZE,
@@ -126,6 +146,56 @@ class TradeExecutionRequestMapperTest {
                         new BigDecimal("82.6"), new BigDecimal("80"))),
                 thresholds,
                 "BullPutSpread: VIX 18.6 Normal, IV Rich, strong bullish bias.",
+                LocalDateTime.now().minusMinutes(5),
+                LocalDateTime.now().plusMinutes(15),
+                TradeStatus.CONFIRMED
+        );
+    }
+
+    private TradeCardDto buildIronCondorTradeCard() {
+        TradeLegDto peShort = new TradeLegDto(
+                OptionType.PE, 24000, new BigDecimal("55.00"), LegAction.SELL,
+                new BigDecimal("-0.20"), new BigDecimal("0.80"), "NFO_OPT|NIFTY|2026-06-24|24000|PE");
+        TradeLegDto peLong = new TradeLegDto(
+                OptionType.PE, 23900, new BigDecimal("35.00"), LegAction.BUY,
+                new BigDecimal("-0.16"), new BigDecimal("0.84"), "NFO_OPT|NIFTY|2026-06-24|23900|PE");
+        TradeLegDto ceShort = new TradeLegDto(
+                OptionType.CE, 24600, new BigDecimal("40.00"), LegAction.SELL,
+                new BigDecimal("0.17"), new BigDecimal("0.83"), "NFO_OPT|NIFTY|2026-06-24|24600|CE");
+        TradeLegDto ceLong = new TradeLegDto(
+                OptionType.CE, 24700, new BigDecimal("24.00"), LegAction.BUY,
+                new BigDecimal("0.13"), new BigDecimal("0.87"), "NFO_OPT|NIFTY|2026-06-24|24700|CE");
+
+        MonitorThresholdsDto thresholds = MonitorThresholdsDto.ironCondor(
+                new BigDecimal("24100"), new BigDecimal("24050"), new BigDecimal("24000"),
+                new BigDecimal("24500"), new BigDecimal("24550"), new BigDecimal("24600"),
+                new BigDecimal("20000"), new BigDecimal("40000"));
+
+        return new TradeCardDto(
+                TRADE_ID,
+                Strategy.IRON_CONDOR,
+                SpreadDirection.CREDIT,
+                EXPIRY,
+                3,
+                peShort,
+                peLong,
+                ceShort, ceLong,         // shortLeg2, longLeg2
+                new BigDecimal("36.00"),
+                LOTS,
+                LOT_SIZE,
+                new BigDecimal("8100"),
+                new BigDecimal("40500"),
+                new BigDecimal("20250"),
+                new BigDecimal("82.0"),
+                new BigDecimal("83.5"),
+                new BigDecimal("1.5"),
+                new BigDecimal("1.07"),
+                new BigDecimal("130.0"),
+                new BigDecimal("-0.03"),
+                List.of(new GateResultDto("G1_POP", true, "Seller PoP ≥ 80%",
+                        new BigDecimal("82.0"), new BigDecimal("80"))),
+                thresholds,
+                "Iron condor — neutral bias, VIX normal",
                 LocalDateTime.now().minusMinutes(5),
                 LocalDateTime.now().plusMinutes(15),
                 TradeStatus.CONFIRMED

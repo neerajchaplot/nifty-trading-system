@@ -169,12 +169,12 @@ class CreditSpreadMonitorStrategyTest {
                 LegAction.SELL, new BigDecimal("-0.169"), new BigDecimal("0.826"), null);
         TradeLegDto longLeg = new TradeLegDto(OptionType.PE, 22900, new BigDecimal("45.20"),
                 LegAction.BUY, new BigDecimal("-0.142"), new BigDecimal("0.858"), null);
-        MonitorThresholdsDto thr = new MonitorThresholdsDto(
+        MonitorThresholdsDto thr = MonitorThresholdsDto.twoLeg(
                 new BigDecimal("23150"), new BigDecimal("23075"),
                 new BigDecimal("23000"),
                 new BigDecimal("67138.00"),   // t2 loss
                 new BigDecimal("134277.00")); // t3 loss
-        return new MonitorConfigDto(
+        return MonitorConfigDto.twoLeg(
                 UUID.randomUUID(), Strategy.BULL_PUT_SPREAD, SpreadDirection.CREDIT,
                 shortLeg, longLeg, new BigDecimal("23.20"), 54, 65,
                 new BigDecimal("81396"), new BigDecimal("268554"), false, null,

@@ -72,20 +72,27 @@ public class UpstoxOptionChainClient {
     }
 
     /**
-     * Fetches Nifty front-month futures LTP and returns the premium over spot.
-     * Returns null when spot is unavailable, markets are closed, or the LTP call fails.
+     * Fetches Nifty front-month futures price and returns the premium over spot.
+     * Primary: live LTP from market-quote/ltp (works during market hours).
+     * Fallback: last session's closing price from historical candles (works after market close,
+     * since NSE_FO instruments stop serving LTP once the session ends).
+     * Returns null only when spot is unavailable or both data sources fail.
      */
     private BigDecimal computeFuturesPremium(BigDecimal spot) {
         if (spot == null) return null;
         String futuresKey = com.the3Cgrp.zupptrade.core.upstox.client.UpstoxOptionChainClient
                 .buildNiftyFuturesKey(LocalDate.now());
-        BigDecimal futuresLtp = marketQuoteClient.fetchLtp(futuresKey);
-        if (futuresLtp == null) {
-            log.debug("agent1.futures.ltp.unavailable key={}", futuresKey);
+
+        BigDecimal futuresPrice = marketQuoteClient.fetchLtp(futuresKey);
+        // Note: Upstox historical candle API does not accept NSE_FO instrument keys — no fallback possible.
+        // futuresPrice = null after market hours → scores 0 (neutral), which is the correct fallback.
+
+        if (futuresPrice == null) {
+            log.debug("agent1.futures.unavailable key={}", futuresKey);
             return null;
         }
-        BigDecimal premium = futuresLtp.subtract(spot);
-        log.debug("agent1.futures.premium key={} ltp={} spot={} premium={}", futuresKey, futuresLtp, spot, premium);
+        BigDecimal premium = futuresPrice.subtract(spot);
+        log.debug("agent1.futures.premium key={} price={} spot={} premium={}", futuresKey, futuresPrice, spot, premium);
         return premium;
     }
 

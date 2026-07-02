@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Weekend Test Guide — Nifty Trading System</title>
+  <style>
+    :root {
+      --bg: #f8f9fb;
+      --surface: #ffffff;
+      --text: #1a1d26;
+      --muted: #5c6370;
+      --border: #e2e6ef;
+      --accent: #2563eb;
+      --accent-soft: #eff6ff;
+      --code-bg: #f1f5f9;
+      --success: #059669;
+      --warn-bg: #fffbeb;
+      --warn-border: #f59e0b;
+      --note-bg: #f0fdf4;
+      --note-border: #22c55e;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.65;
+      color: var(--text);
+      background: var(--bg);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 820px);
+      gap: 2rem;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+
+    nav {
+      position: sticky;
+      top: 1.5rem;
+      align-self: start;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      font-size: 0.875rem;
+    }
+
+    nav h2 {
+      margin: 0 0 0.75rem;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+
+    nav ul {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    nav li { margin: 0.35rem 0; }
+
+    nav a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    nav a:hover { text-decoration: underline; }
+
+    main {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2.5rem 2.75rem;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+
+    h1 {
+      margin: 0 0 0.5rem;
+      font-size: 2rem;
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin: 0 0 2rem;
+      font-size: 1.05rem;
+    }
+
+    h2 {
+      margin: 2.5rem 0 1rem;
+      padding-top: 0.5rem;
+      font-size: 1.35rem;
+      border-top: 1px solid var(--border);
+    }
+
+    h2:first-of-type { border-top: none; margin-top: 0; padding-top: 0; }
+
+    h3 {
+      margin: 1.75rem 0 0.75rem;
+      font-size: 1.05rem;
+      color: var(--text);
+    }
+
+    p { margin: 0.75rem 0; }
+
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 2rem 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0 1.25rem;
+      font-size: 0.925rem;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.55rem 0.75rem;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--accent-soft);
+      font-weight: 600;
+    }
+
+    tr:nth-child(even) td { background: #fafbfc; }
+
+    code {
+      font-family: Consolas, "Cascadia Code", monospace;
+      font-size: 0.88em;
+      background: var(--code-bg);
+      padding: 0.15em 0.4em;
+      border-radius: 4px;
+    }
+
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 1rem 1.15rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin: 1rem 0 1.25rem;
+      font-size: 0.85rem;
+      line-height: 1.55;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      color: inherit;
+    }
+
+    .check { color: var(--success); font-weight: 600; }
+
+    blockquote.note,
+    blockquote.warn {
+      margin: 1rem 0 1.25rem;
+      padding: 0.85rem 1rem;
+      border-left: 4px solid;
+      border-radius: 0 8px 8px 0;
+      font-size: 0.95rem;
+    }
+
+    blockquote.note {
+      background: var(--note-bg);
+      border-color: var(--note-border);
+    }
+
+    blockquote.warn {
+      background: var(--warn-bg);
+      border-color: var(--warn-border);
+    }
+
+    blockquote p { margin: 0.35rem 0; }
+    blockquote p:first-child { margin-top: 0; }
+    blockquote p:last-child { margin-bottom: 0; }
+
+    ol, ul { margin: 0.75rem 0; padding-left: 1.4rem; }
+    li { margin: 0.35rem 0; }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      nav { position: static; }
+      main { padding: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <nav>
+      <h2>Contents</h2>
+      <ul>
+        <li><a href="#overview">Overview</a></li>
+        <li><a href="#prerequisites">Step 0: Pre-requisites</a></li>
+        <li><a href="#capture">Step 1: Friday Capture</a></li>
+        <li><a href="#seeds">Step 2: Load SQL Seeds</a></li>
+        <li><a href="#tests">Step 3: Run Tests</a></li>
+        <li><a href="#s1">S1 — Agent 1</a></li>
+        <li><a href="#s2">S2 — Agent 2</a></li>
+        <li><a href="#s3">S3 — Agent 3</a></li>
+        <li><a href="#s4">S4 — Agent 5</a></li>
+        <li><a href="#s5">S5 — Integration</a></li>
+        <li><a href="#reset">Step 4: Reset</a></li>
+        <li><a href="#uuids">Fixed UUIDs</a></li>
+        <li><a href="#troubleshooting">Troubleshooting</a></li>
+        <li><a href="#sandbox">Sandbox Safety</a></li>
+      </ul>
+    </nav>
+
+    <main>
+      <h1>Weekend Test Guide — Nifty Trading System</h1>
+      <p class="subtitle">This guide covers weekend testing with synthetic data when markets are closed.</p>
+
+      <h2 id="overview">Overview</h2>
+      <table>
+        <thead>
+          <tr><th>Scope</th><th>What works offline</th><th>Needs Friday capture</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Agent 1 — read signals</td><td><span class="check">✓</span> Pre-seeded signals (S1 Part A)</td><td>Live /score calls</td></tr>
+          <tr><td>Agent 2 — confirm/reject</td><td><span class="check">✓</span> Pre-seeded PENDING trades</td><td>/recommend (option chain)</td></tr>
+          <tr><td>Agent 3 — monitor/evaluate</td><td><span class="check">✓</span> Spot override body</td><td>—</td></tr>
+          <tr><td>Agent 5 — execute</td><td><span class="check">✓</span> simulate-fills mode</td><td>Real instrument keys</td></tr>
+          <tr><td>Integration E2E</td><td><span class="check">✓</span> Confirm → Execute → Monitor</td><td>/recommend step</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="prerequisites">Step 0: Pre-requisites</h2>
+      <p>All services use <strong>NeonDB</strong> (<code>zupptrade_dev</code> schema):</p>
+      <pre><code>Host:  ep-green-snow-aozeabar.c-2.ap-southeast-1.aws.neon.tech
+DB:    neondb
+User:  zupp_app
+Schema: zupptrade_dev</code></pre>
+
+      <p>Services run locally:</p>
+      <table>
+        <thead><tr><th>Service</th><th>Port</th><th>Profile</th></tr></thead>
+        <tbody>
+          <tr><td>Agent 1</td><td>8081</td><td><code>local</code></td></tr>
+          <tr><td>Agent 2</td><td>8082</td><td><code>local</code></td></tr>
+          <tr><td>Agent 3</td><td>8083</td><td><code>local</code></td></tr>
+          <tr><td>Agent 5</td><td>8085</td><td><code>sandbox,local</code></td></tr>
+        </tbody>
+      </table>
+
+      <p>Agent 5 <strong>must</strong> run with <code>sandbox</code> profile to enable simulate-fills:</p>
+      <pre><code># Agent 5 — sandbox profile
+mvn spring-boot:run -pl agent5-execution \
+  -Dspring-boot.run.profiles=sandbox,local</code></pre>
+
+      <h2 id="capture">Step 1: Friday — Capture Live Market Data</h2>
+      <p>Run <strong>before 3:30 PM on Friday</strong> to capture option chain data:</p>
+      <pre><code>export UPSTOX_ACCESS_TOKEN=your_token
+export MARKETAUX_API_KEY=your_key
+export EXPIRY_DATE=2026-07-01      # next Tuesday expiry
+
+bash test-data/capture/capture_friday.sh</code></pre>
+
+      <p>Output files saved to <code>test-data/capture/snapshot/</code>:</p>
+      <table>
+        <thead><tr><th>File</th><th>Contents</th></tr></thead>
+        <tbody>
+          <tr><td><code>option_chain.json</code></td><td>Full Upstox option chain response</td></tr>
+          <tr><td><code>spot_vix.json</code></td><td>Nifty spot + India VIX at capture time</td></tr>
+          <tr><td><code>atm_strikes.json</code></td><td>ATM ± 200 pts with instrument keys, LTP, IV, delta</td></tr>
+          <tr><td><code>fii_dii.json</code></td><td>NSE FII/DII trade data</td></tr>
+          <tr><td><code>marketaux_sentiment.json</code></td><td>Latest ^NSEI news sentiment</td></tr>
+          <tr><td><code>capture_meta.json</code></td><td>Capture timestamp, DTE, summary</td></tr>
+        </tbody>
+      </table>
+
+      <p>After capture, update instrument key placeholders in SQL seeds and curl scripts:</p>
+      <pre><code># Find all placeholders
+grep -r "NSE_FO|REPLACE" test-data/sql/
+
+# Then replace with real keys from atm_strikes.json
+# Example replacement (use actual keys from the file):
+#   NSE_FO|REPLACE_SELL_PE_23800  →  NSE_FO|71234
+#   NSE_FO|REPLACE_BUY_PE_23700   →  NSE_FO|71235</code></pre>
+
+      <h2 id="seeds">Step 2: Load SQL Seeds</h2>
+      <p>Run in order. Each script is idempotent (uses <code>ON CONFLICT DO NOTHING</code>).</p>
+
+      <h3>Option A: psql (if available)</h3>
+      <pre><code>PGPASSWORD=your_password psql \
+  "host=ep-green-snow-aozeabar.c-2.ap-southeast-1.aws.neon.tech \
+   dbname=neondb user=zupp_app sslmode=require" \
+  -f test-data/sql/01_seed_user_profiles.sql
+
+# Repeat for 02, 03, 04 in order</code></pre>
+
+      <h3>Option B: Any DB GUI (DBeaver, pgAdmin, TablePlus)</h3>
+      <p>Connect with SSL to NeonDB, then execute each file in order:</p>
+      <ol>
+        <li><code>test-data/sql/01_seed_user_profiles.sql</code></li>
+        <li><code>test-data/sql/02_seed_agent1_signals.sql</code></li>
+        <li><code>test-data/sql/03_seed_agent2_trades.sql</code></li>
+        <li><code>test-data/sql/04_seed_agent3_active_trades.sql</code></li>
+      </ol>
+
+      <h3>Verify</h3>
+      <pre><code>-- Check row counts
+SELECT 'user_profiles' AS tbl, COUNT(*) FROM zupptrade_dev.user_profiles
+UNION ALL SELECT 'agent1_signals', COUNT(*) FROM zupptrade_dev.agent1_signals
+UNION ALL SELECT 'trades', COUNT(*) FROM zupptrade_dev.trades;
+-- Expected: user_profiles=4, agent1_signals=12, trades=15 (8 A2 + 7 A3)</code></pre>
+
+      <h2 id="tests">Step 3: Run Tests</h2>
+      <p>Make scripts executable:</p>
+      <pre><code>chmod +x test-data/curl/*.sh</code></pre>
+
+      <h3 id="s1">S1 — Agent 1 silo (offline)</h3>
+      <pre><code>bash test-data/curl/S1_agent1_silo.sh</code></pre>
+      <p>Tests Part A only (reads pre-seeded signals). Part B is commented out (market hours).</p>
+      <p><strong>Expected:</strong> Each signal returns correct bias/strength/confidence matching the seed values.</p>
+
+      <h3 id="s2">S2 — Agent 2 silo (offline)</h3>
+      <pre><code>bash test-data/curl/S2_agent2_silo.sh</code></pre>
+      <table>
+        <thead><tr><th>Test</th><th>Input</th><th>Expected</th></tr></thead>
+        <tbody>
+          <tr><td>S2.1</td><td>CONFIRM T-201 BullPutSpread</td><td>status=CONFIRMED, execution_order with 2 legs</td></tr>
+          <tr><td>S2.2</td><td>CONFIRM T-202 BullCallSpread</td><td>status=CONFIRMED</td></tr>
+          <tr><td>S2.3</td><td>CONFIRM T-203 BearCallSpread</td><td>status=CONFIRMED</td></tr>
+          <tr><td>S2.4</td><td>CONFIRM T-204 IronCondor</td><td>status=CONFIRMED, 4 legs</td></tr>
+          <tr><td>S2.5</td><td>REJECT T-201</td><td>status=REJECTED</td></tr>
+          <tr><td>S2.6</td><td>CONFIRM T-205 (already REJECTED)</td><td>409 Conflict</td></tr>
+          <tr><td>S2.7</td><td>CONFIRM T-203 with overrideLots=5</td><td>lots=5 in execution_order</td></tr>
+          <tr><td>S2.8</td><td>GET monitor-config T-207</td><td>MonitorConfigDto with T1/T2/T3 thresholds</td></tr>
+        </tbody>
+      </table>
+      <blockquote class="warn">
+        <p><strong>Note:</strong> S2.5 runs after S2.1 — T-201 will be CONFIRMED after S2.1. Either re-seed T-201 or run S2.5 before S2.1.</p>
+      </blockquote>
+
+      <h3 id="s3">S3 — Agent 3 silo (offline — uses spot override)</h3>
+      <pre><code>bash test-data/curl/S3_agent3_silo.sh</code></pre>
+      <p>All S3 tests pass <code>{"niftySpot": ..., "vix": ...}</code> in the body to bypass Upstox.</p>
+      <table>
+        <thead><tr><th>Test</th><th>Trade</th><th>Spot</th><th>Expected action</th></tr></thead>
+        <tbody>
+          <tr><td>S3.1</td><td>T-301 BullPutSpread (short=23500)</td><td>24200</td><td>HOLD</td></tr>
+          <tr><td>S3.2</td><td>T-302 BullPutSpread</td><td>23650 (= short+150 = T1)</td><td>WATCH</td></tr>
+          <tr><td>S3.3</td><td>T-303 BullPutSpread</td><td>23575 (= short+75 = T2)</td><td>READJUST</td></tr>
+          <tr><td>S3.4</td><td>T-304 BullPutSpread</td><td>23450 (&lt; short=23500 = T3)</td><td>EXIT</td></tr>
+          <tr><td>S3.5</td><td>T-305 BullPutSpread</td><td>24100 (fine), VIX=32 (+73%)</td><td>EXIT (VIX spike)</td></tr>
+          <tr><td>S3.6</td><td>T-306 BullCallSpread</td><td>24480 (&gt; profit target)</td><td>EXIT (profit)</td></tr>
+          <tr><td>S3.7</td><td>T-307 BullCallSpread</td><td>23800 (MTM &gt; 50% debit)</td><td>EXIT (loss cut)</td></tr>
+        </tbody>
+      </table>
+
+      <p><strong>Special setup for S3.5 (VIX spike):</strong></p>
+      <p>Agent 3 needs a previous VIX reading to compute the spike percentage. Seed one row into <code>monitoring_evaluations</code> before running S3.5:</p>
+      <pre><code>INSERT INTO zupptrade_dev.monitoring_evaluations
+  (id, trade_id, evaluated_at, action, nifty_spot, india_vix, notes)
+VALUES
+  (gen_random_uuid(),
+   'a3000001-0000-0000-0000-000000000005',
+   NOW() - INTERVAL '5 minutes',
+   'HOLD', 24100, 18.5, 'Prior reading for VIX spike test');</code></pre>
+
+      <h3 id="s4">S4 — Agent 5 silo (requires sandbox profile)</h3>
+      <pre><code>bash test-data/curl/S4_agent5_silo.sh</code></pre>
+      <table>
+        <thead><tr><th>Test</th><th>Input</th><th>Expected</th></tr></thead>
+        <tbody>
+          <tr><td>S4.1</td><td>Execute BullPutSpread T-207</td><td>ACTIVE, SIM-A2000007-L0/L1 order IDs, slippageAlert=false</td></tr>
+          <tr><td>S4.2</td><td>Execute BullCallSpread T-208</td><td>ACTIVE, actualNet negative (debit), slippageAlert=false</td></tr>
+          <tr><td>S4.3</td><td>Execute with bad prices</td><td>slippageAlert=true, trade still ACTIVE</td></tr>
+          <tr><td>S4.4</td><td>Non-existent tradeId</td><td>404 Not Found</td></tr>
+          <tr><td>S4.5</td><td>Execute already-ACTIVE trade</td><td>409 Conflict</td></tr>
+          <tr><td>S4.6</td><td>Exit BullPutSpread</td><td>CLOSED, exit fills recorded</td></tr>
+        </tbody>
+      </table>
+      <blockquote class="warn">
+        <p><strong>S4.3 setup:</strong> Re-seed T-207 to CONFIRMED first (run S4.1, then reset):</p>
+        <pre><code>UPDATE zupptrade_dev.trades
+  SET status='CONFIRMED', entry_fills=NULL, confirmed_at=NOW()
+  WHERE id='a2000001-0000-0000-0000-000000000007';</code></pre>
+      </blockquote>
+
+      <h3 id="s5">S5 — Integration flows (end-to-end)</h3>
+      <pre><code>bash test-data/curl/S5_integration_full_flow.sh</code></pre>
+      <table>
+        <thead><tr><th>Flow</th><th>Path</th><th>Expected final state</th></tr></thead>
+        <tbody>
+          <tr><td>F1</td><td>BullPutSpread → Execute → Monitor HOLD</td><td>Trade ACTIVE, action=HOLD</td></tr>
+          <tr><td>F2</td><td>BullPutSpread → Execute → Monitor EXIT</td><td>Trade CLOSED, Agent 5 exit called</td></tr>
+          <tr><td>F3</td><td>VIX Extreme signal → Recommend</td><td>Agent 2 returns SKIP, no trade</td></tr>
+          <tr><td>F4</td><td>BearCallSpread → Confirm → Execute → Monitor HOLD</td><td>Trade ACTIVE, action=HOLD</td></tr>
+          <tr><td>F5</td><td>IronCondor → Confirm → Execute → Monitor HOLD</td><td>Trade ACTIVE, 4-leg execute</td></tr>
+        </tbody>
+      </table>
+      <p><strong>F2 requires reset between F1 and F2:</strong></p>
+      <pre><code>UPDATE zupptrade_dev.trades
+  SET status='CONFIRMED', entry_fills=NULL, confirmed_at=NOW()
+  WHERE id='a2000001-0000-0000-0000-000000000007';</code></pre>
+
+      <h2 id="reset">Step 4: Reset Test Data</h2>
+      <p>To return all test data to initial state:</p>
+      <pre><code>-- Run: test-data/sql/99_cleanup.sql
+-- Then reload 01–04 in order</code></pre>
+      <p>Or reset a single trade:</p>
+      <pre><code>-- Reset a specific trade to PENDING_CONFIRM
+UPDATE zupptrade_dev.trades
+  SET status='PENDING_CONFIRM', entry_fills=NULL, confirmed_at=NULL
+  WHERE id='&lt;uuid&gt;';</code></pre>
+
+      <h2 id="uuids">Fixed UUIDs Quick Reference</h2>
+      <p>These are defined in <code>test-data/curl/vars.sh</code>.</p>
+
+      <h3>User Profiles</h3>
+      <table>
+        <thead><tr><th>Variable</th><th>UUID</th><th>Capital</th></tr></thead>
+        <tbody>
+          <tr><td><code>UP_5L</code></td><td><code>00000001-...-0001</code></td><td>Rs 5L</td></tr>
+          <tr><td><code>UP_10L</code></td><td><code>00000001-...-0002</code></td><td>Rs 10L</td></tr>
+          <tr><td><code>UP_50L</code></td><td><code>00000001-...-0003</code></td><td>Rs 50L</td></tr>
+          <tr><td><code>UP_1CR</code></td><td><code>00000001-...-0004</code></td><td>Rs 1Cr</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Agent 1 Signals (expiry 2026-07-01)</h3>
+      <table>
+        <thead><tr><th>Variable</th><th>Signal</th><th>Bias/VIX</th></tr></thead>
+        <tbody>
+          <tr><td><code>SIG_BULL_EXT</code></td><td>S01</td><td>Bullish Extreme, VIX Normal</td></tr>
+          <tr><td><code>SIG_BULL_MILD_VHIGH</code></td><td>S02</td><td>Bullish Mild, VIX High</td></tr>
+          <tr><td><code>SIG_BULL_MILD_VNORM</code></td><td>S03</td><td>Bullish Mild, VIX Normal</td></tr>
+          <tr><td><code>SIG_BULL_WEAK</code></td><td>S04</td><td>Bullish Weak</td></tr>
+          <tr><td><code>SIG_NEUT_VHIGH</code></td><td>S05</td><td>Neutral, VIX High</td></tr>
+          <tr><td><code>SIG_NEUT_VNORM</code></td><td>S06</td><td>Neutral, VIX Normal</td></tr>
+          <tr><td><code>SIG_SKIP_VLOW</code></td><td>S07</td><td>VIX Low → SKIP</td></tr>
+          <tr><td><code>SIG_SKIP_VEXT</code></td><td>S08</td><td>VIX Extreme → SKIP</td></tr>
+          <tr><td><code>SIG_BEAR_MILD</code></td><td>S09</td><td>Bearish Mild</td></tr>
+          <tr><td><code>SIG_BEAR_EXT</code></td><td>S10</td><td>Bearish Extreme</td></tr>
+          <tr><td><code>SIG_GAPS</code></td><td>S11</td><td>Data gaps present</td></tr>
+          <tr><td><code>SIG_DIVERGE</code></td><td>S12</td><td>Commentary divergence</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Agent 2 Trades</h3>
+      <table>
+        <thead><tr><th>Variable</th><th>Trade</th><th>Strategy</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td><code>T_BPS_PEND</code></td><td>T-201</td><td>BullPutSpread</td><td>PENDING_CONFIRM</td></tr>
+          <tr><td><code>T_BCS_PEND</code></td><td>T-202</td><td>BullCallSpread</td><td>PENDING_CONFIRM</td></tr>
+          <tr><td><code>T_BCAS_PEND</code></td><td>T-203</td><td>BearCallSpread</td><td>PENDING_CONFIRM</td></tr>
+          <tr><td><code>T_IC_PEND</code></td><td>T-204</td><td>IronCondor</td><td>PENDING_CONFIRM</td></tr>
+          <tr><td><code>T_GATE_G1</code></td><td>T-205</td><td>BullPutSpread</td><td>REJECTED (G1)</td></tr>
+          <tr><td><code>T_GATE_G4</code></td><td>T-206</td><td>BullCallSpread</td><td>REJECTED (G4)</td></tr>
+          <tr><td><code>T_BPS_CONF</code></td><td>T-207</td><td>BullPutSpread</td><td>CONFIRMED (ready for A5)</td></tr>
+          <tr><td><code>T_BCS_CONF</code></td><td>T-208</td><td>BullCallSpread</td><td>CONFIRMED (ready for A5)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Agent 3 Active Trades</h3>
+      <table>
+        <thead><tr><th>Variable</th><th>Trade</th><th>Strategy</th><th>Expected action</th></tr></thead>
+        <tbody>
+          <tr><td><code>T_A3_HOLD</code></td><td>T-301</td><td>BullPutSpread</td><td>HOLD</td></tr>
+          <tr><td><code>T_A3_WATCH</code></td><td>T-302</td><td>BullPutSpread</td><td>WATCH</td></tr>
+          <tr><td><code>T_A3_READJUST</code></td><td>T-303</td><td>BullPutSpread</td><td>READJUST</td></tr>
+          <tr><td><code>T_A3_EXIT</code></td><td>T-304</td><td>BullPutSpread</td><td>EXIT (price)</td></tr>
+          <tr><td><code>T_A3_VIX</code></td><td>T-305</td><td>BullPutSpread</td><td>EXIT (VIX spike)</td></tr>
+          <tr><td><code>T_A3_PROFIT</code></td><td>T-306</td><td>BullCallSpread</td><td>EXIT (profit)</td></tr>
+          <tr><td><code>T_A3_LOSSCUT</code></td><td>T-307</td><td>BullCallSpread</td><td>EXIT (loss cut)</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="troubleshooting">Troubleshooting</h2>
+      <p><strong><code>slippageAlert: true</code> on a clean debit spread execute</strong></p>
+      <p>Fixed in Agent 5 <code>TradeExecutionService.isSlippage()</code>. The fix uses <code>actual.signum()</code> (not <code>expected.signum()</code>) to detect credit vs debit direction. Verify Agent 5 is running latest code.</p>
+
+      <p><strong>Agent 3 evaluate fails with "Trade not found" or NPE on missing monitor_config</strong></p>
+      <p>Check that seed 04 loaded correctly. Agent 3 requires <code>monitor_config</code> JSONB to be non-null in the <code>trades</code> row.</p>
+
+      <p><strong>Agent 5 fails with "Trade is not in CONFIRMED status"</strong></p>
+      <p>Reset the trade to CONFIRMED (see SQL above). After execute the status becomes ACTIVE — you cannot execute twice without resetting.</p>
+
+      <p><strong>VIX spike test (S3.5) returns HOLD instead of EXIT</strong></p>
+      <p>The <code>monitoring_evaluations</code> table needs a prior row to compute the spike percentage. Run the INSERT above before S3.5.</p>
+
+      <p><strong>NSE FII/DII fetch returns empty or error</strong></p>
+      <p>NSE requires a browser session cookie. If automated fetch fails:</p>
+      <ol>
+        <li>Open <code>https://www.nseindia.com/reports-indices-derivates-fii-dii-trade-react</code> in browser</li>
+        <li>Open DevTools → Network → find the <code>fiidiiTradeReact</code> request</li>
+        <li>Copy response and save to <code>test-data/capture/snapshot/fii_dii.json</code></li>
+      </ol>
+
+      <h2 id="sandbox">Sandbox Safety Reminders</h2>
+      <ul>
+        <li><code>simulate-fills=true</code> and <code>bypass-margin-check=true</code> are <strong>sandbox-only</strong> flags. They must <strong>never</strong> appear in <code>application.yml</code> — only in <code>application-sandbox.yml</code>.</li>
+        <li>SIM- order IDs (<code>SIM-XXXXXXXX-L0</code>) are synthetic. They will never appear in Upstox.</li>
+        <li>All test UUIDs start with <code>00000001-</code>, <code>a1000001-</code>, <code>a2000001-</code>, <code>a3000001-</code> — easy to identify and clean up.</li>
+      </ul>
+    </main>
+  </div>
+</body>
+</html>

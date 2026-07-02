@@ -1,5 +1,6 @@
 package com.the3Cgrp.zupptrade.agent2.engine.layer5;
 
+import com.the3Cgrp.zupptrade.agent2.config.TradingConfig;
 import com.the3Cgrp.zupptrade.agent2.engine.RecommendationContext;
 import com.the3Cgrp.zupptrade.agent2.engine.layer4.GateValidator;
 import com.the3Cgrp.zupptrade.shared.dto.GateResultDto;
@@ -29,15 +30,18 @@ public class PositionSizer {
 
     private static final Logger log = LoggerFactory.getLogger(PositionSizer.class);
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
-    // Agent 3 exits the trade at T3 when mark-to-market loss reaches 30% of theoretical max loss.
-    // Sizing is based on this real expected loss, not the theoretical max wipeout.
-    private static final BigDecimal REAL_LOSS_FACTOR = new BigDecimal("0.30");
+    // Credit: Agent 3 exits at T3 when MTM loss reaches 50% of theoretical max loss (per CLAUDE.md Layer 5).
+    private static final BigDecimal CREDIT_REAL_LOSS_FACTOR = new BigDecimal("0.50");
+    // Debit: Agent 3 exits at T3 when MTM loss = 50% of premium paid (per CLAUDE.md monitor thresholds).
+    private static final BigDecimal DEBIT_REAL_LOSS_FACTOR = new BigDecimal("0.50");
     private static final BigDecimal ANNUALISATION_DAYS = BigDecimal.valueOf(252);
 
     private final GateValidator gateValidator;
+    private final TradingConfig config;
 
-    public PositionSizer(GateValidator gateValidator) {
+    public PositionSizer(GateValidator gateValidator, TradingConfig config) {
         this.gateValidator = gateValidator;
+        this.config = config;
     }
 
     public void execute(RecommendationContext ctx) {
@@ -45,32 +49,52 @@ public class PositionSizer {
         TradeLegDto longLeg = ctx.getLongLeg();
         int lotSize = ctx.getLotSize();
         BigDecimal capital = ctx.getUserProfile().getCapital();
-        BigDecimal maxLossPct = ctx.getUserProfile().getMaxLossPct();
 
-        int spreadWidth = Math.abs(shortLeg.strike() - longLeg.strike());
+        // Iron Condor has a second spread (CE side) stored in shortLeg2/longLeg2.
+        // Net premium = sum of both spreads; max loss = larger spread width - total premium
+        // (a condor can only lose on one side at expiry).
+        boolean hasLeg2 = ctx.getShortLeg2() != null && ctx.getLongLeg2() != null;
+
+        int spreadWidth1 = Math.abs(shortLeg.strike() - longLeg.strike());
+        int spreadWidth = hasLeg2
+                ? Math.max(spreadWidth1, Math.abs(ctx.getShortLeg2().strike() - ctx.getLongLeg2().strike()))
+                : spreadWidth1;
+
         BigDecimal netPremiumPerUnit = computeNetPremium(ctx.getSpreadDirection(), shortLeg, longLeg);
+        if (hasLeg2) {
+            netPremiumPerUnit = netPremiumPerUnit
+                    .add(computeNetPremium(ctx.getSpreadDirection(), ctx.getShortLeg2(), ctx.getLongLeg2()));
+        }
 
         BigDecimal maxLossPerLot = computeMaxLossPerLot(ctx.getSpreadDirection(), spreadWidth, netPremiumPerUnit, lotSize);
-        BigDecimal realExpectedLossPerLot = maxLossPerLot.multiply(REAL_LOSS_FACTOR).setScale(2, RoundingMode.HALF_UP);
-
-        BigDecimal maxLossBudget = capital.multiply(maxLossPct).divide(HUNDRED, 2, RoundingMode.HALF_UP);
-
-        int lots = realExpectedLossPerLot.compareTo(BigDecimal.ZERO) > 0
-                ? maxLossBudget.divide(realExpectedLossPerLot, 0, RoundingMode.FLOOR).intValue()
-                : 1;
-        lots = Math.max(lots, 1);
-
         BigDecimal maxProfitPerLot = computeMaxProfitPerLot(ctx.getSpreadDirection(), spreadWidth, netPremiumPerUnit, lotSize);
+
+        int lots;
+        BigDecimal realExpectedLossTotal;
+        if (ctx.getStrategy().isDebit()) {
+            lots = sizeDebitLots(capital, maxLossPerLot);
+            realExpectedLossTotal = maxLossPerLot.multiply(BigDecimal.valueOf(lots))
+                    .multiply(DEBIT_REAL_LOSS_FACTOR).setScale(2, RoundingMode.HALF_UP);
+        } else {
+            lots = sizeCreditLots(capital, ctx.getUserProfile().getMaxLossPct(), maxLossPerLot);
+            realExpectedLossTotal = maxLossPerLot.multiply(BigDecimal.valueOf(lots))
+                    .multiply(CREDIT_REAL_LOSS_FACTOR).setScale(2, RoundingMode.HALF_UP);
+        }
+
         BigDecimal maxProfitTotal = maxProfitPerLot.multiply(BigDecimal.valueOf(lots));
         BigDecimal theoreticalMaxLossTotal = maxLossPerLot.multiply(BigDecimal.valueOf(lots));
-        BigDecimal realExpectedLossTotal = realExpectedLossPerLot.multiply(BigDecimal.valueOf(lots));
 
         BigDecimal roc = maxProfitTotal.divide(capital, 6, RoundingMode.HALF_UP)
                 .multiply(HUNDRED).setScale(4, RoundingMode.HALF_UP);
         BigDecimal rocAnnualised = roc.multiply(ANNUALISATION_DAYS)
                 .divide(BigDecimal.valueOf(ctx.getDte()), 4, RoundingMode.HALF_UP);
 
-        BigDecimal netDelta = shortLeg.delta().add(longLeg.delta()).setScale(4, RoundingMode.HALF_UP);
+        // Include leg2 delta for net delta calculation (Iron Condor)
+        BigDecimal leg2Delta = hasLeg2
+                ? ctx.getShortLeg2().delta().add(ctx.getLongLeg2().delta())
+                : BigDecimal.ZERO;
+        BigDecimal netDelta = shortLeg.delta().add(longLeg.delta()).add(leg2Delta)
+                .setScale(4, RoundingMode.HALF_UP);
 
         ctx.setLots(lots);
         ctx.setMaxProfitTotal(maxProfitTotal);
@@ -80,18 +104,20 @@ public class PositionSizer {
         ctx.setRocAnnualised(rocAnnualised);
         ctx.setNetDelta(netDelta);
 
-        // G4 can only be evaluated after RoC is known — append to existing gate results
-        GateResultDto g4 = gateValidator.validateG4(ctx);
+        // G4 / G4D can only be evaluated after sizing is complete — append to existing gate results
+        GateResultDto finalGate = ctx.getStrategy().isDebit()
+                ? gateValidator.validateG4D(ctx)
+                : gateValidator.validateG4(ctx);
         List<GateResultDto> allGates = new java.util.ArrayList<>(ctx.getGateResults());
-        allGates.add(g4);
+        allGates.add(finalGate);
         ctx.setGateResults(allGates);
 
-        // G4 failure is informational for SKIP signal, not hard rejection (RoC may still be acceptable)
-        if (!g4.passed()) {
+        if (!finalGate.passed()) {
             ctx.setAllHardGatesPassed(false);
         }
 
         log.info("layer5.position.sizing",
+                kv("strategy", ctx.getStrategy()),
                 kv("lots", lots),
                 kv("maxProfitTotal", maxProfitTotal),
                 kv("theoreticalMaxLossTotal", theoreticalMaxLossTotal),
@@ -99,7 +125,26 @@ public class PositionSizer {
                 kv("roc", roc),
                 kv("rocAnnualised", rocAnnualised),
                 kv("netDelta", netDelta),
-                kv("g4_passed", g4.passed()));
+                kv("finalGatePassed", finalGate.passed()));
+    }
+
+    private int sizeDebitLots(BigDecimal capital, BigDecimal maxLossPerLot) {
+        // Budget = 0.5% of capital; maxLossPerLot = net debit × lotSize (the most we can lose per lot)
+        BigDecimal budget = capital.multiply(config.getMaxLossDebitPct()).divide(HUNDRED, 2, RoundingMode.HALF_UP);
+        int lots = maxLossPerLot.compareTo(BigDecimal.ZERO) > 0
+                ? budget.divide(maxLossPerLot, 0, RoundingMode.FLOOR).intValue()
+                : 1;
+        return Math.max(lots, 1);
+    }
+
+    private int sizeCreditLots(BigDecimal capital, BigDecimal maxLossPct, BigDecimal maxLossPerLot) {
+        BigDecimal realExpectedLossPerLot = maxLossPerLot.multiply(CREDIT_REAL_LOSS_FACTOR)
+                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal maxLossBudget = capital.multiply(maxLossPct).divide(HUNDRED, 2, RoundingMode.HALF_UP);
+        int lots = realExpectedLossPerLot.compareTo(BigDecimal.ZERO) > 0
+                ? maxLossBudget.divide(realExpectedLossPerLot, 0, RoundingMode.FLOOR).intValue()
+                : 1;
+        return Math.max(lots, 1);
     }
 
     private BigDecimal computeNetPremium(SpreadDirection direction, TradeLegDto shortLeg, TradeLegDto longLeg) {

@@ -1,6 +1,7 @@
 package com.the3Cgrp.zupptrade.agent2.engine.layer3;
 
 import com.the3Cgrp.zupptrade.agent2.client.model.StrikeData;
+import com.the3Cgrp.zupptrade.agent2.config.TradingConfig;
 import com.the3Cgrp.zupptrade.agent2.engine.RecommendationContext;
 import com.the3Cgrp.zupptrade.agent2.exception.MarketDataUnavailableException;
 import com.the3Cgrp.zupptrade.shared.dto.TradeLegDto;
@@ -24,13 +25,20 @@ import static net.logstash.logback.argument.StructuredArguments.kv;
  * Credit spreads: Short strike at or beyond 1.4 SD boundary, delta ≤ 0.20, rounded to 50pt.
  *                 Long strike: 50–100 pts further OTM.
  *
- * Debit spreads: Long strike at or near ATM, short strike 200 pts OTM (Bull Call Spread).
+ * Debit spreads (Bull Call / Bear Put): Long strike at or near ATM, short strike
+ *                 config.debitSpreadWidth pts OTM.
  */
 @Component
 public class StrikeSelector {
 
     private static final Logger log = LoggerFactory.getLogger(StrikeSelector.class);
     private static final BigDecimal MAX_SHORT_DELTA = new BigDecimal("0.20");
+
+    private final TradingConfig config;
+
+    public StrikeSelector(TradingConfig config) {
+        this.config = config;
+    }
 
     // DTE threshold for spread width selection.
     // ≤ 4 calendar days → narrow spread (spread_width_min): less time for adverse moves,
@@ -44,6 +52,7 @@ public class StrikeSelector {
             case BULL_PUT_SPREAD -> selectCreditPutSpread(ctx);
             case BEAR_CALL_SPREAD -> selectCreditCallSpread(ctx);
             case BULL_CALL_SPREAD -> selectDebitCallSpread(ctx);
+            case BEAR_PUT_SPREAD -> selectDebitPutSpread(ctx);
             case IRON_CONDOR, WIDE_IRON_CONDOR -> selectIronCondor(ctx);
             default -> throw new IllegalStateException("StrikeSelector called for unsupported strategy: " + ctx.getStrategy());
         }
@@ -120,7 +129,7 @@ public class StrikeSelector {
                         .min(Comparator.comparingInt(s -> Math.abs(s.strike() - atmStrike)))
                         .orElseThrow(() -> new MarketDataUnavailableException("No ATM call strike found")));
 
-        int shortStrike = roundToNearest50(atmStrike + 200, true);
+        int shortStrike = roundToNearest50(atmStrike + config.getDebitSpreadWidth(), true);
         StrikeData shortCall = calls.stream()
                 .filter(s -> s.strike() == shortStrike)
                 .findFirst()
@@ -140,21 +149,62 @@ public class StrikeSelector {
                 kv("shortLtp", shortCall.ltp()));
     }
 
+    private void selectDebitPutSpread(RecommendationContext ctx) {
+        int atmStrike = ctx.getOptionChainData().atmStrike();
+        List<StrikeData> puts = ctx.getOptionChainData().puts();
+
+        // Long ATM put — the directional leg
+        StrikeData longPut = puts.stream()
+                .filter(s -> s.strike() == atmStrike)
+                .findFirst()
+                .orElseGet(() -> puts.stream()
+                        .min(Comparator.comparingInt(s -> Math.abs(s.strike() - atmStrike)))
+                        .orElseThrow(() -> new MarketDataUnavailableException("No ATM put strike found")));
+
+        // Short put further OTM (below ATM) — caps the debit cost
+        int shortStrike = roundToNearest50(atmStrike - config.getDebitSpreadWidth(), false);
+        StrikeData shortPut = puts.stream()
+                .filter(s -> s.strike() == shortStrike)
+                .findFirst()
+                .orElseGet(() -> puts.stream()
+                        .filter(s -> s.strike() < longPut.strike())
+                        .min(Comparator.comparingInt(s -> Math.abs(s.strike() - shortStrike)))
+                        .orElseThrow(() -> new MarketDataUnavailableException("No OTM put strike found for debit spread")));
+
+        ctx.setLongLeg(toLeg(longPut, OptionType.PE, LegAction.BUY));
+        ctx.setShortLeg(toLeg(shortPut, OptionType.PE, LegAction.SELL));
+
+        log.info("layer3.strikes.selected",
+                kv("strategy", ctx.getStrategy()),
+                kv("longStrike", longPut.strike()),
+                kv("longLtp", longPut.ltp()),
+                kv("shortStrike", shortPut.strike()),
+                kv("shortLtp", shortPut.ltp()));
+    }
+
     private void selectIronCondor(RecommendationContext ctx) {
-        // Iron condor = put spread below + call spread above
-        // Reuse credit spread logic for each side
+        // Iron condor = put spread below + call spread above.
+        // PE spread stored as shortLeg/longLeg (primary); CE spread stored as shortLeg2/longLeg2.
         selectCreditPutSpread(ctx);
-        TradeLegDto putShortLeg = ctx.getShortLeg();
-        TradeLegDto putLongLeg = ctx.getLongLeg();
+        TradeLegDto peShortLeg = ctx.getShortLeg();
+        TradeLegDto peLongLeg  = ctx.getLongLeg();
 
         selectCreditCallSpread(ctx);
-        // For now stores call spread legs — Iron Condor full leg management handled in service
+        // ctx.shortLeg/longLeg now holds the CE spread — promote PE to primary, CE to leg2
+        TradeLegDto ceShortLeg = ctx.getShortLeg();
+        TradeLegDto ceLongLeg  = ctx.getLongLeg();
+
+        ctx.setShortLeg(peShortLeg);
+        ctx.setLongLeg(peLongLeg);
+        ctx.setShortLeg2(ceShortLeg);
+        ctx.setLongLeg2(ceLongLeg);
+
         log.info("layer3.iron.condor.selected",
                 kv("strategy", ctx.getStrategy()),
-                kv("putShortStrike", putShortLeg.strike()),
-                kv("putLongStrike", putLongLeg.strike()),
-                kv("callShortStrike", ctx.getShortLeg().strike()),
-                kv("callLongStrike", ctx.getLongLeg().strike()));
+                kv("peShortStrike", peShortLeg.strike()),
+                kv("peLongStrike",  peLongLeg.strike()),
+                kv("ceShortStrike", ceShortLeg.strike()),
+                kv("ceLongStrike",  ceLongLeg.strike()));
     }
 
     private TradeLegDto toLeg(StrikeData strike, OptionType optionType, LegAction action) {

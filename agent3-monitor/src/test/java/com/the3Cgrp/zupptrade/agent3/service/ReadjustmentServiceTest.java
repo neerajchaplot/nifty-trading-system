@@ -378,6 +378,126 @@ class ReadjustmentServiceTest {
         verifyNoInteractions(agent2RecommendClient, agent5ExecuteClient);
     }
 
+    // ── IC readjustment — 4-leg exit routing ─────────────────────────────────
+
+    @Test
+    void handle_ironCondor_exitRoutesToIcExitMethod() {
+        // When config.shortLeg2() != null (IC), exitOldTrade must call exitIronCondorTrade, not exitTrade
+        TradeMonitorData trade = tradeMock(LocalDate.now().plusDays(5));
+        MonitorConfigDto config = icConfig();
+        EvaluationResponse response = evaluationResponse(new BigDecimal("18.0"));
+
+        when(jdbc.update(anyString(), any(UUID.class))).thenReturn(1);
+        when(agent5ExitClient.exitIronCondorTrade(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(true);
+        when(agent1ScoreClient.score(any())).thenReturn(Optional.of(SIGNAL_ID));
+        when(agent2RecommendClient.recommend(any(), any(), any())).thenReturn(Optional.of(pendingTradeCard()));
+        when(agent2RecommendClient.confirm(any())).thenReturn(Optional.of(confirmedTradeCard()));
+        when(agent5ExecuteClient.execute(any())).thenReturn(true);
+
+        service.handle(trade, config, response);
+
+        // 4-leg IC exit must be called, 2-leg must NOT be called
+        verify(agent5ExitClient).exitIronCondorTrade(
+                eq(OLD_TRADE_ID), anyString(),
+                eq("NFO_OPT|NIFTY|2026-06-24|23500|PE"), eq(LegAction.SELL),
+                eq("NFO_OPT|NIFTY|2026-06-24|23400|PE"), eq(LegAction.BUY),
+                eq("NFO_OPT|NIFTY|2026-06-24|24000|CE"), eq(LegAction.SELL),
+                eq("NFO_OPT|NIFTY|2026-06-24|24100|CE"), eq(LegAction.BUY),
+                anyInt());
+        verify(agent5ExitClient, never()).exitTrade(any(), any(), any(), any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void handle_ironCondor_exitFails_alertsAndAbortsReentry() {
+        TradeMonitorData trade = tradeMock(LocalDate.now().plusDays(5));
+        MonitorConfigDto config = icConfig();
+        EvaluationResponse response = evaluationResponse(new BigDecimal("18.0"));
+
+        when(jdbc.update(anyString(), any(UUID.class))).thenReturn(1);
+        when(agent5ExitClient.exitIronCondorTrade(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(false); // IC exit failed
+
+        service.handle(trade, config, response);
+
+        verify(alertService).critical(eq(OLD_TRADE_ID), eq("readjust_exit_failed"), anyString());
+        verifyNoInteractions(agent1ScoreClient, agent2RecommendClient, agent5ExecuteClient);
+    }
+
+    @Test
+    void handle_ironCondor_dteGuard_callsIcExitNotTwoLeg() {
+        // Even when DTE guard blocks re-entry, exit must still use 4-leg path for IC
+        TradeMonitorData trade = tradeMock(LocalDate.now()); // DTE=0 < minDteDays=1
+        MonitorConfigDto config = icConfig();
+        EvaluationResponse response = evaluationResponse(new BigDecimal("18.0"));
+
+        when(jdbc.update(anyString(), any(UUID.class))).thenReturn(1);
+        when(agent5ExitClient.exitIronCondorTrade(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(true);
+
+        service.handle(trade, config, response);
+
+        verify(agent5ExitClient).exitIronCondorTrade(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyInt());
+        verify(agent5ExitClient, never()).exitTrade(any(), any(), any(), any(), any(), any(), anyInt());
+        // DTE guard fires — no re-entry
+        verifyNoInteractions(agent1ScoreClient, agent2RecommendClient, agent5ExecuteClient);
+    }
+
+    @Test
+    void handle_creditSpread_exitRoutesToTwoLegMethod() {
+        // Confirm 2-leg (Bull Put Spread) still uses exitTrade — not IC path
+        TradeMonitorData trade = tradeMock(LocalDate.now().plusDays(5));
+        MonitorConfigDto config = creditConfig();
+        EvaluationResponse response = evaluationResponse(new BigDecimal("18.0"));
+
+        when(jdbc.update(anyString(), any(UUID.class))).thenReturn(1);
+        when(agent5ExitClient.exitTrade(any(), any(), any(), any(), any(), any(), anyInt())).thenReturn(true);
+        when(agent1ScoreClient.score(any())).thenReturn(Optional.of(SIGNAL_ID));
+        when(agent2RecommendClient.recommend(any(), any(), any())).thenReturn(Optional.of(pendingTradeCard()));
+        when(agent2RecommendClient.confirm(any())).thenReturn(Optional.of(confirmedTradeCard()));
+        when(agent5ExecuteClient.execute(any())).thenReturn(true);
+
+        service.handle(trade, config, response);
+
+        verify(agent5ExitClient).exitTrade(any(), any(), any(), any(), any(), any(), anyInt());
+        verify(agent5ExitClient, never()).exitIronCondorTrade(any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyInt());
+    }
+
+    @Test
+    void handle_ironCondor_reentry_executesIcCardWith4Legs() {
+        // When Agent 2 re-recommends an IC, the execute card must have shortLeg2+longLeg2 populated
+        TradeMonitorData trade = tradeMock(LocalDate.now().plusDays(5));
+        MonitorConfigDto config = icConfig();
+        EvaluationResponse response = evaluationResponse(new BigDecimal("18.0"));
+
+        when(jdbc.update(anyString(), any(UUID.class))).thenReturn(1);
+        when(agent5ExitClient.exitIronCondorTrade(
+                any(), any(), any(), any(), any(), any(), any(), any(), any(), any(), anyInt()))
+                .thenReturn(true);
+        when(agent1ScoreClient.score(any())).thenReturn(Optional.of(SIGNAL_ID));
+        when(agent2RecommendClient.recommend(any(), any(), any())).thenReturn(Optional.of(pendingIcTradeCard()));
+        when(agent2RecommendClient.confirm(any())).thenReturn(Optional.of(confirmedIcTradeCard()));
+        when(agent5ExecuteClient.execute(any())).thenReturn(true);
+
+        service.handle(trade, config, response);
+
+        ArgumentCaptor<TradeCardDto> captor = ArgumentCaptor.forClass(TradeCardDto.class);
+        verify(agent5ExecuteClient).execute(captor.capture());
+        TradeCardDto executedCard = captor.getValue();
+
+        // All 4 IC legs must be present in the card sent to Agent 5
+        assertThat(executedCard.shortLeg()).isNotNull();
+        assertThat(executedCard.longLeg()).isNotNull();
+        assertThat(executedCard.shortLeg2()).isNotNull();
+        assertThat(executedCard.longLeg2()).isNotNull();
+        assertThat(executedCard.shortLeg().optionType()).isEqualTo(OptionType.PE);
+        assertThat(executedCard.shortLeg2().optionType()).isEqualTo(OptionType.CE);
+        assertThat(executedCard.strategy()).isEqualTo(Strategy.IRON_CONDOR);
+    }
+
     // ── Test data builders ────────────────────────────────────────────────────
 
     private TradeMonitorData tradeMock(LocalDate expiryDate) {
@@ -394,14 +514,14 @@ class ReadjustmentServiceTest {
                 new BigDecimal("28.20"), LegAction.BUY, new BigDecimal("-0.14"),
                 new BigDecimal("0.88"), "NFO_OPT|NIFTY|2026-06-17|23400|PE");
 
-        MonitorThresholdsDto thresholds = new MonitorThresholdsDto(
+        MonitorThresholdsDto thresholds = MonitorThresholdsDto.twoLeg(
                 new BigDecimal("23650"),   // t1WatchNiftyLevel
                 new BigDecimal("23575"),   // t2ReadjustNiftyLevel
                 new BigDecimal("23500"),   // t3ExitNiftyLevel
                 new BigDecimal("-9750"),   // t2LossThreshold
                 new BigDecimal("-19500")); // t3LossThreshold
 
-        return new MonitorConfigDto(
+        return MonitorConfigDto.twoLeg(
                 OLD_TRADE_ID, Strategy.BULL_PUT_SPREAD, SpreadDirection.CREDIT,
                 shortLegDto, longLegDto,
                 new BigDecimal("17.30"),  // actualNetPremiumPerUnit
@@ -411,6 +531,75 @@ class ReadjustmentServiceTest {
                 false, null,                // slippageAlert, slippageAmount
                 thresholds,
                 LocalDate.now().plusDays(5), 5);
+    }
+
+    private MonitorConfigDto icConfig() {
+        TradeLegDto peShort = new TradeLegDto(OptionType.PE, 23500,
+                new BigDecimal("40.00"), LegAction.SELL, new BigDecimal("-0.18"),
+                new BigDecimal("0.82"), "NFO_OPT|NIFTY|2026-06-24|23500|PE");
+        TradeLegDto peLong  = new TradeLegDto(OptionType.PE, 23400,
+                new BigDecimal("25.00"), LegAction.BUY, new BigDecimal("-0.13"),
+                new BigDecimal("0.87"), "NFO_OPT|NIFTY|2026-06-24|23400|PE");
+        TradeLegDto ceShort = new TradeLegDto(OptionType.CE, 24000,
+                new BigDecimal("30.00"), LegAction.SELL, new BigDecimal("0.16"),
+                new BigDecimal("0.84"), "NFO_OPT|NIFTY|2026-06-24|24000|CE");
+        TradeLegDto ceLong  = new TradeLegDto(OptionType.CE, 24100,
+                new BigDecimal("18.00"), LegAction.BUY, new BigDecimal("0.12"),
+                new BigDecimal("0.88"), "NFO_OPT|NIFTY|2026-06-24|24100|CE");
+
+        MonitorThresholdsDto thresholds = MonitorThresholdsDto.ironCondor(
+                new BigDecimal("23600"), new BigDecimal("23550"), new BigDecimal("23500"),
+                new BigDecimal("23900"), new BigDecimal("23950"), new BigDecimal("24000"),
+                new BigDecimal("15000"), new BigDecimal("30000"));
+
+        return MonitorConfigDto.ironCondor(
+                OLD_TRADE_ID, Strategy.IRON_CONDOR, SpreadDirection.CREDIT,
+                peShort, peLong, ceShort, ceLong,
+                new BigDecimal("27.00"), 6, 65,
+                new BigDecimal("10530"), new BigDecimal("39000"),
+                false, null, thresholds,
+                LocalDate.now().plusDays(5), 5);
+    }
+
+    private TradeCardDto pendingIcTradeCard() {
+        TradeLegDto peShort = new TradeLegDto(OptionType.PE, 23350,
+                new BigDecimal("38.00"), LegAction.SELL, new BigDecimal("-0.17"),
+                new BigDecimal("0.83"), "NFO_OPT|NIFTY|2026-06-24|23350|PE");
+        TradeLegDto peLong = new TradeLegDto(OptionType.PE, 23250,
+                new BigDecimal("24.00"), LegAction.BUY, new BigDecimal("-0.13"),
+                new BigDecimal("0.87"), "NFO_OPT|NIFTY|2026-06-24|23250|PE");
+        TradeLegDto ceShort = new TradeLegDto(OptionType.CE, 24050,
+                new BigDecimal("28.00"), LegAction.SELL, new BigDecimal("0.15"),
+                new BigDecimal("0.85"), "NFO_OPT|NIFTY|2026-06-24|24050|CE");
+        TradeLegDto ceLong = new TradeLegDto(OptionType.CE, 24150,
+                new BigDecimal("17.00"), LegAction.BUY, new BigDecimal("0.11"),
+                new BigDecimal("0.89"), "NFO_OPT|NIFTY|2026-06-24|24150|CE");
+
+        return new TradeCardDto(
+                NEW_TRADE_ID, Strategy.IRON_CONDOR, SpreadDirection.CREDIT,
+                LocalDate.now().plusDays(5), 5,
+                peShort, peLong,
+                ceShort, ceLong,                                 // shortLeg2, longLeg2
+                new BigDecimal("25.00"), 6, 65,
+                new BigDecimal("9750.00"), new BigDecimal("46800.00"), new BigDecimal("23400.00"),
+                new BigDecimal("82.00"), new BigDecimal("84.00"), new BigDecimal("2.00"),
+                new BigDecimal("1.07"), new BigDecimal("130.00"), new BigDecimal("-0.02"),
+                null, null, "Iron condor readjust re-entry — neutral bias",
+                null, null, TradeStatus.PENDING_CONFIRM
+        );
+    }
+
+    private TradeCardDto confirmedIcTradeCard() {
+        TradeCardDto card = pendingIcTradeCard();
+        return new TradeCardDto(
+                card.tradeId(), card.strategy(), card.spreadDirection(), card.expiryDate(), card.dte(),
+                card.shortLeg(), card.longLeg(), card.shortLeg2(), card.longLeg2(),
+                card.netPremiumPerUnit(), card.lots(), card.lotSize(),
+                card.maxProfitTotal(), card.theoreticalMaxLossTotal(), card.realExpectedLossTotal(),
+                card.pop(), card.popp(), card.popGap(), card.roc(), card.rocAnnualised(), card.netDelta(),
+                card.gateResults(), card.thresholds(), card.rationale(),
+                card.generatedAt(), card.validUntil(), TradeStatus.CONFIRMED
+        );
     }
 
     private EvaluationResponse evaluationResponse(BigDecimal vix) {
@@ -440,6 +629,7 @@ class ReadjustmentServiceTest {
                 NEW_TRADE_ID, Strategy.BULL_PUT_SPREAD, SpreadDirection.CREDIT,
                 LocalDate.now().plusDays(5), 5,
                 shortLeg, longLeg,
+                null, null,              // shortLeg2, longLeg2 — 2-leg spread
                 new BigDecimal("14.40"), 6, 65,
                 new BigDecimal("5616.00"), new BigDecimal("39000.00"), new BigDecimal("19500.00"),
                 new BigDecimal("68.00"), new BigDecimal("75.00"), new BigDecimal("7.00"),
@@ -453,7 +643,8 @@ class ReadjustmentServiceTest {
         TradeCardDto card = pendingTradeCard();
         return new TradeCardDto(
                 card.tradeId(), card.strategy(), card.spreadDirection(), card.expiryDate(), card.dte(),
-                card.shortLeg(), card.longLeg(), card.netPremiumPerUnit(), card.lots(), card.lotSize(),
+                card.shortLeg(), card.longLeg(), card.shortLeg2(), card.longLeg2(),
+                card.netPremiumPerUnit(), card.lots(), card.lotSize(),
                 card.maxProfitTotal(), card.theoreticalMaxLossTotal(), card.realExpectedLossTotal(),
                 card.pop(), card.popp(), card.popGap(), card.roc(), card.rocAnnualised(), card.netDelta(),
                 card.gateResults(), card.thresholds(), card.rationale(),

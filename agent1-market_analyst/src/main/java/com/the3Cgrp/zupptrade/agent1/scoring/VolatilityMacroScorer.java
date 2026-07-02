@@ -36,12 +36,31 @@ public class VolatilityMacroScorer implements TierScorer {
 
     @Override
     public TierScore calculate(MarketInputs inputs) {
+        int vVix     = voteVixChange(inputs.getVixLevel(), inputs.getVixPrevLevel());
+        int vOi      = voteOiChange(inputs.getCallOiChange(), inputs.getPutOiChange());
+        int vGift    = voteGiftNifty(inputs.getGiftNiftyPremium());
+
+        BigDecimal vixPctChange = null;
+        if (inputs.getVixLevel() != null && inputs.getVixPrevLevel() != null
+                && inputs.getVixPrevLevel().compareTo(BigDecimal.ZERO) != 0) {
+            vixPctChange = inputs.getVixLevel().subtract(inputs.getVixPrevLevel())
+                    .divide(inputs.getVixPrevLevel(), 4, java.math.RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(100));
+        }
+        log.info("agent1.tier3 vix_daily_change: vix={} vixPrev={} pctChange={}%  → {}", inputs.getVixLevel(), inputs.getVixPrevLevel(), vixPctChange, vLabel(vVix));
+        log.info("agent1.tier3 oi_change:        callOiChange={} putOiChange={}   → {}", inputs.getCallOiChange(), inputs.getPutOiChange(), vLabel(vOi));
+        log.info("agent1.tier3 gift_nifty:       premium={} pts threshold=±{} pts → {}", inputs.getGiftNiftyPremium(), props.getGiftNifty().getSignificantPts(), vLabel(vGift));
+
         Map<String, Integer> signals = new LinkedHashMap<>();
-        signals.put("vix_daily_change", voteVixChange(inputs.getVixLevel(), inputs.getVixPrevLevel()));
-        signals.put("oi_change",        voteOiChange(inputs.getCallOiChange(), inputs.getPutOiChange()));
-        signals.put("gift_nifty",       voteGiftNifty(inputs.getGiftNiftyPremium()));
+        signals.put("vix_daily_change", vVix);
+        signals.put("oi_change",        vOi);
+        signals.put("gift_nifty",       vGift);
 
         return buildTierScore(signals);
+    }
+
+    private static String vLabel(int v) {
+        return v == 1 ? "+1 (BULLISH)" : v == -1 ? "-1 (BEARISH)" : "0 (NEUTRAL)";
     }
 
     // --- package-private vote methods ---

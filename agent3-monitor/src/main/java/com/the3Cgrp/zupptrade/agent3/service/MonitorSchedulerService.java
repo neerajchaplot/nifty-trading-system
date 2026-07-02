@@ -47,7 +47,7 @@ import java.util.stream.Collectors;
  *   3. Groups remaining trades by expiry — ONE Upstox option chain call per unique expiry
  *   4. ONE VIX call for the cycle
  *   5. Evaluates each trade against the shared snapshot (no additional API calls)
- *   6. Routes actionable outcomes: EXIT → Agent 5, PAUSE → notification, READJUST → alert
+ *   6. Routes actionable outcomes: EXIT → Agent5ExitClient, READJUST → ReadjustmentService (6-step re-entry), PAUSE → AlertService
  *
  * EXIT_FAILED trades re-enter the loop: Agent 3 re-evaluates and retries the exit call
  * until it succeeds or the user manually closes.
@@ -213,29 +213,34 @@ public class MonitorSchedulerService {
                 trade.tradeId(), trade.tradeCode());
         try {
             JsonNode fills = objectMapper.readTree(trade.entryFillsJson());
-            BigDecimal shortFillPrice = null;
-            BigDecimal longFillPrice  = null;
+            // For IC: PE SELL, PE BUY, CE SELL, CE BUY. For 2-leg: one SELL + one BUY.
+            BigDecimal peSellFill = null, peBuyFill = null;
+            BigDecimal ceSellFill = null, ceBuyFill = null;
 
             for (JsonNode fill : fills) {
-                String action   = fill.path("action").asText();
-                String avgPrice = fill.path("averageFillPrice").asText();
+                String action      = fill.path("action").asText();
+                String optionType  = fill.path("optionType").asText(""); // "PE" or "CE"
+                String avgPrice    = fill.path("averageFillPrice").asText();
                 if (avgPrice.isBlank()) continue;
+                BigDecimal price = new BigDecimal(avgPrice);
 
                 if ("SELL".equals(action)) {
-                    shortFillPrice = new BigDecimal(avgPrice);
+                    if ("CE".equals(optionType)) ceSellFill = price;
+                    else peSellFill = price; // PE or 2-leg
                 } else if ("BUY".equals(action)) {
-                    longFillPrice = new BigDecimal(avgPrice);
+                    if ("CE".equals(optionType)) ceBuyFill = price;
+                    else peBuyFill = price;  // PE or 2-leg
                 }
             }
 
-            if (shortFillPrice == null || longFillPrice == null) {
-                log.error("agent3.scheduler.seed_fail.missing_prices tradeId={} tradeCode={} short={} long={}",
-                        trade.tradeId(), trade.tradeCode(), shortFillPrice, longFillPrice);
+            if (peSellFill == null || peBuyFill == null) {
+                log.error("agent3.scheduler.seed_fail.missing_prices tradeId={} tradeCode={} peSell={} peBuy={}",
+                        trade.tradeId(), trade.tradeCode(), peSellFill, peBuyFill);
                 return null;
             }
 
             Optional<MonitorConfigDto> seeded = agent2RecommendClient.fetchMonitorConfig(
-                    trade.tradeId(), shortFillPrice, longFillPrice);
+                    trade.tradeId(), peSellFill, peBuyFill, ceSellFill, ceBuyFill);
 
             if (seeded.isEmpty()) {
                 log.warn("agent3.scheduler.seed_fail.agent2_empty tradeId={} tradeCode={}",
@@ -322,15 +327,31 @@ public class MonitorSchedulerService {
         }
 
         int quantity = config.lots() * config.lotSize();
+        boolean isIronCondor = config.shortLeg2() != null && config.longLeg2() != null;
+        boolean success;
 
-        boolean success = agent5ExitClient.exitTrade(
-                tradeId,
-                response.reason(),
-                config.shortLeg().instrumentKey(),
-                config.shortLeg().action(),
-                config.longLeg().instrumentKey(),
-                config.longLeg().action(),
-                quantity);
+        if (isIronCondor) {
+            if (config.shortLeg2().instrumentKey() == null || config.longLeg2().instrumentKey() == null) {
+                String msg = "Trade " + trade.tradeCode() + " IC exit failed — CE leg instrumentKey missing. MANUAL INTERVENTION REQUIRED.";
+                log.error("agent3.exit.missing_instrument_key.ce_legs tradeId={}", tradeId);
+                alertService.critical(tradeId, "exit_missing_instrument_key", msg);
+                setExitFailed(tradeId, "Missing CE leg instrument key in monitor_config");
+                return;
+            }
+            success = agent5ExitClient.exitIronCondorTrade(
+                    tradeId, response.reason(),
+                    config.shortLeg().instrumentKey(),  config.shortLeg().action(),
+                    config.longLeg().instrumentKey(),   config.longLeg().action(),
+                    config.shortLeg2().instrumentKey(), config.shortLeg2().action(),
+                    config.longLeg2().instrumentKey(),  config.longLeg2().action(),
+                    quantity);
+        } else {
+            success = agent5ExitClient.exitTrade(
+                    tradeId, response.reason(),
+                    config.shortLeg().instrumentKey(), config.shortLeg().action(),
+                    config.longLeg().instrumentKey(),  config.longLeg().action(),
+                    quantity);
+        }
 
         if (!success) {
             String msg = "Trade " + trade.tradeCode() + " EXIT FAILED — Agent 5 could not place exit orders. " +

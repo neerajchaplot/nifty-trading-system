@@ -6,6 +6,9 @@ import com.the3Cgrp.zupptrade.agent1.domain.model.PrecomputedIndicators;
 import com.the3Cgrp.zupptrade.agent1.domain.model.TierScore;
 import org.springframework.stereotype.Component;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.LinkedHashMap;
@@ -18,6 +21,8 @@ import java.util.Map;
  */
 @Component
 public class PriceStructureScorer implements TierScorer {
+
+    private static final Logger log = LoggerFactory.getLogger(PriceStructureScorer.class);
 
     private final TradingProperties props;
 
@@ -36,16 +41,36 @@ public class PriceStructureScorer implements TierScorer {
         PrecomputedIndicators ind = inputs.getIndicators();
         BigDecimal spot = inputs.getSpot();
 
+        int vEma20  = voteSpotVsEma(spot, ind.ema20());
+        int vEma50  = voteSpotVsEma(spot, ind.ema50());
+        int vEma200 = voteSpotVsEma(spot, ind.ema200());
+        int vHHL    = voteHigherHighsLows(ind.higherHighs(), ind.higherLows());
+        int vFut    = voteFuturesPremium(inputs.getFuturesPremium());
+        int vPcr    = votePcr(inputs.getPcr());
+        int vMp     = voteMaxPain(spot, inputs.getMaxPain());
+
+        log.info("agent1.tier1a spot_vs_ema20:     spot={} ema20={}   → {}", spot, ind.ema20(),   vLabel(vEma20));
+        log.info("agent1.tier1a spot_vs_ema50:     spot={} ema50={}   → {}", spot, ind.ema50(),   vLabel(vEma50));
+        log.info("agent1.tier1a spot_vs_ema200:    spot={} ema200={}  → {}", spot, ind.ema200(),  vLabel(vEma200));
+        log.info("agent1.tier1a higher_highs_lows: higherHighs={} higherLows={}  → {}", ind.higherHighs(), ind.higherLows(), vLabel(vHHL));
+        log.info("agent1.tier1a futures_premium:   premium={}   → {}", inputs.getFuturesPremium(), vLabel(vFut));
+        log.info("agent1.tier1a pcr:               pcr={}       → {}", inputs.getPcr(),            vLabel(vPcr));
+        log.info("agent1.tier1a max_pain:           spot={} maxPain={}  → {}", spot, inputs.getMaxPain(), vLabel(vMp));
+
         Map<String, Integer> signals = new LinkedHashMap<>();
-        signals.put("spot_vs_ema20",     voteSpotVsEma(spot, ind.ema20()));
-        signals.put("spot_vs_ema50",     voteSpotVsEma(spot, ind.ema50()));
-        signals.put("spot_vs_ema200",    voteSpotVsEma(spot, ind.ema200()));
-        signals.put("higher_highs_lows", voteHigherHighsLows(ind.higherHighs(), ind.higherLows()));
-        signals.put("futures_premium",   voteFuturesPremium(inputs.getFuturesPremium()));
-        signals.put("pcr",               votePcr(inputs.getPcr()));
-        signals.put("max_pain",          voteMaxPain(spot, inputs.getMaxPain()));
+        signals.put("spot_vs_ema20",     vEma20);
+        signals.put("spot_vs_ema50",     vEma50);
+        signals.put("spot_vs_ema200",    vEma200);
+        signals.put("higher_highs_lows", vHHL);
+        signals.put("futures_premium",   vFut);
+        signals.put("pcr",               vPcr);
+        signals.put("max_pain",          vMp);
 
         return buildTierScore(signals);
+    }
+
+    private static String vLabel(int v) {
+        return v == 1 ? "+1 (BULLISH)" : v == -1 ? "-1 (BEARISH)" : "0 (NEUTRAL)";
     }
 
     // --- package-private vote methods — called directly from unit tests ---

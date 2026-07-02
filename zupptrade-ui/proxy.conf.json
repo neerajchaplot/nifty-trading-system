@@ -28,5 +28,11 @@
     "secure": false,
     "pathRewrite": { "^/api/agent4": "/api/v1/agent4" },
     "logLevel": "warn"
+  },
+  "/api/agent-user": {
+    "target": "http://localhost:8086",
+    "secure": false,
+    "pathRewrite": { "^/api/agent-user": "/api/v1/agent-user" },
+    "logLevel": "warn"
   }
 }

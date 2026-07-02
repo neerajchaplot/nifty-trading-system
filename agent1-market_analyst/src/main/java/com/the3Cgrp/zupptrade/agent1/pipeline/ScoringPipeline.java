@@ -103,11 +103,15 @@ public class ScoringPipeline {
 
         // Step 1: Fetch all inputs — each client handles its own errors, returns null on failure
         MarketInputs inputs = fetchInputs(request, effectiveExpiry);
+        logInputsSummary(inputs);
 
         // Step 2: Score each tier
         List<TierScore> tierScores = tierScorers.stream()
                 .map(scorer -> scorer.calculate(inputs))
                 .toList();
+        tierScores.forEach(t ->
+            log.info("agent1.tier_result tier={} signals={} average={} contribution={}",
+                    t.tierName(), t.signals(), t.average(), t.contribution()));
 
         // Step 3: Compose signal
         Agent1SignalEntity signal = composer.compose(tierScores, inputs, runTime);
@@ -131,13 +135,11 @@ public class ScoringPipeline {
         // Pre-compute TA4J indicators from candle history
         PrecomputedIndicators indicators = technicalIndicatorService.compute(candles);
 
-        // Read last persisted signal's VIX so the option chain client can compute vix_daily_change.
-        // This is the only DB read outside the @Transactional persist step — read-only, no JPA write.
-        BigDecimal lastVix = repository
-                .findTopByStatusOrderByTimestampDesc("ACTIVE")
-                .map(Agent1SignalEntity::getVixLevel)
-                .orElse(null);
-        log.debug("pipeline.vixPrevLevel lastVix={}", lastVix);
+        // Fetch previous session's VIX close from Upstox historical candles.
+        // More accurate than reading the DB signal's vix_level, which reflects the last Agent1 run
+        // (an intraday value) rather than the true previous trading day close.
+        BigDecimal lastVix = safeGet(historicalClient::fetchVixPrevClose, null);
+        log.debug("pipeline.vixPrevLevel historical={}", lastVix);
 
         // Option chain: spot, PCR, max pain, futures premium from Upstox
         // Pass lastVix so VolatilityMacroScorer can calculate vix_daily_change (Tier 3)
@@ -147,9 +149,15 @@ public class ScoringPipeline {
         FiiDiiData fiiDii = safeGet(fiiDiiService::fetchAndPersist, null);
 
         // Marketaux news sentiment — fetch once, split into score (for scorer) + details (for audit/display)
-        NseiSentiment marketauxResult = request.shouldFetchMarketaux()
-                ? safeGet(marketauxClient::fetchNiftySentiment, null)
-                : null;
+        // Skipped only when caller explicitly sets fetchMarketaux=false (to conserve free-tier quota)
+        NseiSentiment marketauxResult;
+        if (request.shouldFetchMarketaux()) {
+            marketauxResult = safeGet(marketauxClient::fetchNiftySentiment, null);
+            log.debug("marketaux.fetch.result score={}", marketauxResult != null ? marketauxResult.averageScore() : "null");
+        } else {
+            log.info("marketaux.skipped — fetchMarketaux=false in request");
+            marketauxResult = null;
+        }
         BigDecimal marketauxSentiment = marketauxResult != null ? marketauxResult.averageScore() : null;
 
         // Gift Nifty premium vs Nifty previous close (Tier 3)
@@ -192,6 +200,23 @@ public class ScoringPipeline {
                 .indicators(indicators)
                 .expiryDate(expiryDate)
                 .build();
+    }
+
+    private void logInputsSummary(MarketInputs i) {
+        log.info("agent1.inputs.market  spot={} vix={} vixPrev={} vixRegime={} pcr={} maxPain={} futuresPremium={} giftNiftyPremium={}",
+                i.getSpot(), i.getVixLevel(), i.getVixPrevLevel(), i.getVixRegime(),
+                i.getPcr(), i.getMaxPain(), i.getFuturesPremium(), i.getGiftNiftyPremium());
+        log.info("agent1.inputs.fii     fiiNetFutures={} fiiLongRatio={} fiiNetOptions={} diiNet={}",
+                i.getFiiNetFutures(), i.getFiiLongRatio(), i.getFiiNetOptions(), i.getDiiNet());
+        log.info("agent1.inputs.fii_trend {}", i.getFiiTrend() != null ? i.getFiiTrend().direction() + " avg5d=" + i.getFiiTrend().avgNetFlow5d() : "null");
+        log.info("agent1.inputs.sentiment marketauxSentiment={} commentaryBias={}",
+                i.getMarketauxSentiment(), i.getCommentaryBias());
+        PrecomputedIndicators ind = i.getIndicators();
+        log.info("agent1.inputs.indicators ema20={} ema50={} ema200={} rsi14={} macdLine={} macdSignal={} adx14={} bullishCandle={} bearishCandle={} higherHighs={} higherLows={}",
+                ind.ema20(), ind.ema50(), ind.ema200(),
+                ind.rsi14(), ind.macdLine(), ind.macdSignal(), ind.adx14(),
+                ind.bullishCandlePattern(), ind.bearishCandlePattern(),
+                ind.higherHighs(), ind.higherLows());
     }
 
     @Transactional

@@ -14,7 +14,9 @@ import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 
@@ -34,7 +36,8 @@ import java.util.Map;
  * Net flow = buy_amount - sell_amount (₹Cr). Threshold: ±500 Cr (CLAUDE.md Tier 2).
  * FII long ratio = total_long_contracts / (total_long + total_short). Threshold: 40–60%.
  *
- * Date window: queries last 7 days so weekends and holidays are handled automatically —
+ * Date window: 'from' = END date in Upstox API (most recent date to return), NOT a start date.
+ * Passing LocalDate.now() returns the last 30 trading sessions up to today.
  * entries.get(0) is always the most recent trading session regardless of when called.
  *
  * On any error (token expired, weekend, empty response) returns null per field —
@@ -68,14 +71,17 @@ public class UpstoxFiiDiiClient {
     // -------------------------------------------------------------------------
 
     /**
-     * Fetches all entries in the 7-day window for all three segments.
-     * Returns a FiiDiiRawFetch containing the full list per segment —
+     * Fetches all entries for all three segments.
+     * Returns a FiiDiiRawFetch containing the full list per segment --
      * FiiDiiService uses these lists to persist daily snapshots and compute the trend.
+     *
+     * NOTE: Upstox 'from' parameter = END date (most recent date), not a start date.
+     * Passing LocalDate.now() returns the 30 most recent trading sessions up to today.
      *
      * Returns null if ALL three segments failed (likely token expiry).
      */
     public FiiDiiRawFetch fetchAllEntries() {
-        String fromDate = LocalDate.now().minusDays(7).toString();
+        String fromDate = LocalDate.now().toString();
 
         List<MarketFlowEntry> futuresEntries = fetchEntries(FII_ENDPOINT, DATA_TYPE_FII_FUTURES, fromDate);
         List<MarketFlowEntry> optionsEntries = fetchEntries(FII_ENDPOINT, DATA_TYPE_FII_OPTIONS, fromDate);
@@ -100,7 +106,7 @@ public class UpstoxFiiDiiClient {
      * Production scoring uses FiiDiiService.fetchAndPersist() which adds the trend.
      */
     public FiiDiiData fetchLatest() {
-        String fromDate = LocalDate.now().minusDays(7).toString();
+        String fromDate = LocalDate.now().toString();
 
         List<MarketFlowEntry> futures = fetchEntries(FII_ENDPOINT, DATA_TYPE_FII_FUTURES, fromDate);
         List<MarketFlowEntry> options = fetchEntries(FII_ENDPOINT, DATA_TYPE_FII_OPTIONS, fromDate);
@@ -153,8 +159,12 @@ public class UpstoxFiiDiiClient {
                 return List.of();
             }
 
-            log.debug("upstox.fii-dii.entries endpoint={} data_type={} count={} latest_ts={}",
-                    endpoint, dataType, entries.size(), entries.get(0).timeStamp());
+            Long latestTs = entries.get(0).timeStamp();
+            LocalDate latestDate = latestTs != null
+                    ? Instant.ofEpochMilli(latestTs).atZone(ZoneId.of("Asia/Kolkata")).toLocalDate()
+                    : null;
+            log.debug("upstox.fii-dii.entries endpoint={} data_type={} count={} latest_date={}",
+                    endpoint, dataType, entries.size(), latestDate);
             return entries;
 
         } catch (HttpClientErrorException.Unauthorized e) {

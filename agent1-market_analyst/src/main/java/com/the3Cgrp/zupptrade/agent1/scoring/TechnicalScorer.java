@@ -6,6 +6,9 @@ import com.the3Cgrp.zupptrade.agent1.domain.model.PrecomputedIndicators;
 import com.the3Cgrp.zupptrade.agent1.domain.model.TierScore;
 import org.springframework.stereotype.Component;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.LinkedHashMap;
@@ -18,6 +21,8 @@ import java.util.Map;
  */
 @Component
 public class TechnicalScorer implements TierScorer {
+
+    private static final Logger log = LoggerFactory.getLogger(TechnicalScorer.class);
 
     private final TradingProperties props;
 
@@ -35,14 +40,30 @@ public class TechnicalScorer implements TierScorer {
     public TierScore calculate(MarketInputs inputs) {
         PrecomputedIndicators ind = inputs.getIndicators();
 
+        int vEma2050  = voteEmaCrossover(ind.ema20(),    ind.ema50());
+        int vEma50200 = voteEmaCrossover(ind.ema50(),    ind.ema200());
+        int vRsi      = voteRsi(ind.rsi14());
+        int vMacd     = voteMacd(ind.macdLine(),         ind.macdSignal());
+        int vCandle   = voteCandlestick(ind.bullishCandlePattern(), ind.bearishCandlePattern());
+
+        log.info("agent1.tier1b ema20_vs_ema50:  ema20={} ema50={}   → {}", ind.ema20(),    ind.ema50(),    vLabel(vEma2050));
+        log.info("agent1.tier1b ema50_vs_ema200: ema50={} ema200={}  → {}", ind.ema50(),    ind.ema200(),   vLabel(vEma50200));
+        log.info("agent1.tier1b rsi14:           rsi={}              → {}", ind.rsi14(),                    vLabel(vRsi));
+        log.info("agent1.tier1b macd_crossover:  macdLine={} signal={}  → {}", ind.macdLine(), ind.macdSignal(), vLabel(vMacd));
+        log.info("agent1.tier1b candlestick:     bullish={} bearish={}  → {}", ind.bullishCandlePattern(), ind.bearishCandlePattern(), vLabel(vCandle));
+
         Map<String, Integer> signals = new LinkedHashMap<>();
-        signals.put("ema20_vs_ema50",   voteEmaCrossover(ind.ema20(), ind.ema50()));
-        signals.put("ema50_vs_ema200",  voteEmaCrossover(ind.ema50(), ind.ema200()));
-        signals.put("rsi14",            voteRsi(ind.rsi14()));
-        signals.put("macd_crossover",   voteMacd(ind.macdLine(), ind.macdSignal()));
-        signals.put("candlestick",      voteCandlestick(ind.bullishCandlePattern(), ind.bearishCandlePattern()));
+        signals.put("ema20_vs_ema50",   vEma2050);
+        signals.put("ema50_vs_ema200",  vEma50200);
+        signals.put("rsi14",            vRsi);
+        signals.put("macd_crossover",   vMacd);
+        signals.put("candlestick",      vCandle);
 
         return buildTierScore(signals);
+    }
+
+    private static String vLabel(int v) {
+        return v == 1 ? "+1 (BULLISH)" : v == -1 ? "-1 (BEARISH)" : "0 (NEUTRAL)";
     }
 
     // --- package-private vote methods ---

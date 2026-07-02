@@ -36,40 +36,73 @@ export class LiveMonitorComponent {
     return null;
   }
 
+  isIronCondor(trade: ActiveTrade): boolean {
+    return !!(trade.monitorConfig?.shortLeg2);
+  }
+
+  t1Level(trade: ActiveTrade, side: 'down' | 'up' = 'down'): number | null {
+    const t = trade.monitorConfig?.thresholds;
+    if (!t) return null;
+    if (this.isIronCondor(trade)) {
+      return side === 'down' ? (t.t1WatchNiftyDown ?? null) : (t.t1WatchNiftyUp ?? null);
+    }
+    return t.t1WatchNiftyLevel ?? null;
+  }
+
+  t2Level(trade: ActiveTrade, side: 'down' | 'up' = 'down'): number | null {
+    const t = trade.monitorConfig?.thresholds;
+    if (!t) return null;
+    if (this.isIronCondor(trade)) {
+      return side === 'down' ? (t.t2ReadjustNiftyDown ?? null) : (t.t2ReadjustNiftyUp ?? null);
+    }
+    return t.t2ReadjustNiftyLevel ?? null;
+  }
+
+  t3Level(trade: ActiveTrade, side: 'down' | 'up' = 'down'): number | null {
+    const t = trade.monitorConfig?.thresholds;
+    if (!t) return null;
+    if (this.isIronCondor(trade)) {
+      return side === 'down' ? (t.t3ExitNiftyDown ?? null) : (t.t3ExitNiftyUp ?? null);
+    }
+    return t.t3ExitNiftyLevel ?? null;
+  }
+
   alertMessage(trade: ActiveTrade): string | null {
     const hit = trade.lastThresholdHit;
     if (!hit || hit === 'NONE') return null;
-    const level = trade.monitorConfig?.thresholds;
-    if (hit === 'T1') return `Spot approaching T1 watch level (${level?.t1WatchNiftyLevel?.toFixed(0) ?? '—'}). Monitor closely.`;
+    const t = trade.monitorConfig?.thresholds;
+    if (hit === 'T1') {
+      if (this.isIronCondor(trade)) {
+        return `Spot approaching T1 watch levels (PE: ${t?.t1WatchNiftyDown?.toFixed(0) ?? '—'} / CE: ${t?.t1WatchNiftyUp?.toFixed(0) ?? '—'}). Monitor closely.`;
+      }
+      return `Spot approaching T1 watch level (${t?.t1WatchNiftyLevel?.toFixed(0) ?? '—'}). Monitor closely.`;
+    }
     if (hit === 'T2') return `T2 breach — consider readjustment. MtM loss ≥ 50% of max.`;
     if (hit === 'T3') return `T3 EXIT triggered. Agent 5 closing position.`;
     return null;
   }
 
   /**
-   * Returns 0–100 progress of each threshold bar based on how close spot is to that level.
-   * Entry spot is used as the safe anchor (0%), short strike as T3 (100%).
+   * Returns 0–100 progress toward a threshold level.
+   * side='down': spot falling toward t3 (PE risk). side='up': spot rising toward t3 (CE risk).
+   * 0% = spot at T1 (just entering watch zone), 100% = spot at T3 (exit level).
    */
-  thresholdProgress(trade: ActiveTrade, level: 'T1' | 'T2' | 'T3'): number {
+  thresholdProgress(trade: ActiveTrade, level: 'T1' | 'T2' | 'T3', side: 'down' | 'up' = 'down'): number {
     const spot = trade.spotPrice;
     const thresholds = trade.monitorConfig?.thresholds;
-    if (!spot || !thresholds) return 0;
+    if (spot == null || !thresholds) return 0;
 
-    const t3 = thresholds.t3ExitNiftyLevel;
-    const t1 = thresholds.t1WatchNiftyLevel;
-    if (!t3 || !t1) return 0;
+    const t1 = this.t1Level(trade, side);
+    const t3 = this.t3Level(trade, side);
+    if (t1 == null || t3 == null) return 0;
 
     const range = Math.abs(t3 - t1);
     if (range === 0) return 0;
 
-    const target = level === 'T1' ? thresholds.t1WatchNiftyLevel
-      : level === 'T2' ? thresholds.t2ReadjustNiftyLevel
-      : thresholds.t3ExitNiftyLevel;
-
-    if (!target) return 0;
-
-    const progress = Math.abs(spot - t1) / range * 100;
-    return Math.min(100, Math.max(0, progress));
+    // For 'down': spot falls from t1 toward t3 (t3 < t1). Progress = (t1 - spot) / range.
+    // For 'up':  spot rises from t1 toward t3 (t3 > t1). Progress = (spot - t1) / range.
+    const raw = side === 'up' ? (spot - t1) / range * 100 : (t1 - spot) / range * 100;
+    return Math.min(100, Math.max(0, raw));
   }
 
   thresholdVariant(trade: ActiveTrade, level: 'T1' | 'T2' | 'T3'): 'safe' | 'caution' | 'danger' {

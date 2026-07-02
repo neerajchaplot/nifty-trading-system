@@ -4,6 +4,8 @@ import { Observable } from 'rxjs';
 import { Agent1Signal } from './core/models/agent1-signal.model';
 import { ActiveTrade } from './core/models/trade.model';
 import { DashboardStateService } from './core/services/dashboard-state.service';
+import { AgentUserService } from './core/services/agent-user.service';
+import { UserStateService } from './core/services/user-state.service';
 import { NavComponent } from './features/nav/nav.component';
 import { MarketStripComponent } from './features/market-strip/market-strip.component';
 import { RecommendationComponent } from './features/recommendation/recommendation.component';
@@ -116,11 +118,19 @@ export class AppComponent implements OnInit {
   trades$!: Observable<ActiveTrade[]>;
   activeTab: TabId = 'trading';
 
-  constructor(private state: DashboardStateService) {}
+  constructor(
+    private state: DashboardStateService,
+    private agentUser: AgentUserService,
+    private userState: UserStateService,
+  ) {}
 
   ngOnInit(): void {
     this.signal$ = this.state.signal$;
     this.trades$ = this.state.activeTrades$;
+    this.agentUser.me().subscribe({
+      next: profile => this.userState.setProfile(profile),
+      error: err => console.error('Failed to load user profile — recommend will be unavailable', err),
+    });
   }
 
   onRefresh(): void {

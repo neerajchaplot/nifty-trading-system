@@ -85,10 +85,10 @@ class PnlCalculationServiceTest {
                 LegAction.SELL, new BigDecimal("-0.169"), new BigDecimal("0.826"), null);
         TradeLegDto longLeg = new TradeLegDto(OptionType.PE, 23650, new BigDecimal("45.20"),
                 LegAction.BUY, new BigDecimal("-0.142"), new BigDecimal("0.858"), null);
-        MonitorThresholdsDto thr = new MonitorThresholdsDto(
+        MonitorThresholdsDto thr = MonitorThresholdsDto.twoLeg(
                 new BigDecimal("23900"), new BigDecimal("23825"),
                 new BigDecimal("23750"), new BigDecimal("67138.00"), new BigDecimal("134277.00"));
-        return new MonitorConfigDto(
+        return MonitorConfigDto.twoLeg(
                 UUID.randomUUID(), Strategy.BULL_PUT_SPREAD, SpreadDirection.CREDIT,
                 shortLeg, longLeg, new BigDecimal(netPremium), lots, lotSize,
                 new BigDecimal("81396"), new BigDecimal("268554"), false, null,
@@ -100,10 +100,10 @@ class PnlCalculationServiceTest {
                 LegAction.SELL, new BigDecimal("0.35"), new BigDecimal("0.65"), null);
         TradeLegDto longLeg = new TradeLegDto(OptionType.CE, 23800, new BigDecimal("45.00"),
                 LegAction.BUY, new BigDecimal("0.55"), new BigDecimal("0.45"), null);
-        MonitorThresholdsDto thr = new MonitorThresholdsDto(
+        MonitorThresholdsDto thr = MonitorThresholdsDto.twoLeg(
                 new BigDecimal("24100"), new BigDecimal("24200"),
                 null, new BigDecimal("8125.00"), null);
-        return new MonitorConfigDto(
+        return MonitorConfigDto.twoLeg(
                 UUID.randomUUID(), Strategy.BULL_CALL_SPREAD, SpreadDirection.DEBIT,
                 shortLeg, longLeg, new BigDecimal(netPremium), lots, lotSize,
                 new BigDecimal("13000"), new BigDecimal("16250"), false, null,

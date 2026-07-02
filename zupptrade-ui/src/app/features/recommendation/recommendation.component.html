@@ -1,7 +1,7 @@
 <div class="zone-header">
   <span class="zone-title">Recommendation Engine</span>
-  <span class="zone-meta" *ngIf="signal">
-    Signal: {{ signal.bias }} · {{ signal.strength }} · {{ signal.confidence }}
+  <span class="zone-meta" *ngIf="effectiveSignal">
+    Signal: {{ effectiveSignal.bias }} · {{ effectiveSignal.strength }} · {{ effectiveSignal.confidence }}
     <ng-container *ngIf="tradeCard">&nbsp;·&nbsp; Expiry {{ tradeCard.expiryDate }} (DTE {{ tradeCard.dte }})</ng-container>
   </span>
 </div>
@@ -13,64 +13,91 @@
     ⚠ {{ errorMessage }}
   </div>
 
-  <!-- ── STATE: READY ──────────────────────────────────────────────── -->
-  <ng-container *ngIf="state === 'ready'">
-    <div class="signal-summary-card" *ngIf="signal; else noSignal">
-      <div class="divider-label">Current Signal</div>
+  <!-- ── STATE: AWAITING VIEW ──────────────────────────────────────────── -->
+  <ng-container *ngIf="state === 'awaiting-view'">
+    <div class="view-intro">
+      <p class="view-intro-text">
+        Your market view is a Tier 4 input to the scoring model — enter it before generating the signal.
+      </p>
+    </div>
+
+    <div class="commentary-section">
+      <div class="commentary-header">
+        <span class="commentary-label">Your View <span class="optional-tag">optional</span></span>
+        <span class="word-count" [class.word-count-warn]="commentaryTooLong">{{ wordCount }} / 500 words</span>
+      </div>
+      <textarea
+        class="commentary-area"
+        [(ngModel)]="commentary"
+        placeholder="Add your market view or paste broker / news commentary. This feeds Tier 4 (LLM extraction) before the scoring algorithm runs."
+        rows="6">
+      </textarea>
+      <p class="commentary-hint" *ngIf="commentaryTooLong">Keep under 500 words to proceed.</p>
+    </div>
+
+    <button class="btn-primary" (click)="generateSignal()" [disabled]="commentaryTooLong">
+      ▶ &nbsp; Generate Signal
+    </button>
+    <p class="idle-note">Fetches live market data, scores all 5 tiers, and returns a market signal.</p>
+  </ng-container>
+
+  <!-- ── STATE: LOADING (signal or recommendation) ─────────────────────── -->
+  <ng-container *ngIf="state === 'loading-signal' || state === 'loading'">
+    <div class="loading-container">
+      <mat-spinner diameter="36"></mat-spinner>
+      <p>{{ loadingMessage }}</p>
+    </div>
+  </ng-container>
+
+  <!-- ── STATE: SIGNAL READY ───────────────────────────────────────────── -->
+  <ng-container *ngIf="state === 'signal-ready' && freshSignal">
+    <div class="signal-summary-card">
+      <div class="divider-label">Signal Generated</div>
 
       <div class="signal-row">
         <span class="signal-key">Direction</span>
-        <app-bias-pill [bias]="signal.bias" [strength]="signal.strength"></app-bias-pill>
+        <app-bias-pill [bias]="freshSignal.bias" [strength]="freshSignal.strength"></app-bias-pill>
       </div>
       <div class="signal-row">
         <span class="signal-key">Composite score</span>
-        <span class="signal-val" [style.color]="signal.compositeScore > 0 ? '#16A34A' : '#DC2626'">
-          {{ signal.compositeScore > 0 ? '+' : '' }}{{ signal.compositeScore | number:'1.3-3' }}
+        <span class="signal-val" [style.color]="freshSignal.compositeScore > 0 ? '#16A34A' : '#DC2626'">
+          {{ freshSignal.compositeScore > 0 ? '+' : '' }}{{ freshSignal.compositeScore | number:'1.3-3' }}
         </span>
       </div>
       <div class="signal-row">
         <span class="signal-key">Confidence</span>
-        <app-confidence-pill [confidence]="signal.confidence"></app-confidence-pill>
+        <app-confidence-pill [confidence]="freshSignal.confidence"></app-confidence-pill>
       </div>
       <div class="signal-row">
         <span class="signal-key">VIX</span>
         <span class="signal-val">
-          {{ signal.vixLevel | number:'1.2-2' }}
-          <span class="muted">({{ signal.vixRegime }})</span>
+          {{ freshSignal.vixLevel | number:'1.2-2' }}
+          <span class="muted">({{ freshSignal.vixRegime }})</span>
         </span>
       </div>
     </div>
 
-    <ng-template #noSignal>
-      <div class="signal-summary-card muted-card">
-        <p>No market signal loaded. Please wait for the polling cycle or click Refresh.</p>
-      </div>
-    </ng-template>
-
-    <button class="btn-primary" (click)="generateRecommendation()" [disabled]="!signal">
-      ▶ &nbsp; Generate Recommendation
-    </button>
+    <div class="signal-ready-actions">
+      <button class="btn-primary" (click)="generateRecommendation()">
+        ▶ &nbsp; Generate Recommendation
+      </button>
+      <button class="btn-back" (click)="state = 'awaiting-view'">
+        ← Edit View
+      </button>
+    </div>
     <p class="idle-note">Engine will run all 5 layers and populate the trade card below.</p>
   </ng-container>
 
-  <!-- ── STATE: LOADING ────────────────────────────────────────────── -->
-  <ng-container *ngIf="state === 'loading'">
-    <div class="loading-container">
-      <mat-spinner diameter="36"></mat-spinner>
-      <p>Running 5-layer algorithm…</p>
-    </div>
-  </ng-container>
-
-  <!-- ── STATE: TRADE CARD ─────────────────────────────────────────── -->
+  <!-- ── STATE: TRADE CARD ─────────────────────────────────────────────── -->
   <ng-container *ngIf="state === 'tradecard' && tradeCard">
     <div class="trade-card-rec">
       <div class="tc-header">
         <span class="tc-strategy">✦ &nbsp;{{ strategyLabel(tradeCard.strategy) }}</span>
-        <span class="tc-conf-pill">{{ signal?.confidence }} CONF</span>
+        <span class="tc-conf-pill">{{ effectiveSignal?.confidence }} CONF</span>
       </div>
       <div class="tc-body">
 
-        <div class="divider-label">Legs</div>
+        <div class="divider-label">Legs{{ tradeCard.shortLeg2 ? ' — PUT SPREAD' : '' }}</div>
         <div class="legs-grid">
           <div class="leg-card leg-sell">
             <div class="leg-badge">{{ tradeCard.shortLeg.action }} · SHORT LEG</div>
@@ -89,6 +116,29 @@
             </div>
           </div>
         </div>
+
+        <!-- Iron Condor CE spread (leg2) -->
+        <ng-container *ngIf="tradeCard.shortLeg2 && tradeCard.longLeg2">
+          <div class="divider-label">Legs — CALL SPREAD</div>
+          <div class="legs-grid">
+            <div class="leg-card leg-sell">
+              <div class="leg-badge">{{ tradeCard.shortLeg2.action }} · SHORT LEG</div>
+              <div class="leg-strike">{{ tradeCard.shortLeg2.strike | number }} {{ tradeCard.shortLeg2.optionType }}</div>
+              <div class="leg-premium">LTP <span>₹ {{ tradeCard.shortLeg2.ltp | number:'1.2-2' }}</span></div>
+              <div class="leg-premium" *ngIf="tradeCard.shortLeg2.delta">
+                Δ <span>{{ tradeCard.shortLeg2.delta | number:'1.3-3' }}</span>
+              </div>
+            </div>
+            <div class="leg-card leg-buy">
+              <div class="leg-badge">{{ tradeCard.longLeg2.action }} · LONG LEG</div>
+              <div class="leg-strike">{{ tradeCard.longLeg2.strike | number }} {{ tradeCard.longLeg2.optionType }}</div>
+              <div class="leg-premium">LTP <span>₹ {{ tradeCard.longLeg2.ltp | number:'1.2-2' }}</span></div>
+              <div class="leg-premium" *ngIf="tradeCard.longLeg2.delta">
+                Δ <span>{{ tradeCard.longLeg2.delta | number:'1.3-3' }}</span>
+              </div>
+            </div>
+          </div>
+        </ng-container>
 
         <div class="divider-label">Position Metrics</div>
         <div class="metrics-grid">
@@ -112,8 +162,9 @@
           </div>
         </div>
 
+        <!-- ── Monitor Thresholds (view or edit) ──────────── -->
         <div class="divider-label">Monitor Thresholds</div>
-        <div class="monitor-config">
+        <div class="monitor-config" *ngIf="!overrideMode">
           <div class="monitor-row">
             <span class="monitor-key">T1 · Watch</span>
             <span class="monitor-val t1">{{ tradeCard.thresholds.t1WatchNiftyLevel | number }}</span>
@@ -128,19 +179,83 @@
           </div>
         </div>
 
+        <!-- ── Override Panel ─────────────────────────────── -->
+        <div class="override-section" *ngIf="overrideMode">
+          <div class="override-row">
+            <label class="override-label">Lots</label>
+            <input class="override-input" type="number" [(ngModel)]="overrideLots" min="1" [placeholder]="tradeCard.lots">
+            <span class="override-hint">Algorithm: {{ tradeCard.lots }}</span>
+          </div>
+          <div class="override-row">
+            <label class="override-label">T1 · Watch</label>
+            <input class="override-input t1-input" type="number" [(ngModel)]="overrideT1" [placeholder]="tradeCard.thresholds.t1WatchNiftyLevel">
+          </div>
+          <div class="override-row">
+            <label class="override-label">T2 · Readjust</label>
+            <input class="override-input t2-input" type="number" [(ngModel)]="overrideT2" [placeholder]="tradeCard.thresholds.t2ReadjustNiftyLevel">
+          </div>
+          <div class="override-row">
+            <label class="override-label">T3 · Exit</label>
+            <input class="override-input t3-input" type="number" [(ngModel)]="overrideT3" [placeholder]="tradeCard.thresholds.t3ExitNiftyLevel">
+            <span class="override-hint t3-hint">Min: {{ tradeCard.shortLeg.strike }} (short strike)</span>
+          </div>
+
+          <div class="override-error" *ngIf="overrideThresholdError">
+            ⚠ {{ overrideThresholdError }}
+          </div>
+
+          <!-- Margin check -->
+          <div class="margin-check-section">
+            <button class="btn-margin-check" (click)="checkMargin()" [disabled]="marginLoading || !!overrideThresholdError">
+              <span *ngIf="!marginLoading">⟳ &nbsp;Check Margin</span>
+              <span *ngIf="marginLoading">Checking…</span>
+            </button>
+            <div class="margin-result" *ngIf="marginResult">
+              <div class="margin-row">
+                <span>Required</span>
+                <span class="margin-val">{{ formatInr(marginResult.requiredMargin) }}</span>
+              </div>
+              <div class="margin-row">
+                <span>Available</span>
+                <span class="margin-val" [style.color]="marginResult.sufficient ? '#16A34A' : '#DC2626'">
+                  {{ formatInr(marginResult.availableMargin) }}
+                </span>
+              </div>
+              <div class="margin-status" [class.margin-ok]="marginResult.sufficient" [class.margin-fail]="!marginResult.sufficient">
+                {{ marginResult.sufficient ? '✓ Margin sufficient' : '✗ Insufficient — short by ' + formatInr(marginResult.shortfall) }}
+              </div>
+            </div>
+          </div>
+
+          <div class="pop-block-banner" *ngIf="isPopBlocked">
+            ✗ PoP is below 50% — this trade cannot be confirmed.
+          </div>
+        </div>
+
         <div class="rationale" *ngIf="tradeCard.rationale">
           💡 {{ tradeCard.rationale }}
         </div>
 
+        <!-- Override toggle -->
+        <div class="override-toggle-row">
+          <button class="btn-override-toggle" [class.active]="overrideMode" (click)="toggleOverrideMode()">
+            {{ overrideMode ? '✕ Cancel Override' : '⚙ Override' }}
+          </button>
+        </div>
+
         <div class="action-row">
-          <button class="btn-confirm" (click)="confirmTrade()">✓ &nbsp;Confirm Trade</button>
+          <button class="btn-confirm"
+                  (click)="confirmTrade()"
+                  [disabled]="overrideMode && !canConfirmWithOverride">
+            ✓ &nbsp;Confirm Trade
+          </button>
           <button class="btn-reject" (click)="rejectTrade()">✗ Reject</button>
         </div>
       </div>
     </div>
   </ng-container>
 
-  <!-- ── STATE: REJECTED ───────────────────────────────────────────── -->
+  <!-- ── STATE: REJECTED ───────────────────────────────────────────────── -->
   <ng-container *ngIf="state === 'rejected' && tradeCard">
     <div class="rejected-card">
       <div class="rej-header">
@@ -148,6 +263,7 @@
         <span class="rej-badge">REJECTED</span>
       </div>
       <div class="rej-body">
+        <div class="divider-label" *ngIf="tradeCard.shortLeg2">Legs — PUT SPREAD</div>
         <div class="legs-grid">
           <div class="leg-card leg-sell">
             <div class="leg-badge">{{ tradeCard.shortLeg.action }}</div>
@@ -158,6 +274,20 @@
             <div class="leg-strike">{{ tradeCard.longLeg.strike | number }} {{ tradeCard.longLeg.optionType }}</div>
           </div>
         </div>
+
+        <ng-container *ngIf="tradeCard.shortLeg2 && tradeCard.longLeg2">
+          <div class="divider-label">Legs — CALL SPREAD</div>
+          <div class="legs-grid">
+            <div class="leg-card leg-sell">
+              <div class="leg-badge">{{ tradeCard.shortLeg2.action }}</div>
+              <div class="leg-strike">{{ tradeCard.shortLeg2.strike | number }} {{ tradeCard.shortLeg2.optionType }}</div>
+            </div>
+            <div class="leg-card leg-buy">
+              <div class="leg-badge">{{ tradeCard.longLeg2.action }}</div>
+              <div class="leg-strike">{{ tradeCard.longLeg2.strike | number }} {{ tradeCard.longLeg2.optionType }}</div>
+            </div>
+          </div>
+        </ng-container>
 
         <div class="divider-label">Gate Results</div>
         <div class="gate-list">
@@ -173,6 +303,105 @@
           <strong>Why rejected: </strong>{{ tradeCard.rationale }}
         </div>
 
+        <!-- ── Manual Override Builder ───────────────────────── -->
+        <div class="override-toggle-row" *ngIf="!builderMode">
+          <button class="btn-override-toggle" (click)="openBuilderMode()">
+            ⚙ Override — Edit Trade Manually
+          </button>
+        </div>
+
+        <div class="override-builder-section" *ngIf="builderMode">
+          <div class="divider-label">
+            Override Builder
+            <span class="override-tag">GATES BYPASSED · PoP≥50% &amp; Loss≤1.5% only</span>
+          </div>
+
+          <div class="ob-fields-grid">
+            <div class="ob-field">
+              <label class="ob-label">PE Short Strike (SELL)</label>
+              <input class="ob-input" type="number" step="50"
+                     [(ngModel)]="obPeShortStrike" (ngModelChange)="onOverrideFieldChange()">
+            </div>
+            <div class="ob-field">
+              <label class="ob-label">PE Long Strike (BUY)</label>
+              <input class="ob-input" type="number" step="50"
+                     [(ngModel)]="obPeLongStrike" (ngModelChange)="onOverrideFieldChange()">
+            </div>
+            <ng-container *ngIf="tradeCard?.shortLeg2">
+              <div class="ob-field">
+                <label class="ob-label">CE Short Strike (SELL)</label>
+                <input class="ob-input" type="number" step="50"
+                       [(ngModel)]="obCeShortStrike" (ngModelChange)="onOverrideFieldChange()">
+              </div>
+              <div class="ob-field">
+                <label class="ob-label">CE Long Strike (BUY)</label>
+                <input class="ob-input" type="number" step="50"
+                       [(ngModel)]="obCeLongStrike" (ngModelChange)="onOverrideFieldChange()">
+              </div>
+            </ng-container>
+            <div class="ob-field">
+              <label class="ob-label">Lots</label>
+              <input class="ob-input ob-input-lots" type="number" min="1"
+                     [(ngModel)]="obLots" (ngModelChange)="onOverrideFieldChange()">
+            </div>
+          </div>
+
+          <!-- Live metrics (updated on debounce) -->
+          <div class="ob-loading" *ngIf="overrideMetricsLoading">
+            <mat-spinner diameter="20"></mat-spinner>
+            <span>Fetching live LTP…</span>
+          </div>
+
+          <div class="ob-metrics" *ngIf="overrideMetrics && !overrideMetricsLoading">
+            <div class="ob-metric-row">
+              <span class="ob-metric-key">Live LTP</span>
+              <span class="ob-metric-val">
+                PE: ₹{{ overrideMetrics.peShortLtp | number:'1.2-2' }} / ₹{{ overrideMetrics.peLongLtp | number:'1.2-2' }}
+                <ng-container *ngIf="overrideMetrics.ceShortLtp != null">
+                  &nbsp;· CE: ₹{{ overrideMetrics.ceShortLtp | number:'1.2-2' }} / ₹{{ overrideMetrics.ceLongLtp | number:'1.2-2' }}
+                </ng-container>
+              </span>
+            </div>
+            <div class="ob-metric-row">
+              <span class="ob-metric-key">Net Premium</span>
+              <span class="ob-metric-val">₹{{ overrideMetrics.netPremiumPerUnit | number:'1.2-2' }} / unit</span>
+            </div>
+            <div class="ob-metric-row">
+              <span class="ob-metric-key">PoP</span>
+              <span class="ob-metric-val"
+                    [style.color]="overrideMetrics.popBlocked ? '#DC2626' : '#16A34A'">
+                {{ formatPct(overrideMetrics.pop) }}
+                <span class="ob-block-tag" *ngIf="overrideMetrics.popBlocked">✗ below 50%</span>
+              </span>
+            </div>
+            <div class="ob-metric-row">
+              <span class="ob-metric-key">RoC</span>
+              <span class="ob-metric-val">{{ formatPct(overrideMetrics.roc) }}</span>
+            </div>
+            <div class="ob-metric-row">
+              <span class="ob-metric-key">Max Profit</span>
+              <span class="ob-metric-val" style="color:#16A34A">{{ formatInr(overrideMetrics.maxProfitTotal) }}</span>
+            </div>
+            <div class="ob-metric-row">
+              <span class="ob-metric-key">Real Expected Loss</span>
+              <span class="ob-metric-val"
+                    [style.color]="overrideMetrics.lossBlocked ? '#DC2626' : 'inherit'">
+                {{ formatInr(overrideMetrics.realExpectedLossTotal) }}
+                <span class="ob-block-tag" *ngIf="overrideMetrics.lossBlocked">✗ exceeds 1.5% capital</span>
+              </span>
+            </div>
+          </div>
+
+          <div class="ob-actions">
+            <button class="btn-confirm"
+                    [disabled]="!canConfirmOverrideBuilder || overrideMetricsLoading"
+                    (click)="confirmOverrideBuilder()">
+              ✓ &nbsp;Confirm to Place Trade
+            </button>
+            <button class="btn-override-toggle" (click)="closeBuilderMode()">✕ Cancel</button>
+          </div>
+        </div>
+
         <div class="rej-actions">
           <button class="btn-retry" (click)="reset()">↺ &nbsp;Try Again</button>
           <button class="btn-dismiss" (click)="reset()">✗ Dismiss</button>
@@ -181,30 +410,65 @@
     </div>
   </ng-container>
 
-  <!-- ── STATE: ACTIVE ENTRY ───────────────────────────────────────── -->
+  <!-- ── STATE: ACTIVE ENTRY ───────────────────────────────────────────── -->
   <ng-container *ngIf="state === 'active' && tradeCard">
-    <div class="fill-card">
+    <div class="fill-card" [class.fill-card-failed]="executionResponse?.executionStatus === 'FAILED' || executionResponse?.executionStatus === 'REJECTED'">
       <div class="fill-header">
         <span class="fill-title">
           {{ strategyLabel(tradeCard.strategy) }} &nbsp;·&nbsp;
           {{ tradeCard.shortLeg.strike }}/{{ tradeCard.longLeg.strike }} {{ tradeCard.shortLeg.optionType }}
         </span>
-        <span class="fill-status-badge">● CONFIRMED</span>
+        <span class="fill-status-badge"
+              [style.background]="executionResponse?.executionStatus === 'ACTIVE' ? 'rgba(255,255,255,0.2)' : '#DC2626'">
+          ● {{ executionResponse?.executionStatus ?? 'CONFIRMED' }}
+        </span>
       </div>
       <div class="fill-body">
-        <div class="divider-label">Order Confirmed</div>
-        <div class="fill-row">
-          <span class="fill-key">Short leg</span>
-          <span class="fill-val">{{ tradeCard.shortLeg.strike }} {{ tradeCard.shortLeg.optionType }} &#64; ₹ {{ tradeCard.shortLeg.ltp | number:'1.2-2' }}</span>
+
+        <!-- Slippage alert -->
+        <div class="slippage-alert" *ngIf="executionResponse?.slippageAlert">
+          ⚠ Slippage alert — {{ executionResponse!.slippageMessage }}
         </div>
-        <div class="fill-row">
-          <span class="fill-key">Long leg</span>
-          <span class="fill-val">{{ tradeCard.longLeg.strike }} {{ tradeCard.longLeg.optionType }} &#64; ₹ {{ tradeCard.longLeg.ltp | number:'1.2-2' }}</span>
+
+        <!-- Execution failed -->
+        <div class="exec-failed-banner" *ngIf="executionResponse?.executionStatus === 'FAILED' || executionResponse?.executionStatus === 'REJECTED'">
+          {{ executionResponse!.rejectionReason ?? 'Execution failed. Check agent5 logs.' }}
         </div>
-        <div class="fill-row">
-          <span class="fill-key">Net premium</span>
-          <span class="fill-val" style="color:#16A34A">₹ {{ tradeCard.netPremiumPerUnit | number:'1.2-2' }} / unit</span>
-        </div>
+
+        <div class="divider-label">Fills</div>
+
+        <!-- Actual fills from agent5 -->
+        <ng-container *ngIf="executionResponse?.fills?.length; else algorithmLtp">
+          <div class="fill-row" *ngFor="let f of executionResponse!.fills">
+            <span class="fill-key">{{ f.action }} {{ f.strike | number:'1.0-0' }} {{ f.optionType }}</span>
+            <span class="fill-val">₹ {{ f.averageFillPrice | number:'1.2-2' }} × {{ f.quantityFilled }}</span>
+          </div>
+          <div class="fill-row">
+            <span class="fill-key">Actual net premium</span>
+            <span class="fill-val" style="color:#16A34A">₹ {{ executionResponse!.actualNetPremiumPerUnit | number:'1.2-2' }} / unit</span>
+          </div>
+          <div class="fill-row">
+            <span class="fill-key">Expected net premium</span>
+            <span class="fill-val">₹ {{ executionResponse!.expectedNetPremiumPerUnit | number:'1.2-2' }} / unit</span>
+          </div>
+        </ng-container>
+
+        <!-- Fallback: show algorithm values if no fills yet -->
+        <ng-template #algorithmLtp>
+          <div class="fill-row">
+            <span class="fill-key">Short leg (algo LTP)</span>
+            <span class="fill-val">{{ tradeCard.shortLeg.strike }} {{ tradeCard.shortLeg.optionType }} &#64; ₹ {{ tradeCard.shortLeg.ltp | number:'1.2-2' }}</span>
+          </div>
+          <div class="fill-row">
+            <span class="fill-key">Long leg (algo LTP)</span>
+            <span class="fill-val">{{ tradeCard.longLeg.strike }} {{ tradeCard.longLeg.optionType }} &#64; ₹ {{ tradeCard.longLeg.ltp | number:'1.2-2' }}</span>
+          </div>
+          <div class="fill-row">
+            <span class="fill-key">Net premium</span>
+            <span class="fill-val" style="color:#16A34A">₹ {{ tradeCard.netPremiumPerUnit | number:'1.2-2' }} / unit</span>
+          </div>
+        </ng-template>
+
         <div class="fill-row">
           <span class="fill-key">Lots</span>
           <span class="fill-val">{{ tradeCard.lots }} <span class="muted">({{ tradeCard.lots * tradeCard.lotSize }} units)</span></span>

@@ -35,11 +35,30 @@ public class UpstoxHistoricalDataClient {
     }
 
     /**
-     * Fetches Nifty 50 daily candles for the last {@code days} calendar days
-     * (adds a 30-day buffer to account for weekends and holidays).
+     * Fetches Nifty 50 daily candles for the last {@code tradingDays} trading days.
+     * Converts to calendar days (×1.5 factor) plus a 30-day buffer for holidays,
+     * so the caller can always pass trading-day counts (e.g. 200 for EMA200).
      */
-    public List<UpstoxCandle> fetchNiftyDailyCandles(int days) {
-        return fetchDailyCandles(NIFTY_50_KEY, LocalDate.now().minusDays(days + 30L), LocalDate.now());
+    public List<UpstoxCandle> fetchNiftyDailyCandles(int tradingDays) {
+        long calendarDays = (long)(tradingDays * 1.5) + 30;
+        return fetchDailyCandles(NIFTY_50_KEY, LocalDate.now().minusDays(calendarDays), LocalDate.now());
+    }
+
+    /**
+     * Fetches the most recent session's closing price for any instrument.
+     * Works after market hours — historical candles are always available regardless of session state.
+     * Returns null if the instrument has no trading history in the last 10 calendar days.
+     */
+    public BigDecimal fetchLastClose(String instrumentKey) {
+        List<UpstoxCandle> candles = fetchDailyCandles(instrumentKey,
+                LocalDate.now().minusDays(10), LocalDate.now());
+        if (candles.isEmpty()) {
+            log.debug("upstox.historical.last_close.unavailable instrument={}", instrumentKey);
+            return null;
+        }
+        BigDecimal close = candles.get(0).close();
+        log.debug("upstox.historical.last_close instrument={} close={} date={}", instrumentKey, close, candles.get(0).date());
+        return close;
     }
 
     public List<UpstoxCandle> fetchDailyCandles(String instrumentKey, LocalDate from, LocalDate to) {

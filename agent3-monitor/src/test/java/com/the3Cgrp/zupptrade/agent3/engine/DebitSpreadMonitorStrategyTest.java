@@ -95,13 +95,13 @@ class DebitSpreadMonitorStrategyTest {
                 LegAction.SELL, new BigDecimal("0.35"), new BigDecimal("0.65"), null);
         TradeLegDto longLeg = new TradeLegDto(OptionType.CE, 23800, new BigDecimal("45.00"),
                 LegAction.BUY, new BigDecimal("0.55"), new BigDecimal("0.45"), null);
-        MonitorThresholdsDto thr = new MonitorThresholdsDto(
+        MonitorThresholdsDto thr = MonitorThresholdsDto.twoLeg(
                 new BigDecimal("24100"),  // T1 profit target Nifty level
                 new BigDecimal("24200"),  // T2 profit target Nifty level
                 null,
                 new BigDecimal("8125.00"),  // 50% of premium paid: 25 × 10 × 65 × 0.5
                 null);
-        MonitorConfigDto config = new MonitorConfigDto(
+        MonitorConfigDto config = MonitorConfigDto.twoLeg(
                 UUID.randomUUID(), Strategy.BULL_CALL_SPREAD, SpreadDirection.DEBIT,
                 shortLeg, longLeg, new BigDecimal("25.00"), 10, 65,
                 new BigDecimal("13000"), new BigDecimal("16250"), false, null,

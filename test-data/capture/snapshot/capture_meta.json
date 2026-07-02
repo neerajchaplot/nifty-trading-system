@@ -1,0 +1,21 @@
+{
+  "capturedAt": "2026-06-26T04:04:02Z",
+  "capturedBy": "capture_friday.sh",
+  "expiryDate": "2026-06-30",
+  "dte": 4,
+  "niftySpot": 24056.0,
+  "indiaVix": 13.05,
+  "avgMarketauxSentiment": 0.0,
+  "files": [
+    "option_chain.json",
+    "spot_vix.json",
+    "atm_strikes.json",
+    "fii_dii.json",
+    "marketaux_sentiment.json"
+  ],
+  "notes": [
+    "Update NSE_FO instrument keys in SQL seeds before loading:",
+    "  grep -r 'NSE_FO|REPLACE' ../sql/ to find all placeholders",
+    "  Replace with instrumentKey values from atm_strikes.json"
+  ]
+}

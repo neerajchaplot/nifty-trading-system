@@ -5,6 +5,9 @@ import com.the3Cgrp.zupptrade.agent1.domain.model.MarketInputs;
 import com.the3Cgrp.zupptrade.agent1.domain.model.TierScore;
 import org.springframework.stereotype.Component;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.LinkedHashMap;
@@ -12,11 +15,13 @@ import java.util.Map;
 
 /**
  * Tier 2 — Institutional Flow (weight: 30%).
- * Source: NSE FII/DII CSV (published ~7 PM previous day).
+ * Source: Upstox /v2/market/fii + /v2/market/dii.
  * 4 signals. Null = data not yet available; scores 0 as per CLAUDE.md spec.
  */
 @Component
 public class InstitutionalFlowScorer implements TierScorer {
+
+    private static final Logger log = LoggerFactory.getLogger(InstitutionalFlowScorer.class);
 
     private final TradingProperties props;
 
@@ -32,13 +37,28 @@ public class InstitutionalFlowScorer implements TierScorer {
 
     @Override
     public TierScore calculate(MarketInputs inputs) {
+        int vFiiNet  = voteFiiNetFutures(inputs.getFiiNetFutures());
+        int vLongRat = voteFiiLongRatio(inputs.getFiiLongRatio());
+        int vFiiOpt  = voteFiiNetOptions(inputs.getFiiNetOptions());
+        int vDii     = voteDiiNet(inputs.getDiiNet());
+
+        BigDecimal threshold = props.getFii().getSignificantFlowCrore();
+        log.info("agent1.tier2 fii_net_futures:  value={} Cr  threshold=±{} Cr  → {}", inputs.getFiiNetFutures(), threshold, vLabel(vFiiNet));
+        log.info("agent1.tier2 fii_long_ratio:   ratio={}  (>{}=bull, <{}=bear)  → {}", inputs.getFiiLongRatio(), props.getFii().getLongRatioBullish(), props.getFii().getLongRatioBearish(), vLabel(vLongRat));
+        log.info("agent1.tier2 fii_net_options:  value={} Cr  threshold=±{} Cr  → {}", inputs.getFiiNetOptions(), threshold, vLabel(vFiiOpt));
+        log.info("agent1.tier2 dii_net_cash:     value={} Cr  threshold=±{} Cr  → {}", inputs.getDiiNet(), props.getScoring().getDiiSignificantCrore(), vLabel(vDii));
+
         Map<String, Integer> signals = new LinkedHashMap<>();
-        signals.put("fii_net_futures",   voteFiiNetFutures(inputs.getFiiNetFutures()));
-        signals.put("fii_long_ratio",    voteFiiLongRatio(inputs.getFiiLongRatio()));
-        signals.put("fii_net_options",   voteFiiNetOptions(inputs.getFiiNetOptions()));
-        signals.put("dii_net_cash",      voteDiiNet(inputs.getDiiNet()));
+        signals.put("fii_net_futures",  vFiiNet);
+        signals.put("fii_long_ratio",   vLongRat);
+        signals.put("fii_net_options",  vFiiOpt);
+        signals.put("dii_net_cash",     vDii);
 
         return buildTierScore(signals);
+    }
+
+    private static String vLabel(int v) {
+        return v == 1 ? "+1 (BULLISH)" : v == -1 ? "-1 (BEARISH)" : "0 (NEUTRAL)";
     }
 
     // --- package-private vote methods ---

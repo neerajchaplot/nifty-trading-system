@@ -155,6 +155,38 @@ class ExecutionControllerTest {
                 .isNotBlank();
     }
 
+    // ── POST /margin/check — validation and service failures ─────────────────
+
+    @Test
+    @Order(8)
+    @DisplayName("POST /margin/check missing tradeId → 400")
+    void marginCheck_missingTradeId_returns400() {
+        String body = "{}";  // no tradeId field
+        assertBadRequest("/api/v1/agent5/margin/check", body, "missing tradeId");
+    }
+
+    @Test
+    @Order(9)
+    @DisplayName("POST /margin/check unknown tradeId → 502 (trade not found in DB)")
+    void marginCheck_unknownTradeId_returns502() {
+        // Service throws MarginCheckException when trade is not found → controller returns BAD_GATEWAY
+        String body = """
+                { "tradeId": "%s" }
+                """.formatted(UNKNOWN_TRADE_ID);
+        try {
+            restClient()
+                    .post()
+                    .uri("/api/v1/agent5/margin/check")
+                    .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                    .body(body)
+                    .retrieve()
+                    .toBodilessEntity();
+            Assertions.fail("Expected 502 for unknown tradeId — got 2xx instead");
+        } catch (org.springframework.web.client.RestClientResponseException ex) {
+            assertThat(ex.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+        }
+    }
+
     // ── POST /exit — validation ───────────────────────────────────────────────
 
     @Test

@@ -527,7 +527,7 @@ class RecommendationE2ETest {
     }
 
     private TradeCardDto runConfirm(UUID tradeId) {
-        TradeConfirmRequestDto request = new TradeConfirmRequestDto(tradeId, ConfirmAction.CONFIRM, null);
+        TradeConfirmRequestDto request = new TradeConfirmRequestDto(tradeId, ConfirmAction.CONFIRM, null, null, null);
         ResponseEntity<TradeCardDto> response = restClient()
                 .post()
                 .uri("/api/v1/agent2/confirm")
