@@ -28,6 +28,12 @@ public class TradeMonitorReader {
             "SELECT id, user_profile_id, status, monitor_config, entry_fills, market_context, trade_code, expiry_date " +
             "FROM trades WHERE status IN ('ACTIVE', 'EXIT_FAILED')";
 
+    // Trades still ACTIVE past their expiry date with P&L not yet computed.
+    // These are candidates for the morning expiry sweep in ExpiryPnlService.
+    private static final String SELECT_EXPIRED_ACTIVE =
+            "SELECT id, user_profile_id, status, monitor_config, entry_fills, market_context, trade_code, expiry_date " +
+            "FROM trades WHERE status = 'ACTIVE' AND expiry_date < CURRENT_DATE AND actual_pnl IS NULL";
+
     private static final RowMapper<TradeMonitorData> ROW_MAPPER = (rs, rowNum) -> mapRow(rs);
 
     private final JdbcTemplate jdbc;
@@ -42,7 +48,7 @@ public class TradeMonitorReader {
      */
     public Optional<TradeMonitorData> findById(UUID tradeId) {
         try {
-            TradeMonitorData data = jdbc.queryForObject(SELECT_BY_ID, ROW_MAPPER, tradeId.toString());
+            TradeMonitorData data = jdbc.queryForObject(SELECT_BY_ID, ROW_MAPPER, tradeId);
             return Optional.ofNullable(data);
         } catch (org.springframework.dao.EmptyResultDataAccessException e) {
             return Optional.empty();
@@ -55,6 +61,14 @@ public class TradeMonitorReader {
      */
     public List<TradeMonitorData> findAllActive() {
         return jdbc.query(SELECT_ALL_ACTIVE, ROW_MAPPER);
+    }
+
+    /**
+     * Returns ACTIVE trades where expiry_date < today and actual_pnl is null.
+     * Called by the morning expiry sweep (ExpiryPnlService) to compute settled P&L.
+     */
+    public List<TradeMonitorData> findExpiredActiveBeforeToday() {
+        return jdbc.query(SELECT_EXPIRED_ACTIVE, ROW_MAPPER);
     }
 
     private static TradeMonitorData mapRow(ResultSet rs) throws SQLException {

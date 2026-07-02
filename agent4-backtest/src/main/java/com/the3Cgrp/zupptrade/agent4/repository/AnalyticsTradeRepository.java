@@ -115,6 +115,26 @@ public class AnalyticsTradeRepository {
         return jdbc.queryForList(sql, buildDateParams(from, to));
     }
 
+    // ── Corrupted trades (separate line items, excluded from aggregations) ──
+
+    /**
+     * Returns all CORRUPTED_MANUALLY trades in the date range (keyed on closed_at).
+     * Not paginated — there should be very few of these and the user needs to see all of them.
+     */
+    public List<Map<String, Object>> findCorruptedTrades(LocalDate from, LocalDate to) {
+        String sql = "SELECT * FROM " + VIEW + " WHERE status = 'CORRUPTED_MANUALLY' "
+                + buildDateFilter("exit_date")
+                + " ORDER BY exit_date DESC";
+        return jdbc.queryForList(sql, buildDateParams(from, to));
+    }
+
+    public long countCorruptedTrades(LocalDate from, LocalDate to) {
+        String sql = "SELECT COUNT(*) FROM " + VIEW + " WHERE status = 'CORRUPTED_MANUALLY' "
+                + buildDateFilter("exit_date");
+        Long count = jdbc.queryForObject(sql, Long.class, buildDateParams(from, to));
+        return count == null ? 0 : count;
+    }
+
     // ── Health ────────────────────────────────────────────────
 
     public long countAllClosedTrades() {

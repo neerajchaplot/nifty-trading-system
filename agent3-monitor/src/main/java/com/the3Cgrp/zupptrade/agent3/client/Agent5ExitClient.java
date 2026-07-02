@@ -85,6 +85,52 @@ public class Agent5ExitClient {
         }
     }
 
+    /**
+     * Places a 4-leg market exit for an Iron Condor trade.
+     * All legs are included in a single multi/place call via Agent 5.
+     */
+    public boolean exitIronCondorTrade(UUID tradeId, String reason,
+                                        String peShortKey, LegAction peShortAction,
+                                        String peLongKey,  LegAction peLongAction,
+                                        String ceShortKey, LegAction ceShortAction,
+                                        String ceLongKey,  LegAction ceLongAction,
+                                        int quantity) {
+        ExitTradeRequest request = new ExitTradeRequest(
+                tradeId, reason,
+                List.of(
+                        new ExitTradeRequest.ExitLeg(peShortKey, peShortAction, quantity),
+                        new ExitTradeRequest.ExitLeg(peLongKey,  peLongAction,  quantity),
+                        new ExitTradeRequest.ExitLeg(ceShortKey, ceShortAction, quantity),
+                        new ExitTradeRequest.ExitLeg(ceLongKey,  ceLongAction,  quantity)
+                )
+        );
+
+        try {
+            ExitResponse response = agent5RestClient.post()
+                    .uri("/api/v1/agent5/exit/{tradeId}", tradeId)
+                    .body(request)
+                    .retrieve()
+                    .body(ExitResponse.class);
+
+            if (response == null) {
+                log.error("agent5.exit.ic.null_response tradeId={}", tradeId);
+                return false;
+            }
+
+            boolean success = TradeStatus.CLOSED.name().equals(response.status());
+            log.info("agent5.exit.ic.response tradeId={} status={} success={}", tradeId, response.status(), success);
+            return success;
+
+        } catch (HttpStatusCodeException e) {
+            log.error("agent5.exit.ic.http_error tradeId={} httpStatus={} body={}",
+                    tradeId, e.getStatusCode(), e.getResponseBodyAsString());
+            return false;
+        } catch (Exception e) {
+            log.error("agent5.exit.ic.error tradeId={} error={}", tradeId, e.getMessage());
+            return false;
+        }
+    }
+
     /** Minimal projection of Agent 5's ExitTradeResponse to avoid cross-module DTO dependency. */
     private record ExitResponse(String tradeId, String status, String failureReason) {}
 }

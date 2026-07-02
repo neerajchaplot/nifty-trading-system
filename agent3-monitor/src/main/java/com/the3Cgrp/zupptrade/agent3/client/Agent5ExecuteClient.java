@@ -50,26 +50,28 @@ public class Agent5ExecuteClient {
      */
     public boolean execute(TradeCardDto card) {
         int quantity = card.lots() * card.lotSize();
+        boolean isIronCondor = card.shortLeg2() != null;
 
-        ExecuteRequest request = new ExecuteRequest(
-                card.tradeId(),
-                List.of(
-                        new LegExecRequest(
-                                card.shortLeg().instrumentKey(),
-                                card.shortLeg().optionType(),
-                                card.shortLeg().strike(),
-                                card.shortLeg().action(),
-                                card.shortLeg().ltp(),
-                                quantity),
-                        new LegExecRequest(
-                                card.longLeg().instrumentKey(),
-                                card.longLeg().optionType(),
-                                card.longLeg().strike(),
-                                card.longLeg().action(),
-                                card.longLeg().ltp(),
-                                quantity)
-                )
-        );
+        List<LegExecRequest> legRequests;
+        if (isIronCondor) {
+            legRequests = List.of(
+                    new LegExecRequest(card.shortLeg().instrumentKey(), card.shortLeg().optionType(),
+                            card.shortLeg().strike(), card.shortLeg().action(), card.shortLeg().ltp(), quantity),
+                    new LegExecRequest(card.longLeg().instrumentKey(), card.longLeg().optionType(),
+                            card.longLeg().strike(), card.longLeg().action(), card.longLeg().ltp(), quantity),
+                    new LegExecRequest(card.shortLeg2().instrumentKey(), card.shortLeg2().optionType(),
+                            card.shortLeg2().strike(), card.shortLeg2().action(), card.shortLeg2().ltp(), quantity),
+                    new LegExecRequest(card.longLeg2().instrumentKey(), card.longLeg2().optionType(),
+                            card.longLeg2().strike(), card.longLeg2().action(), card.longLeg2().ltp(), quantity));
+        } else {
+            legRequests = List.of(
+                    new LegExecRequest(card.shortLeg().instrumentKey(), card.shortLeg().optionType(),
+                            card.shortLeg().strike(), card.shortLeg().action(), card.shortLeg().ltp(), quantity),
+                    new LegExecRequest(card.longLeg().instrumentKey(), card.longLeg().optionType(),
+                            card.longLeg().strike(), card.longLeg().action(), card.longLeg().ltp(), quantity));
+        }
+
+        ExecuteRequest request = new ExecuteRequest(card.tradeId(), legRequests);
 
         try {
             ExecuteResponse response = agent5RestClient.post()

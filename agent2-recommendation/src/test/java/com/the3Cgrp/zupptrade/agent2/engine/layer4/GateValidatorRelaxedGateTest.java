@@ -8,6 +8,7 @@ import com.the3Cgrp.zupptrade.shared.dto.TradeLegDto;
 import com.the3Cgrp.zupptrade.shared.enums.LegAction;
 import com.the3Cgrp.zupptrade.shared.enums.OptionType;
 import com.the3Cgrp.zupptrade.shared.enums.SpreadDirection;
+import com.the3Cgrp.zupptrade.shared.enums.Strategy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -32,7 +33,7 @@ class GateValidatorRelaxedGateTest {
     }
 
     // ── PoP convention ────────────────────────────────────────────────────────
-    // GateValidator.validateG1() computes: seller_pop = (1 - shortLeg.pop()) × 100
+    // GateValidator.validateG1Credit() computes: seller_pop = (1 - shortLeg.pop()) × 100
     // shortLeg.pop() = Upstox buyer's PoP (P option expires ITM, 0-1 scale)
     // For an OTM short put: buyer's PoP is low (e.g. 0.18 = 18%), seller's PoP is high (82%).
     // Test values use this convention: shortPop = 1 - (desired_seller_pop / 100).
@@ -150,6 +151,7 @@ class GateValidatorRelaxedGateTest {
     // Seller's PoP computed by GateValidator as: (1 - shortBuyerPop) × 100.
     private RecommendationContext buildCreditContext(BigDecimal shortBuyerPop, BigDecimal relaxedPopPct) {
         RecommendationContext ctx = new RecommendationContext();
+        ctx.setStrategy(Strategy.BULL_PUT_SPREAD);
         ctx.setSpreadDirection(SpreadDirection.CREDIT);
         ctx.setRelaxedGate1PopPct(relaxedPopPct);
 

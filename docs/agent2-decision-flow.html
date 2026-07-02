@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent 2 — Trade Recommendation Decision Flow</title>
+<style>
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --text-primary: #0F172A;
+  --text-secondary: #334155;
+  --text-muted: #64748B;
+  --border: #E2E8F0;
+  --border-strong: #94A3B8;
+  --surface-1: #FFFFFF;
+  --surface-2: #F8FAFC;
+  --bg-accent: #EFF6FF;
+  --border-accent: #BFDBFE;
+  --text-accent: #1D4ED8;
+  --bg-success: #F0FDF4;
+  --border-success: #86EFAC;
+  --text-success: #15803D;
+  --bg-danger: #FEF2F2;
+  --border-danger: #FECACA;
+  --text-danger: #B91C1C;
+  --bg-warning: #FFFBEB;
+  --border-warning: #FDE68A;
+  --text-warning: #92400E;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text-primary: #F1F5F9;
+    --text-secondary: #CBD5E1;
+    --text-muted: #94A3B8;
+    --border: #334155;
+    --border-strong: #475569;
+    --surface-1: #1E293B;
+    --surface-2: #0F172A;
+    --bg-accent: #1E3A5F;
+    --border-accent: #2563EB;
+    --text-accent: #93C5FD;
+    --bg-success: #052E16;
+    --border-success: #166534;
+    --text-success: #86EFAC;
+    --bg-danger: #450A0A;
+    --border-danger: #991B1B;
+    --text-danger: #FCA5A5;
+    --bg-warning: #451A03;
+    --border-warning: #92400E;
+    --text-warning: #FCD34D;
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);background:var(--surface-1);color:var(--text-primary);padding:32px;min-height:100vh}
+.page-header{max-width:720px;margin:0 auto 24px;display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.page-title-block{}
+.page-title{font-size:22px;font-weight:700;color:var(--text-primary);margin-bottom:4px}
+.page-sub{font-size:13px;color:var(--text-muted)}
+.print-btn{padding:7px 14px;border:1px solid var(--border-strong);border-radius:6px;background:var(--surface-2);color:var(--text-secondary);font-size:12px;cursor:pointer;font-family:var(--font-sans);white-space:nowrap;margin-top:4px}
+.print-btn:hover{background:var(--border)}
+.page-footer{max-width:720px;margin:32px auto 0;font-size:11px;color:var(--text-muted);border-top:1px solid var(--border);padding-top:12px}
+@media print{.print-btn{display:none}body{padding:16px}}
+
+/* ── widget styles ── */
+.af{max-width:680px;margin:0 auto;font-family:var(--font-sans);color:var(--text-primary);font-size:13px}
+.fg{display:grid;grid-template-columns:1fr 164px;column-gap:10px}
+.box{border-radius:8px;padding:10px 13px;border:1px solid var(--border);background:var(--surface-1)}
+.b-in{background:var(--bg-accent);border-color:var(--border-accent)}
+.b-dec{background:var(--bg-warning);border-color:var(--border-warning)}
+.b-ok{background:var(--bg-success);border-color:var(--border-success)}
+.b-no{background:var(--bg-danger);border-color:var(--border-danger)}
+.b-sk{background:var(--bg-warning);border-color:var(--border-warning)}
+.ltag{font-size:10px;font-weight:500;letter-spacing:.5px;color:var(--text-muted);text-transform:uppercase;margin-bottom:3px}
+.bt{font-size:13px;font-weight:500;margin-bottom:5px}
+.bs{font-size:11px;color:var(--text-secondary);line-height:1.55}
+.dn{display:flex;justify-content:center;height:18px;align-items:center;color:var(--text-muted);font-size:14px}
+.exit-wrap{display:flex;align-items:center;gap:8px;height:100%;padding-top:8px}
+.exit-arr{color:var(--text-muted);font-size:13px;flex-shrink:0}
+.exit-box{border-radius:8px;padding:7px 10px;border:1px solid var(--border-danger);background:var(--bg-danger);min-width:90px}
+.exit-box.sk{border-color:var(--border-warning);background:var(--bg-warning)}
+.exit-ttl{font-size:12px;font-weight:500;color:var(--text-danger)}
+.exit-ttl.sk{color:var(--text-warning)}
+.exit-cond{font-size:10px;color:var(--text-secondary);margin-top:2px}
+.gr{display:flex;gap:6px;align-items:baseline;padding:3px 0;border-bottom:1px solid var(--border);font-size:11px}
+.gr:last-child{border-bottom:none}
+.bh{font-size:10px;font-weight:500;padding:1px 5px;border-radius:3px;flex-shrink:0;background:var(--bg-danger);color:var(--text-danger);border:1px solid var(--border-danger)}
+.bi{font-size:10px;font-weight:500;padding:1px 5px;border-radius:3px;flex-shrink:0;background:var(--bg-success);color:var(--text-success);border:1px solid var(--border-success)}
+.mt{border-collapse:collapse;width:100%;font-size:11px;margin-top:5px}
+.mt th{color:var(--text-muted);font-weight:500;text-align:left;padding:2px 4px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.4px}
+.mt td{padding:3px 4px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--text-secondary)}
+.mt tr:last-child td{border-bottom:none}
+.mt td.s{color:var(--text-primary);font-weight:500}
+.sep{height:1px;background:var(--border);margin:18px 0}
+.lgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.lbox{border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.lt{font-size:11px;font-weight:500;margin-bottom:4px}
+.ld{font-size:10px;color:var(--text-muted);margin-bottom:7px;line-height:1.4}
+.lr{display:flex;justify-content:space-between;gap:6px;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px;align-items:center}
+.lr:last-child{border-bottom:none}
+.lk{color:var(--text-secondary)}
+.lv{color:var(--text-primary);font-weight:500;text-align:right;font-size:11px}
+.chip{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px;font-weight:500}
+.ch-r{background:var(--bg-danger);color:var(--text-danger)}
+.ch-a{background:var(--bg-warning);color:var(--text-warning)}
+.ch-g{background:var(--bg-success);color:var(--text-success)}
+.ch-b{background:var(--bg-accent);color:var(--text-accent)}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="page-title-block">
+    <div class="page-title">Agent 2 — Trade Recommendation Decision Flow</div>
+    <div class="page-sub">5-layer decision path: signal + profile → PENDING_CONFIRM or REJECTED · with legend defining Confidence, VIX Regime, and IV Regime</div>
+  </div>
+  <button class="print-btn" onclick="window.print()">🖨 Print / Save PDF</button>
+</div>
+
+<div class="af">
+<div class="fg">
+
+  <div class="box b-in" style="grid-column:1;grid-row:1">
+    <div class="ltag">input</div>
+    <div class="bt">Agent 2 receives request</div>
+    <div class="bs">Signal ID + user profile ID → fetch signal, user profile, lot size, option chain, HV 20d</div>
+  </div>
+  <div style="grid-column:2;grid-row:1"></div>
+
+  <div class="dn" style="grid-column:1;grid-row:2">↓</div>
+
+  <div class="box b-dec" style="grid-column:1;grid-row:3">
+    <div class="ltag">layer 1 — pre-flight (hard blocks)</div>
+    <div class="bt">Two conditions trigger NO_TRADE immediately</div>
+    <div class="gr"><span class="bh">BLOCK</span><span>VIX regime = EXTREME (India VIX &gt; 24)</span></div>
+    <div class="gr"><span class="bh">BLOCK</span><span>Signal confidence = LOW (adjusted score &lt; 41%)</span></div>
+  </div>
+  <div style="grid-column:2;grid-row:3;display:flex;align-items:center">
+    <div class="exit-wrap">
+      <div class="exit-arr">→</div>
+      <div class="exit-box"><div class="exit-ttl">NO_TRADE</div><div class="exit-cond">either condition met</div></div>
+    </div>
+  </div>
+
+  <div class="dn" style="grid-column:1;grid-row:4">↓</div>
+
+  <div class="box b-dec" style="grid-column:1;grid-row:5">
+    <div class="ltag">layer 1 — strategy matrix</div>
+    <div class="bt">Bias + strength + VIX regime + IV regime → strategy</div>
+    <table class="mt">
+      <thead><tr><th>signal</th><th>VIX regime</th><th>IV regime</th><th>strategy selected</th></tr></thead>
+      <tbody>
+        <tr><td>Bullish extreme</td><td>any</td><td>any</td><td class="s">Bull Call Spread</td></tr>
+        <tr><td>Bullish mild</td><td>Normal / High</td><td>Rich</td><td class="s">Bull Put Spread</td></tr>
+        <tr><td>Bearish ex / mild</td><td>Normal / High</td><td>Rich</td><td class="s">Bear Call Spread</td></tr>
+        <tr><td>Neutral weak</td><td>High</td><td>Rich</td><td class="s">Wide Iron Condor</td></tr>
+        <tr><td>Neutral weak</td><td>Normal</td><td>Rich</td><td class="s">Iron Condor</td></tr>
+        <tr><td style="color:var(--text-muted)">no match</td><td>—</td><td>—</td><td class="s" style="color:var(--text-warning)">SKIP</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div style="grid-column:2;grid-row:5;display:flex;align-items:center">
+    <div class="exit-wrap">
+      <div class="exit-arr">→</div>
+      <div class="exit-box sk"><div class="exit-ttl sk">SKIP</div><div class="exit-cond">no matching rule</div></div>
+    </div>
+  </div>
+
+  <div class="dn" style="grid-column:1;grid-row:6">↓</div>
+
+  <div class="box" style="grid-column:1;grid-row:7">
+    <div class="ltag">layer 2 — calculation only, no gate</div>
+    <div class="bt">Expected move</div>
+    <div class="bs">
+      BS move = spot × ATM IV × √(DTE ÷ 365) &nbsp;·&nbsp; 1.4 SD boundary = BS move × 1.4<br>
+      Cross-check: ATM straddle LTP (CE + PE) &nbsp;·&nbsp; flag divergence if methods differ &gt; 15%
+    </div>
+  </div>
+  <div style="grid-column:2;grid-row:7"></div>
+
+  <div class="dn" style="grid-column:1;grid-row:8">↓</div>
+
+  <div class="box" style="grid-column:1;grid-row:9">
+    <div class="ltag">layer 3 — calculation only, no gate</div>
+    <div class="bt">Strike selection</div>
+    <div class="bs">
+      <strong>Credit spreads</strong> — short strike at 1.4 SD boundary · delta ≤ 0.20 · round to nearest 50 · spread width: DTE ≤ 4 → min, DTE &gt; 4 → max (both from user profile)<br>
+      <strong>Debit spreads</strong> — long = ATM · short = ATM + 200 pts rounded to nearest 50
+    </div>
+  </div>
+  <div style="grid-column:2;grid-row:9"></div>
+
+  <div class="dn" style="grid-column:1;grid-row:10">↓</div>
+
+  <div class="box b-dec" style="grid-column:1;grid-row:11">
+    <div class="ltag">layer 4 — gate validation round 1 (G1 · G2 · G3)</div>
+    <div class="bt">PoP, max loss, and spread width checks</div>
+    <div class="gr">
+      <span class="bh">HARD</span>
+      <span><strong>G1 PoP</strong> — credit: seller PoP = (1 − short leg pop) × 100 ≥ 80% &nbsp;·&nbsp; debit: long leg pop × 100 ≥ 35%</span>
+    </div>
+    <div class="gr">
+      <span class="bi">INFO</span>
+      <span><strong>G2 max loss</strong> — max loss per lot calculated for sizing · never rejects · always passes</span>
+    </div>
+    <div class="gr">
+      <span class="bh">HARD</span>
+      <span><strong>G3 PoP–PoPP gap</strong> — |short leg pop − long leg pop| × 100 ≤ 15% · credit spreads only, auto-pass for debit</span>
+    </div>
+  </div>
+  <div style="grid-column:2;grid-row:11;display:flex;align-items:center">
+    <div class="exit-wrap">
+      <div class="exit-arr">→</div>
+      <div class="exit-box"><div class="exit-ttl">REJECTED</div><div class="exit-cond">G1 or G3 fails</div></div>
+    </div>
+  </div>
+
+  <div class="dn" style="grid-column:1;grid-row:12">↓</div>
+
+  <div class="box" style="grid-column:1;grid-row:13">
+    <div class="ltag">layer 5 — position sizing</div>
+    <div class="bt">Lot calculation</div>
+    <div class="bs">
+      Real expected loss / lot = max loss / lot × 0.50 (Agent 3 exits at T2 — not full max loss)<br>
+      Max loss allowed = capital × max_loss_pct (user profile default 1.5%)<br>
+      Lots = floor(max loss allowed ÷ real expected loss / lot)
+    </div>
+  </div>
+  <div style="grid-column:2;grid-row:13"></div>
+
+  <div class="dn" style="grid-column:1;grid-row:14">↓</div>
+
+  <div class="box b-dec" style="grid-column:1;grid-row:15">
+    <div class="ltag">layer 4 — gate G4 (evaluated after sizing)</div>
+    <div class="bt">Minimum return check</div>
+    <div class="gr">
+      <span class="bh">HARD</span>
+      <span><strong>G4 RoC</strong> — RoC ≥ 0.5% × (DTE ÷ 7) &nbsp;·&nbsp; DTE 3 → min 0.21% &nbsp;·&nbsp; DTE 7 → min 0.50%</span>
+    </div>
+  </div>
+  <div style="grid-column:2;grid-row:15;display:flex;align-items:center">
+    <div class="exit-wrap">
+      <div class="exit-arr">→</div>
+      <div class="exit-box"><div class="exit-ttl">REJECTED</div><div class="exit-cond">G4 fails</div></div>
+    </div>
+  </div>
+
+  <div class="dn" style="grid-column:1;grid-row:16">↓</div>
+
+  <div class="box b-ok" style="grid-column:1;grid-row:17">
+    <div class="ltag">output</div>
+    <div class="bt" style="color:var(--text-success)">PENDING_CONFIRM</div>
+    <div class="bs">Trade card returned with legs, position summary, gate results, T1/T2/T3 thresholds · valid 20 min</div>
+  </div>
+  <div style="grid-column:2;grid-row:17"></div>
+
+</div>
+
+<div class="sep"></div>
+
+<div class="lgrid">
+  <div class="lbox">
+    <div class="lt">Signal confidence</div>
+    <div class="ld">base = tiers agreeing with direction ÷ 5 · then multiplied by VIX modifier and ADX modifier</div>
+    <div class="lr"><span class="lk"><span class="chip ch-r">LOW</span></span><span class="lv">&lt; 41% → NO_TRADE</span></div>
+    <div class="lr"><span class="lk"><span class="chip ch-a">MEDIUM</span></span><span class="lv">41% – 70%</span></div>
+    <div class="lr"><span class="lk"><span class="chip ch-g">HIGH</span></span><span class="lv">&gt; 70%</span></div>
+  </div>
+  <div class="lbox">
+    <div class="lt">VIX regime (India VIX)</div>
+    <div class="ld">drives confidence modifier · determines strategy eligibility · EXTREME blocks all trades</div>
+    <div class="lr"><span class="lk"><span class="chip ch-b">LOW</span></span><span class="lv">VIX &lt; 13 · mod ×1.10</span></div>
+    <div class="lr"><span class="lk"><span class="chip ch-g">NORMAL</span></span><span class="lv">13 – 18 · mod ×1.00</span></div>
+    <div class="lr"><span class="lk"><span class="chip ch-a">HIGH</span></span><span class="lv">18 – 24 · mod ×0.85</span></div>
+    <div class="lr"><span class="lk"><span class="chip ch-r">EXTREME</span></span><span class="lv">&gt; 24 → NO_TRADE</span></div>
+  </div>
+  <div class="lbox">
+    <div class="lt">IV regime (ATM IV ÷ HV 20d)</div>
+    <div class="ld">ATM call IV from option chain · fallback: VIX ÷ 100 when chain unavailable</div>
+    <div class="lr"><span class="lk"><span class="chip ch-b">CHEAP</span></span><span class="lv">ratio &lt; 0.85</span></div>
+    <div class="lr"><span class="lk"><span class="chip ch-a">FAIR</span></span><span class="lv">0.85 – 1.20</span></div>
+    <div class="lr"><span class="lk"><span class="chip ch-g">RICH</span></span><span class="lv">ratio &gt; 1.20 → sell premium</span></div>
+  </div>
+</div>
+</div>
+
+<div class="page-footer">Zupptrade · Agent 2 Trade Recommendation Decision Flow · nifty-trading-system</div>
+</body>
+</html>

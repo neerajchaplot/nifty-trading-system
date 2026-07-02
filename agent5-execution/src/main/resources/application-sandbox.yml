@@ -33,6 +33,10 @@ agent5:
     # When true: skip multi/place entirely and inject synthetic fills at limitPrice so the
     # downstream flow (slippage check, fill persistence, ACTIVE status) can be exercised.
     simulate-fills: true
+    # When true: skip exit order placement and mark the trade CLOSED directly.
+    # Mirrors simulate-fills for the exit path — sandbox cannot place exit orders on
+    # weekly NIFTY instruments either.
+    simulate-exit: true
 
 logging:
   level:

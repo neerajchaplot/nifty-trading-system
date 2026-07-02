@@ -24,10 +24,15 @@ public final class TradeExecutionRequestMapper {
 
     public static ExecuteTradeRequest from(TradeCardDto tradeCard) {
         int totalQty = tradeCard.lots() * tradeCard.lotSize();
-        return new ExecuteTradeRequest(tradeCard.tradeId(), List.of(
-                legRequest(tradeCard.shortLeg(), totalQty),
-                legRequest(tradeCard.longLeg(),  totalQty)
-        ));
+        boolean isIronCondor = tradeCard.shortLeg2() != null;
+        List<LegOrderRequest> legs = isIronCondor
+                ? List.of(legRequest(tradeCard.shortLeg(), totalQty),
+                          legRequest(tradeCard.longLeg(),  totalQty),
+                          legRequest(tradeCard.shortLeg2(), totalQty),
+                          legRequest(tradeCard.longLeg2(),  totalQty))
+                : List.of(legRequest(tradeCard.shortLeg(), totalQty),
+                          legRequest(tradeCard.longLeg(),  totalQty));
+        return new ExecuteTradeRequest(tradeCard.tradeId(), legs);
     }
 
     private static LegOrderRequest legRequest(TradeLegDto leg, int qty) {

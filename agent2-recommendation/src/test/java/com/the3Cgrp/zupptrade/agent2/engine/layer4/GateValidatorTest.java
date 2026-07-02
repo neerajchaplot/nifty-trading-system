@@ -8,6 +8,7 @@ import com.the3Cgrp.zupptrade.shared.dto.TradeLegDto;
 import com.the3Cgrp.zupptrade.shared.enums.LegAction;
 import com.the3Cgrp.zupptrade.shared.enums.OptionType;
 import com.the3Cgrp.zupptrade.shared.enums.SpreadDirection;
+import com.the3Cgrp.zupptrade.shared.enums.Strategy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -88,7 +89,7 @@ class GateValidatorTest {
     void g4_rocAboveMinimum_passes() {
         RecommendationContext ctx = buildCreditContext(new BigDecimal("0.87"), new BigDecimal("0.90"));
         ctx.setDte(5);
-        ctx.setRoc(new BigDecimal("0.55")); // min RoC for DTE=5 = 0.5% × (5/5) = 0.5%
+        ctx.setRoc(new BigDecimal("0.55")); // min RoC for DTE=5 = 0.5% × (5/7) = 0.357% → 0.55 passes
 
         GateResultDto g4 = gateValidator.validateG4(ctx);
         assertThat(g4.passed()).isTrue();
@@ -108,7 +109,7 @@ class GateValidatorTest {
     void g4_dteTwoAdjustsThresholdDown() {
         RecommendationContext ctx = buildCreditContext(new BigDecimal("0.87"), new BigDecimal("0.90"));
         ctx.setDte(2);
-        // min RoC for DTE=2 = 0.5% × (2/5) = 0.2%
+        // min RoC for DTE=2 = 0.5% × (2/7) = 0.143% → 0.25 passes
         ctx.setRoc(new BigDecimal("0.25"));
 
         GateResultDto g4 = gateValidator.validateG4(ctx);
@@ -119,6 +120,7 @@ class GateValidatorTest {
 
     private RecommendationContext buildCreditContext(BigDecimal shortPop, BigDecimal longPop) {
         RecommendationContext ctx = new RecommendationContext();
+        ctx.setStrategy(Strategy.BULL_PUT_SPREAD);
         ctx.setSpreadDirection(SpreadDirection.CREDIT);
 
         TradeLegDto shortLeg = new TradeLegDto(OptionType.PE, 23500,

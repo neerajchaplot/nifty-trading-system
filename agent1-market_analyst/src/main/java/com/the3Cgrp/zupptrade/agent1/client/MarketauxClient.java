@@ -52,6 +52,7 @@ public class MarketauxClient {
      */
     @Cacheable(value = "marketaux-sentiment", key = "'nsei'", unless = "#result == null")
     public NseiSentiment fetchNiftySentiment() {
+        log.debug("marketaux.fetch.start symbol={}", NSEI_SYMBOL);
         try {
             MarketauxResponse response = marketauxRestClient.get()
                     .uri("/v1/news/all?symbols={symbol}&api_token={key}&language=en&limit=3",
@@ -60,19 +61,31 @@ public class MarketauxClient {
                     .body(MarketauxResponse.class);
 
             if (response == null || response.data() == null || response.data().isEmpty()) {
-                log.warn("marketaux.empty_response");
+                log.warn("marketaux.empty_response — no articles returned; check quota or symbol");
                 return null;
             }
+
+            log.debug("marketaux.articles.returned count={}", response.data().size());
 
             // Build per-article summaries, extracting the ^NSEI entity score for each article
             List<NseiSentiment.ArticleSummary> articles = response.data().stream()
                     .map(article -> {
+                        List<String> entitySymbols = article.entities() == null ? List.of() :
+                                article.entities().stream().map(MarketauxEntity::symbol).toList();
+                        log.debug("marketaux.article title=\"{}\" entity_symbols={}", article.title(), entitySymbols);
+
                         BigDecimal nseiScore = article.entities() == null ? null :
                                 article.entities().stream()
                                         .filter(e -> NSEI_SYMBOL.equals(e.symbol()) && e.sentimentScore() != null)
                                         .map(MarketauxEntity::sentimentScore)
                                         .findFirst()
                                         .orElse(null);
+
+                        if (nseiScore == null) {
+                            log.debug("marketaux.article.no_nsei_score title=\"{}\" — ^NSEI entity not tagged or score null", article.title());
+                        } else {
+                            log.debug("marketaux.article.nsei_score title=\"{}\" score={}", article.title(), nseiScore);
+                        }
 
                         return new NseiSentiment.ArticleSummary(
                                 article.title(),
@@ -98,7 +111,7 @@ public class MarketauxClient {
                         .map(MarketauxEntity::symbol)
                         .distinct()
                         .toList();
-                log.warn("marketaux.no_nsei_entities articles={} all_symbols_found={}",
+                log.warn("marketaux.no_nsei_entities articles={} all_symbols_found={} — none tagged as ^NSEI",
                         response.data().size(), allSymbols);
                 return null;
             }

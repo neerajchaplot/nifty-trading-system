@@ -5,6 +5,7 @@ export const environment = {
   agent2BaseUrl: '/api/agent2',
   agent3BaseUrl: '/api/agent3',
   agent5BaseUrl: '/api/agent5',
+  agentUserBaseUrl: '/api/agent-user',
   marketPollIntervalMs: 10000,
   tradesPollIntervalMs: 5000,
 };

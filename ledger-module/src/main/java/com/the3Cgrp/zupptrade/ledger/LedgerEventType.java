@@ -9,9 +9,10 @@ package com.the3Cgrp.zupptrade.ledger;
 public enum LedgerEventType {
 
     // ── Agent 2 events ────────────────────────────────────────────────────────
-    TRADE_PENDING,          // Agent 2 generated a trade card, awaiting user confirmation
-    TRADE_APPROVED,         // User confirmed — trade is CONFIRMED, queued for execution
-    TRADE_REJECTED,         // User rejected or system rejected (gate failure)
+    TRADE_PENDING,                   // Agent 2 generated a trade card, awaiting user confirmation
+    TRADE_APPROVED,                  // User confirmed — trade is CONFIRMED, queued for execution
+    TRADE_CONFIRMED_WITH_OVERRIDE,   // User manually overrode strikes/lots and confirmed; gate rules bypassed
+    TRADE_REJECTED,                  // User rejected or system rejected (gate failure)
 
     // ── Agent 5 — entry events ────────────────────────────────────────────────
     TRADE_PLACED,           // Both legs submitted to Upstox exchange
@@ -27,5 +28,7 @@ public enum LedgerEventType {
 
     // ── Lifecycle housekeeping ────────────────────────────────────────────────
     TRADE_EXPIRED,              // Reached expiry date without being closed
-    TRADE_EXTERNALLY_CLOSED     // Detected closed via position reconciliation (user acted in Upstox app)
+    TRADE_EXTERNALLY_CLOSED,    // Detected closed via position reconciliation (user acted in Upstox app)
+    TRADE_CORRUPTED_MANUALLY    // Partial close detected: one or more legs flat on Upstox, others open;
+                                // monitoring stopped; manual intervention required on Upstox
 }

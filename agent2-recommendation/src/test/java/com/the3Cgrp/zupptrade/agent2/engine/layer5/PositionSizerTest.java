@@ -8,6 +8,7 @@ import com.the3Cgrp.zupptrade.shared.dto.TradeLegDto;
 import com.the3Cgrp.zupptrade.shared.enums.LegAction;
 import com.the3Cgrp.zupptrade.shared.enums.OptionType;
 import com.the3Cgrp.zupptrade.shared.enums.SpreadDirection;
+import com.the3Cgrp.zupptrade.shared.enums.Strategy;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -24,14 +25,14 @@ class PositionSizerTest {
     void setUp() {
         TradingConfig config = new TradingConfig();
         GateValidator gateValidator = new GateValidator(config);
-        positionSizer = new PositionSizer(gateValidator);
+        positionSizer = new PositionSizer(gateValidator, config);
     }
 
     // Validated against worked example from context doc:
     // Spot: 23998, Short: 23500 PE @ 34.50, Long: 23450 PE @ 29.40
-    // Net: 5.10, Spread: 50, Lot: 65, Capital: 500000
+    // Net: 5.10, Spread: 50, Lot: 65, Capital: 500000, maxLossPct: 1.5%
     // Max loss/lot = (50×65) - (5.10×65) = 3250 - 331.5 = 2918.5
-    // Real loss/lot = 2918.5 × 0.5 = 1459.25
+    // Real loss/lot = 2918.5 × 0.50 = 1459.25  (CLAUDE.md Layer 5: real_expected_loss = max_loss × 0.50)
     // Max loss budget = 500000 × 1.5% = 7500
     // Lots = floor(7500 / 1459.25) = 5
     @Test
@@ -103,6 +104,7 @@ class PositionSizerTest {
                                                SpreadDirection direction, int lotSize,
                                                BigDecimal capital, BigDecimal maxLossPct, int dte) {
         RecommendationContext ctx = new RecommendationContext();
+        ctx.setStrategy(Strategy.BULL_PUT_SPREAD);  // credit strategy — ensures isDebit() = false
         ctx.setSpreadDirection(direction);
         ctx.setLotSize(lotSize);
         ctx.setDte(dte);

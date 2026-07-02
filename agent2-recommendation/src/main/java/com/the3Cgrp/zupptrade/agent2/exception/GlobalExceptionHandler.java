@@ -30,6 +30,15 @@ public class GlobalExceptionHandler {
         return problem;
     }
 
+    @ExceptionHandler(IllegalStateException.class)
+    public ProblemDetail handleIllegalState(IllegalStateException ex) {
+        log.warn("trade.invalid.state", kv("error", ex.getMessage()));
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problem.setType(URI.create("urn:zupptrade:error:invalid-trade-state"));
+        problem.setTitle("Invalid Trade State");
+        return problem;
+    }
+
     @ExceptionHandler(MarketDataUnavailableException.class)
     public ProblemDetail handleMarketDataUnavailable(MarketDataUnavailableException ex) {
         log.error("market.data.unavailable", kv("error", ex.getMessage()));

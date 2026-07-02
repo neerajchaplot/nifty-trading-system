@@ -40,6 +40,9 @@ T_GATE_G1="a2000001-0000-0000-0000-000000000005"      # Rejected G1 failure
 T_GATE_G4="a2000001-0000-0000-0000-000000000006"      # Rejected G4 failure
 T_BPS_CONF="a2000001-0000-0000-0000-000000000007"     # BullPutSpread CONFIRMED
 T_BCS_CONF="a2000001-0000-0000-0000-000000000008"     # BullCallSpread CONFIRMED
+T_S03_PEND="a2000001-0000-0000-0000-000000000009"     # S03 BullPutSpread VIX Normal + IV Fair pending
+T_S06_PEND="a2000001-0000-0000-0000-000000000010"     # S06 ShortStrangle VIX Normal + IV Rich pending
+T_S10_PEND="a2000001-0000-0000-0000-000000000011"     # S10 BearPutSpread Bearish Extreme pending
 
 # Agent 3 trades (ACTIVE)
 T_A3_HOLD="a3000001-0000-0000-0000-000000000001"      # BullPutSpread → HOLD
@@ -49,6 +52,9 @@ T_A3_EXIT="a3000001-0000-0000-0000-000000000004"      # BullPutSpread → EXIT
 T_A3_VIX="a3000001-0000-0000-0000-000000000005"       # VIX spike → EXIT
 T_A3_PROFIT="a3000001-0000-0000-0000-000000000006"    # BullCallSpread → profit EXIT
 T_A3_LOSSCUT="a3000001-0000-0000-0000-000000000007"   # BullCallSpread → loss EXIT
+
+# Scheduler READJUST test (05_seed_readjust_scheduler_test.sql)
+T_A3_IC_READJUST="a3000001-0000-0000-0000-000000000010"  # IronCondor → READJUST via scheduler
 
 # ── Helper ────────────────────────────────────────────────────────────────────
 h() {

@@ -44,6 +44,9 @@ public class RecommendationContext {
     // ── Layer 3: Strike Selection ───────────────────────────────────────────
     private TradeLegDto shortLeg;
     private TradeLegDto longLeg;
+    // Iron Condor only: CE spread (shortLeg/longLeg hold the PE spread)
+    private TradeLegDto shortLeg2;
+    private TradeLegDto longLeg2;
 
     // ── Layer 4: Gate Validation ────────────────────────────────────────────
     private List<GateResultDto> gateResults = new ArrayList<>();
@@ -95,6 +98,10 @@ public class RecommendationContext {
     public void setShortLeg(TradeLegDto shortLeg) { this.shortLeg = shortLeg; }
     public TradeLegDto getLongLeg() { return longLeg; }
     public void setLongLeg(TradeLegDto longLeg) { this.longLeg = longLeg; }
+    public TradeLegDto getShortLeg2() { return shortLeg2; }
+    public void setShortLeg2(TradeLegDto shortLeg2) { this.shortLeg2 = shortLeg2; }
+    public TradeLegDto getLongLeg2() { return longLeg2; }
+    public void setLongLeg2(TradeLegDto longLeg2) { this.longLeg2 = longLeg2; }
     public List<GateResultDto> getGateResults() { return gateResults; }
     public void setGateResults(List<GateResultDto> gateResults) { this.gateResults = gateResults; }
     public boolean isAllHardGatesPassed() { return allHardGatesPassed; }

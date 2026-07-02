@@ -1,12 +1,14 @@
 package com.the3Cgrp.zupptrade.agent5.controller;
 
 import com.the3Cgrp.zupptrade.agent5.dto.*;
+import com.the3Cgrp.zupptrade.agent5.service.MarginCheckService;
 import com.the3Cgrp.zupptrade.agent5.service.TradeExecutionService;
 import com.the3Cgrp.zupptrade.agent5.service.UpstoxConnectionCheckService;
 import com.the3Cgrp.zupptrade.shared.dto.ExitTradeRequest;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.*;
@@ -44,13 +46,16 @@ public class ExecutionController {
 
     private final TradeExecutionService        executionService;
     private final UpstoxConnectionCheckService connectionCheckService;
+    private final MarginCheckService           marginCheckService;
     private final JdbcTemplate                 jdbc;
 
     public ExecutionController(TradeExecutionService executionService,
                                UpstoxConnectionCheckService connectionCheckService,
+                               MarginCheckService marginCheckService,
                                JdbcTemplate jdbc) {
         this.executionService        = executionService;
         this.connectionCheckService  = connectionCheckService;
+        this.marginCheckService      = marginCheckService;
         this.jdbc                    = jdbc;
     }
 
@@ -69,6 +74,29 @@ public class ExecutionController {
         log.info("api.exit", kv("tradeId", tradeId), kv("reason", request.reason()));
         ExitTradeResponse response = executionService.exit(request);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Pre-execution margin check — called by the UI before Agent 2 /confirm in override flow.
+     * Reads trade legs from DB, calls Upstox /v2/charges/margin + /v2/user/fund-and-margin,
+     * and returns required vs available margin.
+     *
+     * POST (not GET) because it triggers two external Upstox API calls.
+     */
+    @PostMapping("/margin/check")
+    public ResponseEntity<MarginCheckService.MarginCheckResultDto> marginCheck(
+            @Valid @RequestBody MarginCheckService.MarginCheckRequestBody request) {
+        log.info("api.margin.check",
+                kv("tradeId", request.tradeId()), kv("overrideLots", request.overrideLots()));
+        try {
+            return ResponseEntity.ok(marginCheckService.check(request.tradeId(), request.overrideLots()));
+        } catch (MarginCheckService.MarginCheckException e) {
+            log.warn("api.margin.check.failed", kv("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
+        } catch (IllegalArgumentException e) {
+            log.warn("api.margin.check.not_found", kv("error", e.getMessage()));
+            return ResponseEntity.notFound().build();
+        }
     }
 
     /**

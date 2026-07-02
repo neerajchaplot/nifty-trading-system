@@ -39,7 +39,7 @@
             {{ alertMessage(trade) }}
           </div>
 
-          <!-- Legs -->
+          <!-- Legs: PE spread (always) -->
           <div class="lt-legs-row" *ngIf="trade.monitorConfig">
             <div class="lt-leg lt-leg-sell">
               <div class="lt-leg-label">SELL</div>
@@ -55,6 +55,25 @@
               <div class="lt-leg-detail">
                 Fill <span>₹ {{ trade.monitorConfig.longLeg.ltp | number:'1.2-2' }}</span>
                 &nbsp;·&nbsp; {{ trade.monitorConfig.lots }} lots
+              </div>
+            </div>
+          </div>
+          <!-- Legs: CE spread (Iron Condor only) -->
+          <div class="lt-legs-row" *ngIf="trade.monitorConfig?.shortLeg2">
+            <div class="lt-leg lt-leg-sell">
+              <div class="lt-leg-label">SELL</div>
+              <div class="lt-leg-strike">{{ trade.monitorConfig!.shortLeg2!.strike | number }} {{ trade.monitorConfig!.shortLeg2!.optionType }}</div>
+              <div class="lt-leg-detail">
+                Fill <span>₹ {{ trade.monitorConfig!.shortLeg2!.ltp | number:'1.2-2' }}</span>
+                &nbsp;·&nbsp; {{ trade.monitorConfig!.lots }} lots
+              </div>
+            </div>
+            <div class="lt-leg lt-leg-buy">
+              <div class="lt-leg-label">BUY</div>
+              <div class="lt-leg-strike">{{ trade.monitorConfig!.longLeg2!.strike | number }} {{ trade.monitorConfig!.longLeg2!.optionType }}</div>
+              <div class="lt-leg-detail">
+                Fill <span>₹ {{ trade.monitorConfig!.longLeg2!.ltp | number:'1.2-2' }}</span>
+                &nbsp;·&nbsp; {{ trade.monitorConfig!.lots }} lots
               </div>
             </div>
           </div>
@@ -90,41 +109,77 @@
           <div class="threshold-section" *ngIf="trade.monitorConfig?.thresholds">
             <div class="divider-label">Thresholds</div>
 
-            <div class="threshold-row">
-              <span class="threshold-label tl-t1">T1 Watch</span>
-              <app-threshold-bar
-                [progress]="thresholdProgress(trade, 'T1')"
-                [variant]="thresholdVariant(trade, 'T1')">
-              </app-threshold-bar>
-              <span class="threshold-level tl-t1">
-                {{ trade.monitorConfig!.thresholds.t1WatchNiftyLevel | number:'1.0-0' }}
-                {{ trade.lastThresholdHit === 'T1' || trade.lastThresholdHit === 'T2' || trade.lastThresholdHit === 'T3' ? '✓' : '' }}
-              </span>
-            </div>
+            <!-- Iron Condor: two-column layout (PE down / CE up) -->
+            <ng-container *ngIf="isIronCondor(trade); else singleDirThresholds">
+              <div class="ic-threshold-grid">
+                <!-- PE side — Nifty falling toward PE short -->
+                <div class="ic-side">
+                  <div class="ic-side-label">PUT ↓</div>
+                  <div class="threshold-row">
+                    <span class="threshold-label tl-t1">T1</span>
+                    <app-threshold-bar [progress]="thresholdProgress(trade, 'T1', 'down')" [variant]="thresholdVariant(trade, 'T1')"></app-threshold-bar>
+                    <span class="threshold-level tl-t1">{{ t1Level(trade, 'down') | number:'1.0-0' }}</span>
+                  </div>
+                  <div class="threshold-row">
+                    <span class="threshold-label tl-t2">T2</span>
+                    <app-threshold-bar [progress]="thresholdProgress(trade, 'T2', 'down')" [variant]="thresholdVariant(trade, 'T2')"></app-threshold-bar>
+                    <span class="threshold-level tl-t2">{{ t2Level(trade, 'down') | number:'1.0-0' }}</span>
+                  </div>
+                  <div class="threshold-row">
+                    <span class="threshold-label tl-t3">T3</span>
+                    <app-threshold-bar [progress]="thresholdProgress(trade, 'T3', 'down')" [variant]="thresholdVariant(trade, 'T3')"></app-threshold-bar>
+                    <span class="threshold-level tl-t3">{{ t3Level(trade, 'down') | number:'1.0-0' }}</span>
+                  </div>
+                </div>
+                <!-- CE side — Nifty rising toward CE short -->
+                <div class="ic-side">
+                  <div class="ic-side-label">CALL ↑</div>
+                  <div class="threshold-row">
+                    <span class="threshold-label tl-t1">T1</span>
+                    <app-threshold-bar [progress]="thresholdProgress(trade, 'T1', 'up')" [variant]="thresholdVariant(trade, 'T1')"></app-threshold-bar>
+                    <span class="threshold-level tl-t1">{{ t1Level(trade, 'up') | number:'1.0-0' }}</span>
+                  </div>
+                  <div class="threshold-row">
+                    <span class="threshold-label tl-t2">T2</span>
+                    <app-threshold-bar [progress]="thresholdProgress(trade, 'T2', 'up')" [variant]="thresholdVariant(trade, 'T2')"></app-threshold-bar>
+                    <span class="threshold-level tl-t2">{{ t2Level(trade, 'up') | number:'1.0-0' }}</span>
+                  </div>
+                  <div class="threshold-row">
+                    <span class="threshold-label tl-t3">T3</span>
+                    <app-threshold-bar [progress]="thresholdProgress(trade, 'T3', 'up')" [variant]="thresholdVariant(trade, 'T3')"></app-threshold-bar>
+                    <span class="threshold-level tl-t3">{{ t3Level(trade, 'up') | number:'1.0-0' }}</span>
+                  </div>
+                </div>
+              </div>
+            </ng-container>
 
-            <div class="threshold-row">
-              <span class="threshold-label tl-t2">T2 Readjust</span>
-              <app-threshold-bar
-                [progress]="thresholdProgress(trade, 'T2')"
-                [variant]="thresholdVariant(trade, 'T2')">
-              </app-threshold-bar>
-              <span class="threshold-level tl-t2">
-                {{ trade.monitorConfig!.thresholds.t2ReadjustNiftyLevel | number:'1.0-0' }}
-                {{ trade.lastThresholdHit === 'T2' || trade.lastThresholdHit === 'T3' ? '✓' : '' }}
-              </span>
-            </div>
-
-            <div class="threshold-row">
-              <span class="threshold-label tl-t3">T3 Exit</span>
-              <app-threshold-bar
-                [progress]="thresholdProgress(trade, 'T3')"
-                [variant]="thresholdVariant(trade, 'T3')">
-              </app-threshold-bar>
-              <span class="threshold-level tl-t3">
-                {{ trade.monitorConfig!.thresholds.t3ExitNiftyLevel | number:'1.0-0' }}
-                {{ trade.lastThresholdHit === 'T3' ? '✓' : '' }}
-              </span>
-            </div>
+            <!-- 2-leg spreads: single direction -->
+            <ng-template #singleDirThresholds>
+              <div class="threshold-row">
+                <span class="threshold-label tl-t1">T1 Watch</span>
+                <app-threshold-bar [progress]="thresholdProgress(trade, 'T1')" [variant]="thresholdVariant(trade, 'T1')"></app-threshold-bar>
+                <span class="threshold-level tl-t1">
+                  {{ t1Level(trade) | number:'1.0-0' }}
+                  {{ trade.lastThresholdHit === 'T1' || trade.lastThresholdHit === 'T2' || trade.lastThresholdHit === 'T3' ? '✓' : '' }}
+                </span>
+              </div>
+              <div class="threshold-row">
+                <span class="threshold-label tl-t2">T2 Readjust</span>
+                <app-threshold-bar [progress]="thresholdProgress(trade, 'T2')" [variant]="thresholdVariant(trade, 'T2')"></app-threshold-bar>
+                <span class="threshold-level tl-t2">
+                  {{ t2Level(trade) | number:'1.0-0' }}
+                  {{ trade.lastThresholdHit === 'T2' || trade.lastThresholdHit === 'T3' ? '✓' : '' }}
+                </span>
+              </div>
+              <div class="threshold-row">
+                <span class="threshold-label tl-t3">T3 Exit</span>
+                <app-threshold-bar [progress]="thresholdProgress(trade, 'T3')" [variant]="thresholdVariant(trade, 'T3')"></app-threshold-bar>
+                <span class="threshold-level tl-t3">
+                  {{ t3Level(trade) | number:'1.0-0' }}
+                  {{ trade.lastThresholdHit === 'T3' ? '✓' : '' }}
+                </span>
+              </div>
+            </ng-template>
           </div>
 
           <!-- P&L Row -->

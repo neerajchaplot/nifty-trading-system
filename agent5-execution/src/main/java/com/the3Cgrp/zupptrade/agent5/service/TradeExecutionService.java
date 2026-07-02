@@ -84,9 +84,16 @@ public class TradeExecutionService {
                 kv("legCount", request.legs().size()));
 
         // Read expected net premium from DB — Agent 5 never trusts caller for financial figures
+        // Query is gated on status = 'CONFIRMED' so null means trade is not CONFIRMED (may be ACTIVE,
+        // CLOSED, etc.). Do NOT update the trade's DB status in this case — the trade is in a valid
+        // state; this is simply an invalid execution attempt.
         BigDecimal expectedNet = readExpectedNetPremium(tradeId);
         if (expectedNet == null) {
-            return rejected(tradeId, null, "MARGIN_CHECK", "Trade not found or not in CONFIRMED status: " + tradeId);
+            log.warn("execution.not.confirmed tradeId={} — execution rejected, trade status unchanged", tradeId);
+            return new ExecuteTradeResponse(tradeId, TradeStatus.REJECTED, List.of(),
+                    null, null, false, null,
+                    "Trade not found or not in CONFIRMED status: " + tradeId,
+                    LocalDateTime.now());
         }
 
         // ── Step 1: Margin check — required margin from /v2/charges/margin ────
@@ -258,6 +265,18 @@ public class TradeExecutionService {
             log.warn("exit.invalid_status tradeId={} status={} — exit not applicable", tradeId, current);
             return new ExitTradeResponse(tradeId, current,
                     "Trade not in exit-eligible status: " + current, null);
+        }
+
+        // ── Simulate exit (sandbox only) — skip Upstox entirely, mark CLOSED ────
+        if (props.isSimulateExit()) {
+            log.warn("exit.fills.simulated tradeId={} — simulate-exit=true, NEVER use in production", tradeId);
+            LocalDateTime closedAt = LocalDateTime.now();
+            setTradeStatusClosed(tradeId, request.reason(), closedAt);
+            recordSilently(tradeId, LedgerEventType.TRADE_CLOSED,
+                    new TradeClosedPayload(request.reason(), List.of(), null, null),
+                    "AGENT5:SIMULATE");
+            log.info("exit.simulated.complete", kv("tradeId", tradeId), kv("reason", request.reason()));
+            return new ExitTradeResponse(tradeId, TradeStatus.CLOSED, null, closedAt);
         }
 
         // ── Ensure EXIT_IN_PROGRESS is set (idempotent if Agent 3 already set it) ──

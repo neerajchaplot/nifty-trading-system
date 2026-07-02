@@ -1,0 +1,68 @@
+{
+  "_help": {
+    "bias":                "BULLISH | BEARISH | NEUTRAL",
+    "strength":            "EXTREME | MILD | WEAK",
+    "confidence":          "HIGH | MEDIUM | LOW  (LOW blocks credit strategies → NO_TRADE)",
+    "vixRegime":           "LOW | NORMAL | HIGH | EXTREME  (EXTREME → NO_TRADE immediately)",
+    "historicalVolatility":"0.0–1.0 decimal (e.g. 0.14 = 14% HV); iv/hv ratio determines IV regime",
+    "dte":                 "Calendar days to expiry; ≤ 4 → spreadWidthMin=50, > 4 → spreadWidthMax=100",
+    "atmStrike":           "Round number nearest to spot — used for EM calc and debit spread anchor",
+    "atmCallLtp":          "ATM straddle leg (for cross-check only; independent from calls list)",
+    "atmPutLtp":           "ATM straddle leg (for cross-check only; independent from puts list)",
+    "calls_iv":            "ATM call iv drives IV/HV ratio (L1 regime) and EM calculation (L2)",
+    "pop":                 "BUYER's PoP (prob ITM from Upstox); G1 uses seller's PoP = 1 − pop",
+    "pop_g1_rule":         "set shortPut pop ≤ 0.20 for G1 pass (seller PoP ≥ 80%)",
+    "delta":               "negative for puts (−0.20 = abs boundary); positive for calls (≤ 0.20 for credit short)",
+    "null_chain":          "set atmStrike to null to skip L2/L3 (engine exits at NO_TRADE or SKIP)"
+  },
+
+  "scenarioName": "28 Jun 2026 — BULLISH MILD VIX HIGH IV RICH → expected BULL_PUT_SPREAD all gates pass",
+
+  "bias":                "BULLISH",
+  "strength":            "MILD",
+  "confidence":          "MEDIUM",
+  "vixRegime":           "HIGH",
+  "vixLevel":            20.0,
+
+  "spot":                24000,
+  "vix":                 20.0,
+  "historicalVolatility": 0.14,
+  "dte":                 3,
+  "expiryDate":          "2026-07-07",
+  "lotSize":             65,
+  "capital":             500000,
+
+  "atmStrike":    24000,
+  "atmCallLtp":   200,
+  "atmPutLtp":    200,
+
+  "calls": [
+    {
+      "_comment": "ATM call — iv=0.185; HV=0.14 → ratio=1.32 > 1.05 → RICH; EM≈402; 1.2SD≈483",
+      "strike": 24000,
+      "ltp":    200,
+      "iv":     0.185,
+      "delta":  0.50,
+      "pop":    0.50
+    }
+  ],
+
+  "puts": [
+    {
+      "_comment": "short put — target boundary=23517 → round to 23500; delta abs=0.16 ≤ 0.20 ✓; pop=0.16 → sellerPoP=84% ≥ 80% ✓",
+      "strike": 23500,
+      "ltp":    22,
+      "iv":     0.195,
+      "delta":  -0.16,
+      "pop":    0.16
+    },
+    {
+      "_comment": "long put — spread=50 (DTE≤4); G3: |0.16−0.20|×100=4% ≤ 15% ✓",
+      "strike": 23450,
+      "ltp":    16,
+      "iv":     0.200,
+      "delta":  -0.13,
+      "pop":    0.20
+    }
+  ]
+}

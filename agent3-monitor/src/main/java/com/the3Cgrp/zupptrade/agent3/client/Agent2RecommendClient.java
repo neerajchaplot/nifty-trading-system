@@ -89,28 +89,31 @@ public class Agent2RecommendClient {
     /**
      * Calls Agent 2 /monitor-config to compute and persist the monitor config for a trade.
      *
-     * Agent 2 reads the trade from DB, computes T1/T2/T3 thresholds and greeks using the
-     * actual fill prices, writes monitor_config to the trades table, and returns the DTO.
+     * For 2-leg spreads: peShortFill and peLongFill are the SELL/BUY fill prices.
+     * For Iron Condor: also pass ceShortFill and ceLongFill for the CE spread.
+     * Null CE prices are ignored (headers omitted) — Agent 2 handles 2-leg path.
      *
-     * Called by MonitorSchedulerService when a trade is ACTIVE but monitor_config is null
-     * — this happens when Agent 5 set the trade ACTIVE but the /monitor-config call was
-     * never triggered (or failed).
-     *
-     * @param tradeId        the ACTIVE trade whose monitor_config needs populating
-     * @param shortFillPrice actual fill price of the short (SELL) leg
-     * @param longFillPrice  actual fill price of the long (BUY) leg
-     * @return populated MonitorConfigDto, or empty if Agent 2 is unavailable or errors
+     * @param tradeId       the ACTIVE trade whose monitor_config needs populating
+     * @param peShortFill   fill price of the PE SELL (or 2-leg SELL) leg
+     * @param peLongFill    fill price of the PE BUY (or 2-leg BUY) leg
+     * @param ceShortFill   fill price of the CE SELL leg (IC only, null for 2-leg)
+     * @param ceLongFill    fill price of the CE BUY leg (IC only, null for 2-leg)
+     * @return populated MonitorConfigDto, or empty on failure
      */
     public Optional<MonitorConfigDto> fetchMonitorConfig(UUID tradeId,
-                                                         BigDecimal shortFillPrice,
-                                                         BigDecimal longFillPrice) {
+                                                         BigDecimal peShortFill,
+                                                         BigDecimal peLongFill,
+                                                         BigDecimal ceShortFill,
+                                                         BigDecimal ceLongFill) {
         try {
-            MonitorConfigDto dto = agent2RestClient.get()
+            var req = agent2RestClient.get()
                     .uri("/api/v1/agent2/monitor-config/{id}", tradeId)
-                    .header("X-Short-Fill-Price", shortFillPrice.toPlainString())
-                    .header("X-Long-Fill-Price",  longFillPrice.toPlainString())
-                    .retrieve()
-                    .body(MonitorConfigDto.class);
+                    .header("X-Short-Fill-Price", peShortFill.toPlainString())
+                    .header("X-Long-Fill-Price",  peLongFill.toPlainString());
+            if (ceShortFill != null) req = req.header("X-CE-Short-Fill-Price", ceShortFill.toPlainString());
+            if (ceLongFill  != null) req = req.header("X-CE-Long-Fill-Price",  ceLongFill.toPlainString());
+
+            MonitorConfigDto dto = req.retrieve().body(MonitorConfigDto.class);
 
             if (dto == null) {
                 log.error("agent2.monitor_config.null_response tradeId={}", tradeId);
@@ -138,7 +141,7 @@ public class Agent2RecommendClient {
      * @return confirmed trade card, or empty on failure
      */
     public Optional<TradeCardDto> confirm(UUID tradeId) {
-        TradeConfirmRequestDto request = new TradeConfirmRequestDto(tradeId, ConfirmAction.CONFIRM, null);
+        TradeConfirmRequestDto request = new TradeConfirmRequestDto(tradeId, ConfirmAction.CONFIRM, null, null, null);
 
         try {
             TradeCardDto confirmed = agent2RestClient.post()

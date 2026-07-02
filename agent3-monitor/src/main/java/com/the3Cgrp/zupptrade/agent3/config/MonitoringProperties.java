@@ -45,6 +45,7 @@ public class MonitoringProperties {
 
     // Scheduler — cron and NSE market hours (IST)
     private String schedulerCron       = "0 */5 9-15 * * MON-FRI";
+    private String expiryPnlCron       = "0 30 8 * * MON-FRI"; // 8:30 AM — before market opens
     private int    marketOpenHour      = 9;
     private int    marketOpenMinute    = 15;
     private int    marketCloseHour     = 15;
@@ -94,6 +95,9 @@ public class MonitoringProperties {
 
     public String getSchedulerCron()            { return schedulerCron; }
     public void setSchedulerCron(String v)      { this.schedulerCron = v; }
+
+    public String getExpiryPnlCron()            { return expiryPnlCron; }
+    public void setExpiryPnlCron(String v)      { this.expiryPnlCron = v; }
 
     public int getMarketOpenHour()              { return marketOpenHour; }
     public void setMarketOpenHour(int v)        { this.marketOpenHour = v; }

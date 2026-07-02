@@ -19,6 +19,9 @@ public class TradingConfig {
     private BigDecimal minRocBasePct = new BigDecimal("0.5");
     private BigDecimal slippageAlertThreshold = new BigDecimal("0.10");
     private int tradeCardValidMinutes = 20;
+    private int debitSpreadWidth = 200;               // pts — debit spread width at low VIX
+    private BigDecimal maxLossDebitPct = new BigDecimal("0.5");  // 0.5% of capital max loss for debit
+    private BigDecimal maxDebitBreakevenDistancePts = new BigDecimal("30"); // max pts from spot to breakeven
     private Upstox upstox = new Upstox();
 
     public static class Upstox {
@@ -70,6 +73,12 @@ public class TradingConfig {
     public void setSlippageAlertThreshold(BigDecimal v) { this.slippageAlertThreshold = v; }
     public int getTradeCardValidMinutes() { return tradeCardValidMinutes; }
     public void setTradeCardValidMinutes(int v) { this.tradeCardValidMinutes = v; }
+    public int getDebitSpreadWidth() { return debitSpreadWidth; }
+    public void setDebitSpreadWidth(int v) { this.debitSpreadWidth = v; }
+    public BigDecimal getMaxLossDebitPct() { return maxLossDebitPct; }
+    public void setMaxLossDebitPct(BigDecimal v) { this.maxLossDebitPct = v; }
+    public BigDecimal getMaxDebitBreakevenDistancePts() { return maxDebitBreakevenDistancePts; }
+    public void setMaxDebitBreakevenDistancePts(BigDecimal v) { this.maxDebitBreakevenDistancePts = v; }
     public Upstox getUpstox() { return upstox; }
     public void setUpstox(Upstox upstox) { this.upstox = upstox; }
 }

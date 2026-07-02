@@ -20,6 +20,7 @@ public class TradeListService {
 
     public TradeListResponse getTrades(LocalDate from, LocalDate to, int page, int size) {
         int offset = page * size;
+
         List<TradeListItemDto> trades = repository
                 .findClosedTrades(from, to, offset, size)
                 .stream()
@@ -29,6 +30,14 @@ public class TradeListService {
         long total   = repository.countClosedTrades(from, to);
         boolean more = (long) offset + size < total;
 
-        return new TradeListResponse(trades, page, size, total, more, from, to);
+        // Corrupted trades: not paginated — always returned in full as a separate section.
+        // Excluded from total count and hasMore so clients know these are outside the main list.
+        List<TradeListItemDto> corrupted = repository
+                .findCorruptedTrades(from, to)
+                .stream()
+                .map(TradeListItemMapper::fromRow)
+                .toList();
+
+        return new TradeListResponse(trades, page, size, total, more, from, to, corrupted);
     }
 }

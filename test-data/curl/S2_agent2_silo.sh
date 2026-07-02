@@ -87,8 +87,50 @@ echo ""
 
 h "S2.8 — GET monitor-config (called by Agent 3 after execution)"
 info "Trade: T-207 (pre-confirmed BullPutSpread with entry_fills)"
-info "Expected: MonitorConfigDto with T1/T2/T3 thresholds and greeks"
-curl -s "$A2/api/v1/agent2/monitor-config/$T_BPS_CONF"
+info "Fill prices: SELL PE 24000 @ 64.50, BUY PE 23900 @ 38.15"
+info "Expected: MonitorConfigDto with strategy=BULL_PUT_SPREAD, thresholds, slippageAlert=false"
+curl -s "$A2/api/v1/agent2/monitor-config/$T_BPS_CONF" \
+  -H "X-Short-Fill-Price: 64.50" \
+  -H "X-Long-Fill-Price: 38.15"
+echo ""
+
+# ────────────────────────────────────────────────────────────────────────────
+# S2.9 — S2.11: Confirm the three new signal scenarios
+# Pre-requisite: 03_seed_agent2_trades.sql re-loaded (it now includes T-209/210/211)
+# ────────────────────────────────────────────────────────────────────────────
+
+h "S2.9 — CONFIRM: BullPutSpread from S03 (Bullish Mild + VIX Normal + IV Fair)"
+info "Trade: T-209 (signal: S03, 10L user)"
+info "Differentiator vs T-201: ivRegime=FAIR — tests BullPutSpread also fires for VIX Normal IV Fair"
+info "Expected: status=CONFIRMED, execution_order with SELL PE 24000 + BUY PE 23900"
+curl -s -X POST "$A2/api/v1/agent2/confirm" \
+  -H "Content-Type: application/json" \
+  -d "{\"tradeId\":\"$T_S03_PEND\",\"action\":\"CONFIRM\"}"
+echo ""
+
+h "S2.10 — CONFIRM: ShortStrangle from S06 (Neutral Weak + VIX Normal + IV Rich)"
+info "Trade: T-210 (signal: S06, 50L user — larger capital needed for naked position margin)"
+info "Key assertions:"
+info "  • strategy = SHORT_STRANGLE"
+info "  • 2 SELL legs only (SELL PE 23950 + SELL CE 24150) — no long legs"
+info "  • lots = 3 (margin-constrained — not lot-sized like a spread)"
+info "Expected: status=CONFIRMED, execution_order with 2 SELL legs"
+curl -s -X POST "$A2/api/v1/agent2/confirm" \
+  -H "Content-Type: application/json" \
+  -d "{\"tradeId\":\"$T_S06_PEND\",\"action\":\"CONFIRM\"}"
+echo ""
+
+h "S2.11 — CONFIRM: BearPutSpread from S10 (Bearish Extreme + VIX High)"
+info "Trade: T-211 (signal: S10, 10L user)"
+info "Key assertions:"
+info "  • strategy = BEAR_PUT_SPREAD (debit)"
+info "  • BUY leg is HIGH strike PE (23650), SELL leg is LOW strike PE (23550) — opposite of BullPutSpread"
+info "  • Gate 1 threshold = 35% (debit breakeven PoP), not 80% (credit PoP)"
+info "  • Instrument keys NSE_FO|79700/79701 are placeholders — real keys needed for Agent 5 test"
+info "Expected: status=CONFIRMED, execution_order with BUY PE 23650 + SELL PE 23550"
+curl -s -X POST "$A2/api/v1/agent2/confirm" \
+  -H "Content-Type: application/json" \
+  -d "{\"tradeId\":\"$T_S10_PEND\",\"action\":\"CONFIRM\"}"
 echo ""
 
 h "S2 DONE"

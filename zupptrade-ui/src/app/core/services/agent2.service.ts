@@ -2,7 +2,13 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { ConfirmRequest, RecommendRequest, TradeCard } from '../models/trade.model';
+import {
+  CalculateOverrideRequest,
+  CalculateOverrideResult,
+  ConfirmRequest,
+  RecommendRequest,
+  TradeCard,
+} from '../models/trade.model';
 
 @Injectable({ providedIn: 'root' })
 export class Agent2Service {
@@ -16,5 +22,9 @@ export class Agent2Service {
 
   confirm(request: ConfirmRequest): Observable<TradeCard> {
     return this.http.post<TradeCard>(`${this.base}/confirm`, request);
+  }
+
+  calculateOverride(request: CalculateOverrideRequest): Observable<CalculateOverrideResult> {
+    return this.http.post<CalculateOverrideResult>(`${this.base}/calculate-override`, request);
   }
 }

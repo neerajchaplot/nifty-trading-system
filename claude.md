@@ -540,7 +540,9 @@ NaN = treat as 0 (neutral). Log to data\_gaps.
 
 
 
-\*\*Source:\*\* NSE FII/DII CSV — published \~7 PM previous day.
+\*\*Source:\*\* Upstox \`/v2/market/fii\` and \`/v2/market/dii\` — same Bearer token, no NSE dependency.
+Segments: \`NSE\_FO|INDEX\_FUTURES\` (net futures + long ratio), \`NSE\_FO|INDEX\_OPTIONS\` (net options), \`NSE\_EQ|CASH\` (DII net cash).
+Query last 7 days (\`from=today-7d\`) — entries returned newest-first; \`entries.get(0)\` is always the most recent trading session.
 
 \*\*Note:\*\* FII long ratio improving (even if still net short) — store trend separately
 
@@ -1470,9 +1472,9 @@ public final class TradingConstants {
 
 \- SPAN margin file: Download daily at 9:00 AM. Direct file URL (stable).
 
-\- FII/DII CSV: Download at previous day \~7 PM. Parse by column header (not index).
-
 \- Holiday calendar: Fetch monthly. Store in reference\_data table.
+
+\*\*FII/DII data does NOT come from NSE.\*\* It comes from Upstox — see Upstox API section above.
 
 
 

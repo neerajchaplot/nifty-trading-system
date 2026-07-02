@@ -211,25 +211,43 @@ public class ReadjustmentService {
                 new TradeCloseInitiatedPayload("READJUST: " + reason, pnl, "AGENT3:READJUST"),
                 "AGENT3:READJUST");
 
-        if (config.shortLeg() == null || config.shortLeg().instrumentKey() == null ||
-            config.longLeg()  == null || config.longLeg().instrumentKey()  == null) {
+        boolean isIronCondor = config.shortLeg2() != null;
+
+        boolean missingKey = config.shortLeg() == null || config.shortLeg().instrumentKey() == null ||
+                             config.longLeg()  == null || config.longLeg().instrumentKey()  == null ||
+                             (isIronCondor && (config.shortLeg2().instrumentKey() == null ||
+                                              config.longLeg2() == null ||
+                                              config.longLeg2().instrumentKey() == null));
+        if (missingKey) {
             String msg = "Trade " + trade.tradeCode() + " readjust exit failed — instrumentKey missing. " +
                          "MANUAL INTERVENTION REQUIRED via Upstox app.";
-            log.error("readjust.exit.missing_instrument_key tradeId={}", tradeId);
+            log.error("readjust.exit.missing_instrument_key tradeId={} isIronCondor={}", tradeId, isIronCondor);
             alertService.critical(tradeId, "readjust_exit_no_key", msg);
             setExitFailed(tradeId, "Missing instrument key — readjust exit");
             return false;
         }
 
         int quantity = config.lots() * config.lotSize();
-        boolean success = agent5ExitClient.exitTrade(
-                tradeId,
-                "READJUST: " + reason,
-                config.shortLeg().instrumentKey(),
-                config.shortLeg().action(),
-                config.longLeg().instrumentKey(),
-                config.longLeg().action(),
-                quantity);
+        boolean success;
+        if (isIronCondor) {
+            success = agent5ExitClient.exitIronCondorTrade(
+                    tradeId,
+                    "READJUST: " + reason,
+                    config.shortLeg().instrumentKey(),  config.shortLeg().action(),
+                    config.longLeg().instrumentKey(),   config.longLeg().action(),
+                    config.shortLeg2().instrumentKey(), config.shortLeg2().action(),
+                    config.longLeg2().instrumentKey(),  config.longLeg2().action(),
+                    quantity);
+        } else {
+            success = agent5ExitClient.exitTrade(
+                    tradeId,
+                    "READJUST: " + reason,
+                    config.shortLeg().instrumentKey(),
+                    config.shortLeg().action(),
+                    config.longLeg().instrumentKey(),
+                    config.longLeg().action(),
+                    quantity);
+        }
 
         if (!success) {
             String msg = "Trade " + trade.tradeCode() + " readjust EXIT FAILED — Agent 5 could not close. " +

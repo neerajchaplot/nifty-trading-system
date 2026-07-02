@@ -69,16 +69,21 @@ Output files saved to `test-data/capture/snapshot/`:
 | `marketaux_sentiment.json` | Latest ^NSEI news sentiment |
 | `capture_meta.json` | Capture timestamp, DTE, summary |
 
-After capture, update instrument key placeholders in SQL seeds and curl scripts:
+SQL seeds and curl scripts are already updated with keys from the **2026-06-27 Friday capture** (expiry 2026-06-30, ATM=24050). No manual replacement needed for this expiry.
 
-```bash
-# Find all placeholders
-grep -r "NSE_FO|REPLACE" test-data/sql/
+When re-capturing for a new expiry, update all `NSE_FO|...` keys in `sql/03_*.sql`, `sql/04_*.sql`, `curl/S4_*.sh`, and `curl/S5_*.sh` with keys from `atm_strikes.json`.
 
-# Then replace with real keys from atm_strikes.json
-# Example replacement (use actual keys from the file):
-#   NSE_FO|REPLACE_SELL_PE_23800  →  NSE_FO|71234
-#   NSE_FO|REPLACE_BUY_PE_23700   →  NSE_FO|71235
+```
+# Keys in use (from 2026-06-27 capture):
+#   PE 23850 = NSE_FO|79714  LTP=29.45
+#   PE 23900 = NSE_FO|79723  LTP=38.15   ← BullPutSpread long leg
+#   PE 24000 = NSE_FO|71473  LTP=64.50   ← BullPutSpread short leg
+#   PE 24050 = NSE_FO|79731  LTP=82.80   ← ATM PE (used in T-205 reject test)
+#   PE 23950 = NSE_FO|79729  LTP=49.50   ← used in T-205 reject test
+#   CE 24100 = NSE_FO|79732  LTP=102.45  ← BullCallSpread long leg
+#   CE 24150 = NSE_FO|79734  LTP=78.10   ← BearCallSpread short / IC call short
+#   CE 24200 = NSE_FO|79736  LTP=58.70
+#   CE 24250 = NSE_FO|79738  LTP=43.55   ← BullCallSpread short / IC call long
 ```
 
 ---

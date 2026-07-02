@@ -53,10 +53,26 @@ public class StrategySelector {
         if (vixRegime == VixRegime.EXTREME) {
             return noTrade();
         }
-        if (confidence == Confidence.LOW) {
+
+        StrategySelection candidate = selectByBias(bias, strength, vixRegime, ivRegime);
+
+        // Confidence.LOW blocks directional credit strategies at Layer 1.
+        // Non-directional strategies (IronCondor, WideIronCondor) are exempt — they profit
+        // from sideways movement and don't require directional conviction, so low confidence
+        // on the direction is irrelevant to their thesis.
+        // Debit strategies are allowed through — Gate 3D rejects LOW confidence with a
+        // more informative reason tied to the quality of directional evidence.
+        boolean isNonDirectional = candidate.strategy() == Strategy.IRON_CONDOR
+                || candidate.strategy() == Strategy.WIDE_IRON_CONDOR;
+        if (confidence == Confidence.LOW && !candidate.strategy().isDebit() && !isNonDirectional) {
             return noTrade();
         }
 
+        return candidate;
+    }
+
+    private StrategySelection selectByBias(Bias bias, Strength strength,
+                                           VixRegime vixRegime, IvRegime ivRegime) {
         return switch (bias) {
             case BULLISH -> selectBullish(strength, vixRegime, ivRegime);
             case BEARISH -> selectBearish(strength, vixRegime, ivRegime);
@@ -69,6 +85,10 @@ public class StrategySelector {
             // Extreme bullish — go directional regardless of VIX/IV
             return new StrategySelection(Strategy.BULL_CALL_SPREAD, SpreadDirection.DEBIT);
         }
+        if (strength == Strength.MILD && vixRegime == VixRegime.LOW) {
+            // Low VIX = cheap premiums — debit is better R:R than selling thin credit
+            return new StrategySelection(Strategy.BULL_CALL_SPREAD, SpreadDirection.DEBIT);
+        }
         if (strength == Strength.MILD
                 && (vixRegime == VixRegime.HIGH || vixRegime == VixRegime.NORMAL)
                 && ivRegime == IvRegime.RICH) {
@@ -79,9 +99,19 @@ public class StrategySelector {
 
     private StrategySelection selectBearish(Strength strength, VixRegime vixRegime, IvRegime ivRegime) {
         if ((strength == Strength.EXTREME || strength == Strength.MILD)
+                && vixRegime == VixRegime.LOW) {
+            // Low VIX = cheap puts — debit bear put spread is better than selling thin call credit
+            return new StrategySelection(Strategy.BEAR_PUT_SPREAD, SpreadDirection.DEBIT);
+        }
+        if ((strength == Strength.EXTREME || strength == Strength.MILD)
                 && (vixRegime == VixRegime.HIGH || vixRegime == VixRegime.NORMAL)
                 && ivRegime == IvRegime.RICH) {
             return new StrategySelection(Strategy.BEAR_CALL_SPREAD, SpreadDirection.CREDIT);
+        }
+        // WEAK bearish is functionally neutral — reuse neutral logic (IronCondor/WideIronCondor)
+        // rather than skipping. Directional conviction is absent but IV richness can still be harvested.
+        if (strength == Strength.WEAK) {
+            return selectNeutral(Strength.WEAK, vixRegime, ivRegime);
         }
         return skip();
     }
@@ -100,25 +130,24 @@ public class StrategySelector {
 
     private IvRegime resolveIvRegime(RecommendationContext ctx) {
         java.math.BigDecimal hv = ctx.getHistoricalVolatility();
-        java.math.BigDecimal vix = ctx.getVix();
 
         if (hv == null || hv.compareTo(java.math.BigDecimal.ZERO) == 0) {
-            // HV unavailable — cannot compute ratio; FAIR is the safe default
             log.debug("layer1.ivRegime.hv_unavailable → FAIR");
             return IvRegime.FAIR;
         }
-        if (vix == null || vix.compareTo(java.math.BigDecimal.ZERO) == 0) {
-            log.debug("layer1.ivRegime.vix_unavailable → FAIR");
+
+        // Prefer ATM option IV from the already-fetched option chain.
+        // VIX is a 30-day blended index; the actual ATM IV for the specific expiry
+        // (especially near-term) can differ materially and is the correct richness measure.
+        // Fall back to VIX / 100 only when chain data is absent.
+        java.math.BigDecimal iv = resolveIv(ctx);
+        if (iv == null || iv.compareTo(java.math.BigDecimal.ZERO) == 0) {
+            log.debug("layer1.ivRegime.iv_unavailable → FAIR");
             return IvRegime.FAIR;
         }
 
-        // IV = VIX / 100   (VIX is expressed as a percentage, e.g. 15.5 → IV = 0.155)
-        // HV is already a decimal (e.g. 0.1540 = 15.40%)
-        // ratio > 1.2 → IV is expensive (RICH) → sell premium
-        // ratio < 0.85 → IV is cheap (CHEAP) → buy premium
-        double iv = vix.doubleValue() / 100.0;
-        double hvD = hv.doubleValue();
-        double ratio = iv / hvD;
+        String ivSource = (ctx.getOptionChainData() != null) ? "atm_chain" : "vix_proxy";
+        double ratio = iv.doubleValue() / hv.doubleValue();
 
         IvRegime regime;
         if (ratio > config.getIvHvRichThreshold().doubleValue()) {
@@ -129,9 +158,35 @@ public class StrategySelector {
             regime = IvRegime.FAIR;
         }
 
-        log.debug("layer1.ivRegime.resolved vix={} iv={} hv={} ratio={} → {}",
-                vix, iv, hvD, ratio, regime);
+        log.debug("layer1.ivRegime.resolved iv_source={} vix={} iv={} hv={} ratio={} → {}",
+                ivSource, ctx.getVix(), iv, hv, ratio, regime);
         return regime;
+    }
+
+    /**
+     * Resolves the implied volatility to use for IV/HV ratio calculation.
+     * Reads ATM call IV from the option chain (the market's actual reading for this expiry).
+     * Falls back to VIX / 100 when the chain is unavailable or the ATM IV is zero/null.
+     */
+    private java.math.BigDecimal resolveIv(RecommendationContext ctx) {
+        com.the3Cgrp.zupptrade.agent2.client.model.OptionChainData chain = ctx.getOptionChainData();
+        if (chain != null && chain.calls() != null) {
+            java.math.BigDecimal atmIv = chain.calls().stream()
+                    .filter(s -> s.strike() == chain.atmStrike())
+                    .findFirst()
+                    .map(s -> s.iv())
+                    .filter(v -> v != null && v.compareTo(java.math.BigDecimal.ZERO) > 0)
+                    .orElse(null);
+            if (atmIv != null) {
+                return atmIv;
+            }
+        }
+        // Fallback: VIX / 100 (e.g. VIX 15.5 → IV 0.155)
+        java.math.BigDecimal vix = ctx.getVix();
+        if (vix != null && vix.compareTo(java.math.BigDecimal.ZERO) > 0) {
+            return vix.divide(java.math.BigDecimal.valueOf(100), 6, java.math.RoundingMode.HALF_UP);
+        }
+        return null;
     }
 
     private StrategySelection noTrade() {

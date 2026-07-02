@@ -20,6 +20,8 @@ public record TradeCardDto(
         int dte,
         TradeLegDto shortLeg,
         TradeLegDto longLeg,
+        TradeLegDto shortLeg2,              // IC only: CE SELL leg (null for 2-leg spreads)
+        TradeLegDto longLeg2,               // IC only: CE BUY leg (null for 2-leg spreads)
         BigDecimal netPremiumPerUnit,
         int lots,
         int lotSize,

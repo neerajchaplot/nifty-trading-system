@@ -8,6 +8,8 @@ import com.the3Cgrp.zupptrade.shared.enums.Bias;
 import com.the3Cgrp.zupptrade.shared.enums.Confidence;
 import com.the3Cgrp.zupptrade.shared.enums.Strength;
 import com.the3Cgrp.zupptrade.shared.enums.VixRegime;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -28,6 +30,8 @@ import java.util.List;
 @Component
 public class SignalComposer {
 
+    private static final Logger log = LoggerFactory.getLogger(SignalComposer.class);
+
     private static final BigDecimal BULLISH_EXTREME = new BigDecimal("0.50");
     private static final BigDecimal BULLISH_MILD    = new BigDecimal("0.25");
     private static final BigDecimal BULLISH_WEAK    = new BigDecimal("0.10");
@@ -46,17 +50,33 @@ public class SignalComposer {
         Bias bias = determineActualBias(composite);
         Strength strength = determineStrength(composite);
 
+        // Log composite breakdown
+        StringBuilder breakdown = new StringBuilder("agent1.composer composite: ");
+        tierScores.forEach(t -> breakdown.append(t.tierName()).append("(").append(t.contribution()).append(") "));
+        log.info("{} = {}", breakdown, composite);
+        log.info("agent1.composer bias={} strength={}", bias, strength);
+
         BigDecimal baseConfidence = computeBaseConfidence(tierScores, bias);
         BigDecimal vixModifier = vixModifier(inputs.getVixRegime());
         BigDecimal adxModifier = adxModifier(inputs.getIndicators().adx14());
+
+        log.info("agent1.composer confidence_base: {}/{} tiers agree with {} → {}",
+                Math.round(baseConfidence.multiply(BigDecimal.valueOf(tierScores.size())).doubleValue()),
+                tierScores.size(), bias, baseConfidence);
+        log.info("agent1.composer confidence_modifiers: vix_regime={} vix_modifier={} adx={} adx_modifier={}",
+                inputs.getVixRegime(), vixModifier, inputs.getIndicators().adx14(), adxModifier);
 
         BigDecimal confidenceScore = baseConfidence.multiply(vixModifier).multiply(adxModifier)
                 .setScale(4, RoundingMode.HALF_UP);
 
         boolean commentaryDivergence = isTier4Diverging(tierScores, bias);
         if (commentaryDivergence) {
-            confidenceScore = confidenceScore.multiply(props.getConfidence().getDivergencePenalty())
-                    .setScale(4, RoundingMode.HALF_UP);
+            BigDecimal penalty = props.getConfidence().getDivergencePenalty();
+            log.info("agent1.composer commentary_divergence: YES — applying penalty {} → {} × {} = {}",
+                    penalty, confidenceScore, penalty, confidenceScore.multiply(penalty).setScale(4, RoundingMode.HALF_UP));
+            confidenceScore = confidenceScore.multiply(penalty).setScale(4, RoundingMode.HALF_UP);
+        } else {
+            log.info("agent1.composer commentary_divergence: NO");
         }
 
         // Cap at 1.0
@@ -65,6 +85,9 @@ public class SignalComposer {
         }
 
         Confidence confidenceLabel = toConfidenceLabel(confidenceScore);
+        log.info("agent1.composer final: composite={} bias={} strength={} confidence={} label={}",
+                composite, bias, strength, confidenceScore, confidenceLabel);
+
         String vixDirection = computeVixDirection(inputs.getVixLevel(), inputs.getVixPrevLevel());
 
         Agent1SignalEntity entity = new Agent1SignalEntity();

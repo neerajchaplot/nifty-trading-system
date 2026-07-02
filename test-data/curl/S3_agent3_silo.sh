@@ -5,149 +5,171 @@
 # All tests use the niftySpot override body — works OFFLINE (no Upstox needed).
 # Pre-requisites: Run 04_seed_agent3_active_trades.sql first.
 #
-# For shortLegLtp / longLegLtp in WATCH/READJUST scenarios:
-#   These are synthetic prices that create a mark-to-market loss at the
-#   corresponding threshold. They do not have to be accurate — Agent 3
-#   uses them for P&L display but the threshold decision is driven by niftySpot.
+# CreditSpreadMonitorStrategy uses PoP-based decisions (not Nifty level thresholds):
+#   PoP ≥ 80% → HOLD    PoP 75–79% → WATCH
+#   PoP 65–74% → READJUST    PoP < 65% → EXIT
+#   VIX > 24 → PAUSE   Spot ≤ short strike (PE) → T3_SHORT_STRIKE_BREACH → EXIT
+#
+# IV overrides calibrated for DTE=4 (test date 2026-06-26, expiry 2026-06-30):
+#   HOLD     : spot=24450, σ=0.185 → PoP≈83.8%
+#   WATCH    : spot=24350, σ=0.192 → PoP≈77.2%
+#   READJUST : spot=24200, σ=0.200 → PoP≈66.3%
+#   EXIT     : spot=23950 → breach detection (σ irrelevant)
+#
+# BullCallSpread (T-306, T-307): DebitSpreadMonitorStrategy
+#   shortLeg=SELL CE 24250, longLeg=BUY CE 24100, entryNetDebit=58.90
+#   t1WatchNiftyLevel=24200 (→ WATCH), t2ReadjustNiftyLevel=24250 (→ EXIT profit)
+#   t2LossThreshold=3829 (total Rs loss stop = 50% of debit paid)
 # ─────────────────────────────────────────────────────────────────────────────
 source "$(dirname "$0")/vars.sh"
 
 h "S3 — Agent 3 silo tests (offline mode)"
 
 # ────────────────────────────────────────────────────────────────────────────
-# S3.1 — HOLD: Nifty well above T1
-# Trade: T-301 BullPutSpread (short=23500, T1=23650)
-# Spot 24200 >> T1 23650 → HOLD
+# S3.1 — HOLD: spot=24450, σ=0.185 → PoP≈83.8% ≥ 80% → HOLD
+# Trade: T-301 BullPutSpread (short=24000)
 # ────────────────────────────────────────────────────────────────────────────
 
-h "S3.1 — Expected action: HOLD (spot 24200, T1=23650)"
+h "S3.1 — Expected action: HOLD (spot 24450, σ=0.185, PoP≈83.8%)"
 curl -s -X POST "$A3/api/v1/agent3/evaluate/$T_A3_HOLD" \
   -H "Content-Type: application/json" \
   -d '{
-    "niftySpot": 24200,
-    "vix": 18.5,
-    "shortLegLtp": 20.50,
-    "longLegLtp":  9.80,
+    "niftySpot": 24450,
+    "vix": 17.5,
+    "shortLegLtp": 15.00,
+    "longLegLtp":  6.00,
     "shortLegIv":  0.185
   }'
 echo ""
 
 # ────────────────────────────────────────────────────────────────────────────
-# S3.2 — WATCH: Nifty at T1 (short_strike + 150 = 23650)
+# S3.2 — WATCH: spot=24350, σ=0.192 → PoP≈77.2% (75–79%) → WATCH
+# Trade: T-302 BullPutSpread (short=24000)
 # ────────────────────────────────────────────────────────────────────────────
 
-h "S3.2 — Expected action: WATCH (spot 23650, exactly at T1)"
+h "S3.2 — Expected action: WATCH (spot 24350, σ=0.192, PoP≈77.2%)"
 curl -s -X POST "$A3/api/v1/agent3/evaluate/$T_A3_WATCH" \
   -H "Content-Type: application/json" \
   -d '{
-    "niftySpot": 23650,
-    "vix": 19.2,
-    "shortLegLtp": 58.40,
-    "longLegLtp":  28.10,
-    "shortLegIv":  0.198
+    "niftySpot": 24350,
+    "vix": 18.2,
+    "shortLegLtp": 28.00,
+    "longLegLtp":  14.00,
+    "shortLegIv":  0.192
   }'
 echo ""
 
 # ────────────────────────────────────────────────────────────────────────────
-# S3.3 — READJUST: Nifty at T2 (short_strike + 75 = 23575)
+# S3.3 — READJUST: spot=24200, σ=0.200 → PoP≈66.3% (65–74%) → READJUST
+# Trade: T-303 BullPutSpread (short=24000)
 # ────────────────────────────────────────────────────────────────────────────
 
-h "S3.3 — Expected action: READJUST (spot 23575, at T2)"
+h "S3.3 — Expected action: READJUST (spot 24200, σ=0.200, PoP≈66.3%)"
 curl -s -X POST "$A3/api/v1/agent3/evaluate/$T_A3_READJUST" \
   -H "Content-Type: application/json" \
   -d '{
-    "niftySpot": 23575,
-    "vix": 20.5,
-    "shortLegLtp": 82.50,
-    "longLegLtp":  48.20,
-    "shortLegIv":  0.218
+    "niftySpot": 24200,
+    "vix": 19.1,
+    "shortLegLtp": 55.00,
+    "longLegLtp":  35.00,
+    "shortLegIv":  0.200
   }'
 echo ""
 
 # ────────────────────────────────────────────────────────────────────────────
-# S3.4 — EXIT: Nifty breaches short strike (23450 < 23500)
+# S3.4 — EXIT: Nifty breaches short strike (23950 < 24000)
 # ────────────────────────────────────────────────────────────────────────────
 
-h "S3.4 — Expected action: EXIT (spot 23450, breached short strike 23500)"
+h "S3.4 — Expected action: EXIT (spot 23950, breached short strike 24000)"
 curl -s -X POST "$A3/api/v1/agent3/evaluate/$T_A3_EXIT" \
   -H "Content-Type: application/json" \
   -d '{
-    "niftySpot": 23450,
-    "vix": 22.0,
-    "shortLegLtp": 115.80,
-    "longLegLtp":   72.40,
-    "shortLegIv":   0.238
+    "niftySpot": 23950,
+    "vix": 19.8,
+    "shortLegLtp": 148.00,
+    "longLegLtp":  105.00,
+    "shortLegIv":  0.238
   }'
 echo ""
 
 # ────────────────────────────────────────────────────────────────────────────
-# S3.5 — EXIT: VIX spike override
-# Spot is fine (24100 >> T1=23650) but VIX jumped from 18.5 → 32.0 (+73%)
+# S3.5 — PAUSE: VIX Extreme override
+# Spot=24450 (fine, PoP would be HOLD) but VIX=32.0 > 24 (Extreme)
+# Expected: PAUSE — VIX Extreme check fires before any PoP/price logic.
+# MonitorAction.PAUSE = auto-trading suspended, manual review required.
 # ────────────────────────────────────────────────────────────────────────────
 
-h "S3.5 — Expected action: EXIT (VIX spike 18.5→32.0, spot fine)"
-info "Previous VIX stored in monitoring_evaluations — seed a row first if needed:"
-info "INSERT INTO monitoring_evaluations (trade_id, vix_level, ...) for $T_A3_VIX"
+h "S3.5 — Expected action: PAUSE (VIX=32.0 Extreme, spot 24450 is fine but VIX overrides)"
+info "VIX > 24 triggers PAUSE (auto-trading suspended, manual review required)."
+info "VIX Extreme check fires FIRST before any PoP/price logic."
 curl -s -X POST "$A3/api/v1/agent3/evaluate/$T_A3_VIX" \
   -H "Content-Type: application/json" \
   -d '{
-    "niftySpot": 24100,
+    "niftySpot": 24450,
     "vix": 32.0,
-    "shortLegLtp": 28.50,
-    "longLegLtp":  12.30,
-    "shortLegIv":  0.220
+    "shortLegLtp": 15.00,
+    "longLegLtp":  6.00,
+    "shortLegIv":  0.185
   }'
 echo ""
 
 # ────────────────────────────────────────────────────────────────────────────
-# S3.6 — EXIT (profit): BullCallSpread — Nifty above T1 profit target
-# Trade: T-306 BullCallSpread (BUY 24200 CE / SELL 24400 CE)
-# T1 profit target: Nifty at 24470. Send spot 24480 → EXIT (book profit).
+# S3.6 — EXIT (profit): BullCallSpread — Nifty reaches T2 1% RoC target
+# Trade: T-306 BullCallSpread (BUY CE 24100 / SELL CE 24250)
+# t2ReadjustNiftyLevel=24250. Send spot=24250 → T2 profit target hit → EXIT.
+# shortLegLtp=55.00 (SELL CE 24250), longLegLtp=160.00 (BUY CE 24100)
+# MTM = (160-55 - 58.90) × 130 = +5993 (profit, no loss stop triggered)
 # ────────────────────────────────────────────────────────────────────────────
 
-h "S3.6 — Expected action: EXIT profit (BullCallSpread, spot 24480 > T1=24470)"
+h "S3.6 — Expected action: EXIT profit (BullCallSpread, spot 24250 > T1=24200)"
 curl -s -X POST "$A3/api/v1/agent3/evaluate/$T_A3_PROFIT" \
   -H "Content-Type: application/json" \
   -d '{
-    "niftySpot": 24480,
+    "niftySpot": 24250,
     "vix": 14.8,
-    "shortLegLtp": 58.20,
-    "longLegLtp":  195.40,
+    "shortLegLtp": 55.00,
+    "longLegLtp":  160.00,
     "shortLegIv":  0.162
   }'
 echo ""
 
 # ────────────────────────────────────────────────────────────────────────────
 # S3.7 — EXIT (loss cut): BullCallSpread — MTM loss > 50% of premium paid
-# Trade: T-307. Entry net debit=72.80. 50% = 36.40/unit.
-# Pass shortLegLtp=12.50 / longLegLtp=130.00 → net = 12.50-130.00 = -117.50
-# MTM loss/unit = 117.50 - 72.80 = 44.70 > 36.40 → EXIT
+# Trade: T-307. entryNetDebit=58.90. t2LossThreshold=3829.
+# spot=24000: both CE 24100 (longLeg) and CE 24250 (shortLeg) deeply OTM.
+# shortLegLtp=2.00 (SELL CE 24250), longLegLtp=10.00 (BUY CE 24100)
+# currentNetPremium(DEBIT) = 10 - 2 = 8.00
+# MTM = (8.00 - 58.90) × 2 × 65 = -50.90 × 130 = -6617 ≤ -3829 → EXIT
 # ────────────────────────────────────────────────────────────────────────────
 
-h "S3.7 — Expected action: EXIT loss cut (BullCallSpread, MTM > 50% of premium)"
+h "S3.7 — Expected action: EXIT loss cut (BullCallSpread, MTM loss Rs 6617 > threshold Rs 3829)"
+info "spot=24000 → both CE 24100 and CE 24250 deeply OTM with DTE=4."
+info "shortLegLtp=2.00 (SELL CE 24250), longLegLtp=10.00 (BUY CE 24100)"
+info "currentNetPremium = 10-2 = 8. MTM = (8 - 58.90) × 2 × 65 = -6617 ≤ -3829 → EXIT"
 curl -s -X POST "$A3/api/v1/agent3/evaluate/$T_A3_LOSSCUT" \
   -H "Content-Type: application/json" \
   -d '{
-    "niftySpot": 23800,
-    "vix": 18.2,
-    "shortLegLtp": 12.50,
-    "longLegLtp":  130.00,
+    "niftySpot": 24000,
+    "vix": 16.2,
+    "shortLegLtp": 2.00,
+    "longLegLtp":  10.00,
     "shortLegIv":  0.175
   }'
 echo ""
 
 # ────────────────────────────────────────────────────────────────────────────
-# S3.8 — Error path: evaluate expired trade
+# S3.8 — Error path: evaluate CLOSED trade
 # Status must be ACTIVE or EXIT_FAILED — CLOSED should return 409
-# (Use any trade that's been set to CLOSED — or create one manually)
 # ────────────────────────────────────────────────────────────────────────────
 
 h "S3.8 — Error: evaluate CLOSED trade (expect 409 Conflict)"
 info "Set a trade to CLOSED first:"
 info "UPDATE zupptrade_dev.trades SET status='CLOSED' WHERE id='$T_A3_HOLD';"
 info "(revert after test)"
+# TODO: Add pre-seeded CLOSED trade (T-308) so this test runs without manual SQL.
+# See test-data/TODO.md
 # curl -s -X POST "$A3/api/v1/agent3/evaluate/$T_A3_HOLD" \
 #   -H "Content-Type: application/json" \
-#   -d '{"niftySpot": 24200, "vix": 18.5}'
+#   -d '{"niftySpot": 24300, "vix": 17.5}'
 
 h "S3 DONE"

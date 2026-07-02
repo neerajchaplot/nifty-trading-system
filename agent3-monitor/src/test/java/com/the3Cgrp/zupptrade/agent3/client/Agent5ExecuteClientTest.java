@@ -102,6 +102,31 @@ class Agent5ExecuteClientTest {
         assertThat(result).isTrue(); // trade is live despite slippage
     }
 
+    @Test
+    void execute_ironCondor_sends4Legs() {
+        // IC trade card has shortLeg2 + longLeg2 — all 4 legs must appear in the HTTP request
+        mockServer.expect(requestTo("http://agent5-test/api/v1/agent5/execute"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(jsonPath("$.legs.length()").value(4))
+                .andExpect(jsonPath("$.legs[0].action").value("SELL"))          // PE short
+                .andExpect(jsonPath("$.legs[0].optionType").value("PE"))
+                .andExpect(jsonPath("$.legs[0].instrumentKey").value("NFO_OPT|NIFTY|2026-06-17|23500|PE"))
+                .andExpect(jsonPath("$.legs[1].action").value("BUY"))           // PE long
+                .andExpect(jsonPath("$.legs[1].optionType").value("PE"))
+                .andExpect(jsonPath("$.legs[2].action").value("SELL"))          // CE short
+                .andExpect(jsonPath("$.legs[2].optionType").value("CE"))
+                .andExpect(jsonPath("$.legs[2].instrumentKey").value("NFO_OPT|NIFTY|2026-06-17|24000|CE"))
+                .andExpect(jsonPath("$.legs[3].action").value("BUY"))           // CE long
+                .andExpect(jsonPath("$.legs[3].optionType").value("CE"))
+                .andExpect(jsonPath("$.legs[0].quantity").value(390))           // 6 lots × 65
+                .andRespond(withSuccess(executeResponseJson("ACTIVE", false, null), MediaType.APPLICATION_JSON));
+
+        boolean result = client.execute(ironCondorTradeCard());
+
+        assertThat(result).isTrue();
+        mockServer.verify();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private TradeCardDto sampleTradeCard() {
@@ -116,11 +141,40 @@ class Agent5ExecuteClientTest {
                 TRADE_ID, Strategy.BULL_PUT_SPREAD, SpreadDirection.CREDIT,
                 LocalDate.of(2026, 6, 17), 3,
                 shortLeg, longLeg,
+                null, null,                                      // shortLeg2, longLeg2 — 2-leg spread
                 new BigDecimal("17.30"), 6, 65,
                 new BigDecimal("6747.00"), new BigDecimal("39000.00"), new BigDecimal("19500.00"),
                 new BigDecimal("82.00"), new BigDecimal("88.00"), new BigDecimal("6.00"),
                 new BigDecimal("1.07"), new BigDecimal("130.00"), new BigDecimal("-0.04"),
                 null, null, "Bull put spread — bearish setup, credit 17.30",
+                null, null, TradeStatus.CONFIRMED
+        );
+    }
+
+    private TradeCardDto ironCondorTradeCard() {
+        TradeLegDto peShort = new TradeLegDto(OptionType.PE, 23500,
+                new BigDecimal("40.00"), LegAction.SELL, new BigDecimal("-0.18"),
+                new BigDecimal("0.82"), "NFO_OPT|NIFTY|2026-06-17|23500|PE");
+        TradeLegDto peLong = new TradeLegDto(OptionType.PE, 23400,
+                new BigDecimal("24.50"), LegAction.BUY, new BigDecimal("-0.14"),
+                new BigDecimal("0.86"), "NFO_OPT|NIFTY|2026-06-17|23400|PE");
+        TradeLegDto ceShort = new TradeLegDto(OptionType.CE, 24000,
+                new BigDecimal("30.00"), LegAction.SELL, new BigDecimal("0.16"),
+                new BigDecimal("0.84"), "NFO_OPT|NIFTY|2026-06-17|24000|CE");
+        TradeLegDto ceLong = new TradeLegDto(OptionType.CE, 24100,
+                new BigDecimal("18.00"), LegAction.BUY, new BigDecimal("0.12"),
+                new BigDecimal("0.88"), "NFO_OPT|NIFTY|2026-06-17|24100|CE");
+
+        return new TradeCardDto(
+                TRADE_ID, Strategy.IRON_CONDOR, SpreadDirection.CREDIT,
+                LocalDate.of(2026, 6, 17), 3,
+                peShort, peLong,
+                ceShort, ceLong,                                 // shortLeg2, longLeg2
+                new BigDecimal("27.50"), 6, 65,
+                new BigDecimal("10725.00"), new BigDecimal("46800.00"), new BigDecimal("23400.00"),
+                new BigDecimal("82.00"), new BigDecimal("84.00"), new BigDecimal("2.00"),
+                new BigDecimal("1.07"), new BigDecimal("130.00"), new BigDecimal("-0.02"),
+                null, null, "Iron condor — neutral bias, VIX normal",
                 null, null, TradeStatus.CONFIRMED
         );
     }

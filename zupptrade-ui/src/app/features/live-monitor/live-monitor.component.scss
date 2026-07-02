@@ -182,6 +182,24 @@
 .tl-t2 { color: #EA580C; }
 .tl-t3 { color: #DC2626; }
 
+/* Iron Condor threshold grid */
+.ic-threshold-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.ic-side { display: flex; flex-direction: column; gap: 0; }
+.ic-side-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748B;
+  margin-bottom: 5px;
+}
+.ic-threshold-grid .threshold-label { width: 24px; font-size: 10px; }
+.ic-threshold-grid .threshold-level { width: 46px; font-size: 10px; }
+
 /* P&L row */
 .lt-pnl-row {
   display: flex;

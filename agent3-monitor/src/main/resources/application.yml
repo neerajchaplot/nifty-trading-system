@@ -65,6 +65,8 @@ agent3:
   monitoring:
     # Scheduler — every 5 min during NSE market hours (9-15 block, filtered in code to 9:15-15:30 IST)
     scheduler-cron: "0 */5 9-15 * * MON-FRI"
+    # Morning sweep — 8:30 AM before market opens, settles P&L for expired-but-still-ACTIVE trades
+    expiry-pnl-cron: "0 30 8 * * MON-FRI"
     market-open-hour: 9
     market-open-minute: 15
     market-close-hour: 15
