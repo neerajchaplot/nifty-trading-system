@@ -82,6 +82,7 @@ upstox:
   api:
     base-url: https://api.upstox.com
     access-token: ${UPSTOX_ACCESS_TOKEN:}
+    token-encryption-key: ${TOKEN_ENCRYPTION_KEY:}
 
 marketaux:
   api:
