@@ -1,4 +1,6 @@
-export const environment = {
+import { AppEnvironment } from './environment.interface';
+
+export const environment: AppEnvironment = {
   production: false,
   apiKey: 'dev-internal-key',
   agent1BaseUrl: '/api/agent1',

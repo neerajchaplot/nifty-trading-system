@@ -1,4 +1,6 @@
-export const environment = {
+import { AppEnvironment } from './environment.interface';
+
+export const environment: AppEnvironment = {
   production: true,
   apiKey: '${API_KEY}',          // replaced at container start via envsubst
   agent1BaseUrl: '/api/agent1',
