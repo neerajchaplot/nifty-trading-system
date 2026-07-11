@@ -1,0 +1,32 @@
+# Dependencies — never commit; restored via `npm install`
+node_modules/
+
+# Build outputs
+/dist/
+/www/
+/tmp/
+/out-tsc/
+/.angular/
+
+# Capacitor / native build artifacts
+/android/app/build/
+/android/build/
+/android/.gradle/
+/android/captures/
+/android/local.properties
+/ios/App/Pods/
+/ios/App/build/
+/ios/App/output/
+
+# Testing
+/coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# System / IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Git Branching Strategy — Nifty Trading System</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      background: #f8fafc;
+      color: #0f172a;
+      padding: 40px 24px;
+    }
+
+    h1 {
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #64748b;
+      margin-bottom: 32px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 32px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* ── Diagram ── */
+    .diagram-wrap {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    .diagram-wrap svg {
+      width: 100%;
+      height: auto;
+    }
+
+    /* ── Cheat sheet ── */
+    .cheatsheet {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .phase-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05);
+    }
+    .phase-header {
+      padding: 10px 16px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .phase-num {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      color: #fff;
+      flex-shrink: 0;
+    }
+    .phase-body { padding: 14px 16px; }
+
+    .note {
+      font-size: 12px;
+      color: #64748b;
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+    .note strong { color: #0f172a; }
+
+    pre {
+      background: #0f172a;
+      color: #e2e8f0;
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-family: ui-monospace, 'Cascadia Code', monospace;
+      font-size: 12px;
+      line-height: 1.8;
+      overflow-x: auto;
+    }
+    .cmd-comment { color: #64748b; }
+    .cmd-key     { color: #7dd3fc; }
+
+    /* Phase colours */
+    .p1 .phase-header { background: #eff6ff; color: #1d4ed8; }
+    .p1 .phase-num    { background: #3b82f6; }
+
+    .p2 .phase-header { background: #fef3c7; color: #92400e; }
+    .p2 .phase-num    { background: #f59e0b; }
+
+    .p3 .phase-header { background: #fdf2f8; color: #9d174d; }
+    .p3 .phase-num    { background: #ec4899; }
+
+    .p4 .phase-header { background: #d1fae5; color: #065f46; }
+    .p4 .phase-num    { background: #10b981; }
+
+    .p5 .phase-header { background: #fef3c7; color: #92400e; }
+    .p5 .phase-num    { background: #f59e0b; }
+
+    /* sync table */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-top: 10px;
+    }
+    th {
+      background: #f1f5f9;
+      padding: 6px 10px;
+      text-align: left;
+      font-weight: 700;
+      color: #475569;
+      border: 1px solid #e2e8f0;
+    }
+    td {
+      padding: 6px 10px;
+      border: 1px solid #e2e8f0;
+      color: #334155;
+      font-family: ui-monospace, monospace;
+      font-size: 11px;
+    }
+    tr:last-child td { background: #f0fdf4; font-weight: 700; color: #065f46; }
+
+    .loop-note {
+      font-size: 12px;
+      color: #94a3b8;
+      text-align: center;
+      padding: 8px;
+      border-top: 1px dashed #e2e8f0;
+    }
+
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Git Branching Strategy</h1>
+  <p class="subtitle">Nifty Trading System — personal dev branch workflow with daily sync</p>
+
+  <div class="layout">
+
+    <!-- ── DIAGRAM ── -->
+    <div class="diagram-wrap">
+      <svg viewBox="0 0 780 820" xmlns="http://www.w3.org/2000/svg"
+           font-family="ui-monospace,'Cascadia Code',monospace" role="img">
+        <title>Git Branching Strategy Diagram</title>
+        <desc>5-phase git workflow: setup, daily sync, make changes, raise PR, post-merge sync</desc>
+
+        <rect width="780" height="820" fill="#f8fafc" rx="12"/>
+        <text x="390" y="30" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">Personal Git Branching Strategy</text>
+
+        <!-- Column headers -->
+        <rect x="20"  y="44" width="200" height="28" rx="6" fill="#dbeafe"/>
+        <rect x="234" y="44" width="200" height="28" rx="6" fill="#fef3c7"/>
+        <rect x="448" y="44" width="200" height="28" rx="6" fill="#d1fae5"/>
+        <rect x="662" y="44" width="98"  height="28" rx="6" fill="#ede9fe"/>
+        <text x="120" y="63" text-anchor="middle" font-size="11" font-weight="700" fill="#1d4ed8">LOCAL</text>
+        <text x="334" y="63" text-anchor="middle" font-size="11" font-weight="700" fill="#92400e">origin / dev (personal)</text>
+        <text x="548" y="63" text-anchor="middle" font-size="11" font-weight="700" fill="#065f46">origin / main</text>
+        <text x="711" y="63" text-anchor="middle" font-size="11" font-weight="700" fill="#6d28d9">Commands</text>
+
+        <line x1="228" y1="40" x2="228" y2="810" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 3"/>
+        <line x1="442" y1="40" x2="442" y2="810" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 3"/>
+        <line x1="656" y1="40" x2="656" y2="810" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="4 3"/>
+
+        <!-- PHASE 1 -->
+        <rect x="0" y="82" width="780" height="18" fill="#f1f5f9"/>
+        <text x="390" y="95" text-anchor="middle" font-size="10" font-weight="700" fill="#64748b" letter-spacing="1.5">PHASE 1 — SETUP (run once)</text>
+
+        <rect x="462" y="106" width="172" height="36" rx="7" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+        <text x="548" y="121" text-anchor="middle" font-size="10" font-weight="700" fill="#065f46">origin/main</text>
+        <text x="548" y="134" text-anchor="middle" font-size="9" fill="#047857">already exists</text>
+
+        <rect x="248" y="106" width="172" height="36" rx="7" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
+        <text x="334" y="121" text-anchor="middle" font-size="10" font-weight="700" fill="#92400e">origin/dev created</text>
+        <text x="334" y="134" text-anchor="middle" font-size="9" fill="#b45309">from origin/main</text>
+        <line x1="462" y1="124" x2="422" y2="124" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#a-amb)"/>
+
+        <rect x="34" y="106" width="172" height="36" rx="7" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+        <text x="120" y="121" text-anchor="middle" font-size="10" font-weight="700" fill="#1d4ed8">local dev branch</text>
+        <text x="120" y="134" text-anchor="middle" font-size="9" fill="#2563eb">tracking origin/dev</text>
+        <line x1="248" y1="124" x2="208" y2="124" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#a-blu)"/>
+
+        <rect x="664" y="106" width="108" height="50" rx="7" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+        <text x="718" y="121" text-anchor="middle" font-size="9" fill="#334155">On GitHub: create branch</text>
+        <text x="718" y="133" text-anchor="middle" font-size="9" font-weight="600" fill="#334155">dev from main</text>
+        <text x="718" y="147" text-anchor="middle" font-size="9" font-weight="600" fill="#1d4ed8">git checkout -b dev</text>
+        <text x="718" y="157" text-anchor="middle" font-size="9" fill="#94a3b8">  origin/dev</text>
+
+        <!-- PHASE 2 -->
+        <rect x="0" y="160" width="780" height="18" fill="#f1f5f9"/>
+        <text x="390" y="173" text-anchor="middle" font-size="10" font-weight="700" fill="#64748b" letter-spacing="1.5">PHASE 2 — DAILY SYNC</text>
+
+        <rect x="462" y="182" width="172" height="36" rx="7" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+        <text x="548" y="197" text-anchor="middle" font-size="10" font-weight="700" fill="#065f46">origin/main</text>
+        <text x="548" y="210" text-anchor="middle" font-size="9" fill="#047857">latest commits</text>
+
+        <rect x="248" y="182" width="172" height="36" rx="7" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
+        <text x="334" y="197" text-anchor="middle" font-size="10" font-weight="700" fill="#92400e">origin/dev synced</text>
+        <text x="334" y="210" text-anchor="middle" font-size="9" fill="#b45309">rebased on main</text>
+        <line x1="462" y1="200" x2="422" y2="200" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#a-amb)"/>
+
+        <rect x="34" y="182" width="172" height="36" rx="7" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+        <text x="120" y="197" text-anchor="middle" font-size="10" font-weight="700" fill="#1d4ed8">local dev updated</text>
+        <text x="120" y="210" text-anchor="middle" font-size="9" fill="#2563eb">in sync with remote</text>
+        <line x1="248" y1="200" x2="208" y2="200" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#a-blu)"/>
+
+        <rect x="664" y="182" width="108" height="68" rx="7" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+        <text x="718" y="197" text-anchor="middle" font-size="9" fill="#334155">git fetch origin</text>
+        <text x="718" y="209" text-anchor="middle" font-size="9" fill="#334155">git rebase origin/main</text>
+        <text x="718" y="221" text-anchor="middle" font-size="9" fill="#334155">git push origin dev</text>
+        <text x="718" y="233" text-anchor="middle" font-size="9" fill="#94a3b8">  --force-with-lease</text>
+        <text x="718" y="245" text-anchor="middle" font-size="9" fill="#64748b">(if already on dev)</text>
+
+        <!-- PHASE 3 -->
+        <rect x="0" y="260" width="780" height="18" fill="#f1f5f9"/>
+        <text x="390" y="273" text-anchor="middle" font-size="10" font-weight="700" fill="#64748b" letter-spacing="1.5">PHASE 3 — MAKE YOUR CHANGES</text>
+
+        <rect x="34" y="282" width="172" height="36" rx="7" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+        <text x="120" y="297" text-anchor="middle" font-size="10" font-weight="700" fill="#1d4ed8">work on local dev</text>
+        <text x="120" y="310" text-anchor="middle" font-size="9" fill="#2563eb">edit files freely</text>
+
+        <rect x="34" y="336" width="172" height="36" rx="7" fill="#fce7f3" stroke="#ec4899" stroke-width="1.5"/>
+        <text x="120" y="351" text-anchor="middle" font-size="10" font-weight="700" fill="#9d174d">feature/my-change</text>
+        <text x="120" y="364" text-anchor="middle" font-size="9" fill="#be185d">branched off dev</text>
+        <line x1="120" y1="318" x2="120" y2="334" stroke="#ec4899" stroke-width="1.5" marker-end="url(#a-pink)"/>
+
+        <rect x="34" y="390" width="172" height="36" rx="7" fill="#fce7f3" stroke="#ec4899" stroke-width="1.5"/>
+        <text x="120" y="405" text-anchor="middle" font-size="10" font-weight="700" fill="#9d174d">git add + commit</text>
+        <text x="120" y="418" text-anchor="middle" font-size="9" fill="#be185d">changes committed</text>
+        <line x1="120" y1="372" x2="120" y2="388" stroke="#ec4899" stroke-width="1.5" marker-end="url(#a-pink)"/>
+
+        <rect x="664" y="282" width="108" height="154" rx="7" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+        <text x="718" y="300" text-anchor="middle" font-size="9" fill="#334155">git checkout dev</text>
+        <text x="718" y="316" text-anchor="middle" font-size="9" fill="#64748b">— do your work —</text>
+        <text x="718" y="332" text-anchor="middle" font-size="9" fill="#334155">git checkout -b</text>
+        <text x="718" y="344" text-anchor="middle" font-size="9" fill="#334155">  feature/my-change</text>
+        <text x="718" y="360" text-anchor="middle" font-size="9" fill="#334155">git add -A</text>
+        <text x="718" y="372" text-anchor="middle" font-size="9" fill="#334155">git commit -m "..."</text>
+        <text x="718" y="388" text-anchor="middle" font-size="9" fill="#334155">git push origin</text>
+        <text x="718" y="400" text-anchor="middle" font-size="9" fill="#334155">  feature/my-change</text>
+        <text x="718" y="416" text-anchor="middle" font-size="9" fill="#334155">gh pr create</text>
+        <text x="718" y="428" text-anchor="middle" font-size="9" fill="#94a3b8">  --base main</text>
+
+        <!-- PHASE 4 -->
+        <rect x="0" y="438" width="780" height="18" fill="#f1f5f9"/>
+        <text x="390" y="451" text-anchor="middle" font-size="10" font-weight="700" fill="#64748b" letter-spacing="1.5">PHASE 4 — RAISE PR → MERGE TO MAIN</text>
+
+        <rect x="248" y="460" width="172" height="36" rx="7" fill="#fce7f3" stroke="#ec4899" stroke-width="1.5"/>
+        <text x="334" y="475" text-anchor="middle" font-size="10" font-weight="700" fill="#9d174d">origin/feature/my-change</text>
+        <text x="334" y="488" text-anchor="middle" font-size="9" fill="#be185d">pushed from local</text>
+        <line x1="206" y1="408" x2="248" y2="478" stroke="#ec4899" stroke-width="1.5" marker-end="url(#a-pink)"/>
+
+        <rect x="462" y="460" width="172" height="36" rx="7" fill="#d1fae5" stroke="#10b981" stroke-width="2"/>
+        <text x="548" y="475" text-anchor="middle" font-size="10" font-weight="700" fill="#065f46">PR merged → main</text>
+        <text x="548" y="488" text-anchor="middle" font-size="9" fill="#047857">origin/main updated</text>
+        <line x1="420" y1="478" x2="460" y2="478" stroke="#10b981" stroke-width="1.5" marker-end="url(#a-grn)"/>
+
+        <rect x="664" y="460" width="108" height="50" rx="7" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+        <text x="718" y="477" text-anchor="middle" font-size="9" fill="#334155">Review PR on GitHub</text>
+        <text x="718" y="491" text-anchor="middle" font-size="9" font-weight="600" fill="#065f46">Merge PR #N</text>
+        <text x="718" y="503" text-anchor="middle" font-size="9" fill="#94a3b8">(GitHub UI click)</text>
+
+        <!-- PHASE 5 -->
+        <rect x="0" y="522" width="780" height="18" fill="#f1f5f9"/>
+        <text x="390" y="535" text-anchor="middle" font-size="10" font-weight="700" fill="#64748b" letter-spacing="1.5">PHASE 5 — POST-MERGE SYNC  (same as Phase 2)</text>
+
+        <rect x="462" y="544" width="172" height="36" rx="7" fill="#d1fae5" stroke="#10b981" stroke-width="1.5"/>
+        <text x="548" y="559" text-anchor="middle" font-size="10" font-weight="700" fill="#065f46">origin/main ✓</text>
+        <text x="548" y="572" text-anchor="middle" font-size="9" fill="#047857">has your merged code</text>
+
+        <rect x="248" y="544" width="172" height="36" rx="7" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
+        <text x="334" y="559" text-anchor="middle" font-size="10" font-weight="700" fill="#92400e">origin/dev synced</text>
+        <text x="334" y="572" text-anchor="middle" font-size="9" fill="#b45309">rebased on new main</text>
+        <line x1="462" y1="562" x2="422" y2="562" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#a-amb)"/>
+
+        <rect x="34" y="544" width="172" height="36" rx="7" fill="#dbeafe" stroke="#3b82f6" stroke-width="2.5"/>
+        <text x="120" y="559" text-anchor="middle" font-size="10" font-weight="700" fill="#1d4ed8">local dev ✓  ← HEAD</text>
+        <text x="120" y="572" text-anchor="middle" font-size="9" fill="#2563eb">ready for next task</text>
+        <line x1="248" y1="562" x2="208" y2="562" stroke="#3b82f6" stroke-width="1.5" marker-end="url(#a-blu)"/>
+
+        <rect x="42" y="588" width="46" height="16" rx="8" fill="#3b82f6"/>
+        <text x="65" y="600" text-anchor="middle" font-size="9" font-weight="800" fill="#fff">HEAD</text>
+
+        <rect x="664" y="544" width="108" height="84" rx="7" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"/>
+        <text x="718" y="560" text-anchor="middle" font-size="9" fill="#334155">git fetch origin</text>
+        <text x="718" y="572" text-anchor="middle" font-size="9" fill="#334155">git rebase origin/main</text>
+        <text x="718" y="584" text-anchor="middle" font-size="9" fill="#334155">git push origin dev</text>
+        <text x="718" y="596" text-anchor="middle" font-size="9" fill="#94a3b8">  --force-with-lease</text>
+        <text x="718" y="612" text-anchor="middle" font-size="9" fill="#334155">git branch -d feature/x</text>
+        <text x="718" y="624" text-anchor="middle" font-size="9" font-weight="600" fill="#1d4ed8">→ loop to Phase 2</text>
+
+        <!-- Loop arrow -->
+        <path d="M 34 562 Q 10 562 10 200 Q 10 200 34 200" stroke="#94a3b8" stroke-width="1.5" fill="none" stroke-dasharray="5 3" marker-end="url(#a-gray)"/>
+        <text x="6" y="385" text-anchor="middle" font-size="9" fill="#94a3b8" transform="rotate(-90,6,385)">loop daily</text>
+
+        <defs>
+          <marker id="a-amb"  markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#f59e0b"/></marker>
+          <marker id="a-blu"  markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#3b82f6"/></marker>
+          <marker id="a-grn"  markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#10b981"/></marker>
+          <marker id="a-pink" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#ec4899"/></marker>
+          <marker id="a-gray" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#94a3b8"/></marker>
+        </defs>
+      </svg>
+    </div>
+
+    <!-- ── CHEAT SHEET ── -->
+    <div class="cheatsheet">
+
+      <div class="phase-card p1">
+        <div class="phase-header">
+          <span class="phase-num">1</span>
+          Setup — run once
+        </div>
+        <div class="phase-body">
+          <p class="note">Create the <strong>dev</strong> branch on GitHub from main, then track it locally.</p>
+          <pre><span class="cmd-comment"># On GitHub UI: create branch "dev" from main</span>
+<span class="cmd-key">git</span> fetch origin
+<span class="cmd-key">git</span> checkout -b dev origin/dev</pre>
+        </div>
+      </div>
+
+      <div class="phase-card p2">
+        <div class="phase-header">
+          <span class="phase-num">2</span>
+          Daily sync
+        </div>
+        <div class="phase-body">
+          <p class="note">Every morning — pull any overnight commits from <strong>origin/main</strong> into your local dev and push to keep <strong>origin/dev</strong> current.</p>
+          <pre><span class="cmd-key">git</span> fetch origin
+<span class="cmd-key">git</span> rebase origin/main
+<span class="cmd-key">git</span> push origin dev --force-with-lease</pre>
+          <p class="note" style="margin-top:8px">Skip <code>git checkout dev</code> if you're already on dev (you will be if you ended last session correctly).</p>
+        </div>
+      </div>
+
+      <div class="phase-card p3">
+        <div class="phase-header">
+          <span class="phase-num">3</span>
+          Make changes
+        </div>
+        <div class="phase-body">
+          <p class="note">Branch off <strong>dev</strong> for each task. Never commit directly to dev or main.</p>
+          <pre><span class="cmd-key">git</span> checkout -b feature/my-change
+<span class="cmd-comment"># ... edit files ...</span>
+<span class="cmd-key">git</span> add -A
+<span class="cmd-key">git</span> commit -m "describe what and why"
+<span class="cmd-key">git</span> push origin feature/my-change
+<span class="cmd-key">gh</span>  pr create --base main</pre>
+        </div>
+      </div>
+
+      <div class="phase-card p4">
+        <div class="phase-header">
+          <span class="phase-num">4</span>
+          Raise PR → merge
+        </div>
+        <div class="phase-body">
+          <p class="note">Review and merge the PR on <strong>GitHub UI</strong>. PR targets <strong>main</strong>, not dev.</p>
+          <pre><span class="cmd-comment"># GitHub UI: review → Merge PR #N → Confirm</span></pre>
+        </div>
+      </div>
+
+      <div class="phase-card p5">
+        <div class="phase-header">
+          <span class="phase-num">5</span>
+          Post-merge sync
+        </div>
+        <div class="phase-body">
+          <p class="note">Your merged commit is now on <strong>origin/main</strong>. Rebase dev to pick it up, push to sync <strong>origin/dev</strong>, then clean up the feature branch.</p>
+          <pre><span class="cmd-key">git</span> fetch origin
+<span class="cmd-key">git</span> checkout dev
+<span class="cmd-key">git</span> rebase origin/main
+<span class="cmd-key">git</span> push origin dev --force-with-lease
+<span class="cmd-key">git</span> branch -d feature/my-change
+<span class="cmd-key">git</span> push origin --delete feature/my-change</pre>
+
+          <p class="note" style="margin-top:10px"><strong>Why push in Phase 5?</strong> The PR merge added a new commit to origin/main <em>after</em> Phase 2's push. After rebase, local dev is 1 commit ahead of origin/dev — so a push is needed to close that gap.</p>
+
+          <table>
+            <tr><th>Point in time</th><th>local/dev</th><th>origin/dev</th><th>origin/main</th></tr>
+            <tr><td>After Phase 2</td><td>A</td><td>A</td><td>A</td></tr>
+            <tr><td>After PR merges</td><td>A</td><td>A</td><td>A + merge</td></tr>
+            <tr><td>After rebase</td><td>A + merge</td><td>A ← stale</td><td>A + merge</td></tr>
+            <tr><td>After push ✓</td><td>A + merge</td><td>A + merge</td><td>A + merge</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="loop-note">⟲ &nbsp; After Phase 5 you are on <strong>dev</strong> pointing to latest main — loop back to Phase 2 next morning.</div>
+
+    </div>
+  </div>
+
+</body>
+</html>

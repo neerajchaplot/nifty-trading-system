@@ -1,0 +1,8 @@
+# Keep the Docker build context small — the Dockerfile only needs target/*.jar
+src/
+.mvn/
+mvnw
+mvnw.cmd
+*.md
+.gitignore
+target/*.original

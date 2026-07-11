@@ -9,13 +9,13 @@
 #   F4: BearCallSpread → confirm → execute → monitor-config → evaluate HOLD
 #   F5: IronCondor → confirm → execute → monitor WATCH (CE side at T1)
 #
-# Instrument keys (Friday 2026-06-27 capture, expiry 2026-06-30, ATM=24050):
-#   NSE_FO|71473 = PE 24000  LTP=64.50
-#   NSE_FO|79723 = PE 23900  LTP=38.15
-#   NSE_FO|79714 = PE 23850  LTP=29.45
-#   NSE_FO|79732 = CE 24100  LTP=102.45
-#   NSE_FO|79734 = CE 24150  LTP=78.10
-#   NSE_FO|79738 = CE 24250  LTP=43.55
+# Instrument keys (2026-07-04 capture, expiry 2026-07-07, ATM=24250):
+#   NSE_FO|44621 = PE 24000  LTP=15.65
+#   NSE_FO|44617 = PE 23900  LTP=9.30
+#   NSE_FO|44615 = PE 23850  LTP=7.15
+#   NSE_FO|44633 = CE 24100  LTP=209.55
+#   NSE_FO|44635 = CE 24150  LTP=169.20
+#   NSE_FO|44642 = CE 24250  LTP=102.15
 #
 # Pre-requisites:
 #   1. All SQL seeds loaded (01–04)
@@ -43,8 +43,8 @@ curl -s -X POST "$A5/api/v1/agent5/execute" \
   -d "{
     \"tradeId\": \"$TRADE\",
     \"legs\": [
-      {\"instrumentKey\":\"NSE_FO|71473\",\"optionType\":\"PE\",\"strike\":24000,\"action\":\"SELL\",\"limitPrice\":64.50,\"quantity\":520},
-      {\"instrumentKey\":\"NSE_FO|79723\",\"optionType\":\"PE\",\"strike\":23900,\"action\":\"BUY\", \"limitPrice\":38.15,\"quantity\":520}
+      {\"instrumentKey\":\"NSE_FO|44621\",\"optionType\":\"PE\",\"strike\":24000,\"action\":\"SELL\",\"limitPrice\":64.50,\"quantity\":520},
+      {\"instrumentKey\":\"NSE_FO|44617\",\"optionType\":\"PE\",\"strike\":23900,\"action\":\"BUY\", \"limitPrice\":38.15,\"quantity\":520}
     ]
   }" | grep -E '"executionStatus"|"actualNetPremiumPerUnit"|"slippageAlert"'
 echo ""
@@ -82,8 +82,8 @@ curl -s -X POST "$A5/api/v1/agent5/execute" \
   -d "{
     \"tradeId\": \"$TRADE\",
     \"legs\": [
-      {\"instrumentKey\":\"NSE_FO|71473\",\"optionType\":\"PE\",\"strike\":24000,\"action\":\"SELL\",\"limitPrice\":64.50,\"quantity\":520},
-      {\"instrumentKey\":\"NSE_FO|79723\",\"optionType\":\"PE\",\"strike\":23900,\"action\":\"BUY\", \"limitPrice\":38.15,\"quantity\":520}
+      {\"instrumentKey\":\"NSE_FO|44621\",\"optionType\":\"PE\",\"strike\":24000,\"action\":\"SELL\",\"limitPrice\":64.50,\"quantity\":520},
+      {\"instrumentKey\":\"NSE_FO|44617\",\"optionType\":\"PE\",\"strike\":23900,\"action\":\"BUY\", \"limitPrice\":38.15,\"quantity\":520}
     ]
   }" | grep '"executionStatus"'
 echo ""
@@ -108,8 +108,8 @@ curl -s -X POST "$A5/api/v1/agent5/exit/$TRADE" \
     \"tradeId\": \"$TRADE\",
     \"reason\": \"T3_EXIT_PRICE_BREACH\",
     \"exitLegs\": [
-      {\"instrumentKey\":\"NSE_FO|71473\",\"originalAction\":\"SELL\",\"quantity\":520},
-      {\"instrumentKey\":\"NSE_FO|79723\",\"originalAction\":\"BUY\", \"quantity\":520}
+      {\"instrumentKey\":\"NSE_FO|44621\",\"originalAction\":\"SELL\",\"quantity\":520},
+      {\"instrumentKey\":\"NSE_FO|44617\",\"originalAction\":\"BUY\", \"quantity\":520}
     ]
   }" | grep -E '"status"|"closeReason"'
 echo ""
@@ -151,8 +151,8 @@ curl -s -X POST "$A5/api/v1/agent5/execute" \
   -d "{
     \"tradeId\": \"$TRADE_BCAS\",
     \"legs\": [
-      {\"instrumentKey\":\"NSE_FO|79734\",\"optionType\":\"CE\",\"strike\":24150,\"action\":\"SELL\",\"limitPrice\":78.10,\"quantity\":520},
-      {\"instrumentKey\":\"NSE_FO|79738\",\"optionType\":\"CE\",\"strike\":24250,\"action\":\"BUY\", \"limitPrice\":43.55,\"quantity\":520}
+      {\"instrumentKey\":\"NSE_FO|44635\",\"optionType\":\"CE\",\"strike\":24150,\"action\":\"SELL\",\"limitPrice\":78.10,\"quantity\":520},
+      {\"instrumentKey\":\"NSE_FO|44642\",\"optionType\":\"CE\",\"strike\":24250,\"action\":\"BUY\", \"limitPrice\":43.55,\"quantity\":520}
     ]
   }" | grep -E '"executionStatus"|"slippageAlert"'
 echo ""
@@ -176,13 +176,17 @@ echo ""
 # Confirm pre-seeded PENDING T-204 (4-leg IC).
 # Legs: SELL PE 23900 / BUY PE 23850 / SELL CE 24150 / BUY CE 24250.
 # Lots: 40. Qty per leg: 2600.
-# IC thresholds:
-#   T1 down (PE side) = 23900+150 = 24050
-#   T1 up  (CE side) = 24150-150 = 24000
-# Send spot=24100:
-#   PE side: 24100 > T1_down=24050 → PE HOLD ✓
-#   CE side: 24100 > T1_up=24000  → CE WATCH ✗
-# Expected: WATCH (CE side triggered — near-ATM IC test scenario)
+#
+# monitor-config uses fixed fallback (no option chain at config time):
+#   T1_DOWN (PE side) = 23900+150 = 24050  → WATCH if spot ≤ 24050
+#   T2_DOWN (PE side) = 23900+75  = 23975  → READJUST if spot ≤ 23975
+#   T1_UP   (CE side) = 24150-150 = 24000  → WATCH if spot ≥ 24000
+#   T2_UP   (CE side) = 24150-75  = 24075  → READJUST if spot ≥ 24075
+#
+# Send spot=24060 (between CE T1=24000 and CE T2=24075):
+#   PE side: 24060 > T2_DOWN=23975 and 24060 > T1_DOWN=24050 → PE HOLD ✓
+#   CE side: 24060 ≥ T1_UP=24000 → CE T1 triggered; 24060 < T2_UP=24075 → T2 NOT triggered ✓
+# Expected: WATCH (CE T1 only — spot is inside CE T1/T2 buffer zone)
 #
 # IC monitor-config is fully supported: 4 fill price headers (PE + CE spreads).
 # Step 2.5 builds the config with all 4 legs; Step 3 evaluates both sides.
@@ -204,10 +208,10 @@ curl -s -X POST "$A5/api/v1/agent5/execute" \
   -d "{
     \"tradeId\": \"$TRADE_IC\",
     \"legs\": [
-      {\"instrumentKey\":\"NSE_FO|79723\",\"optionType\":\"PE\",\"strike\":23900,\"action\":\"SELL\",\"limitPrice\":38.15,\"quantity\":2600},
-      {\"instrumentKey\":\"NSE_FO|79714\",\"optionType\":\"PE\",\"strike\":23850,\"action\":\"BUY\", \"limitPrice\":29.45,\"quantity\":2600},
-      {\"instrumentKey\":\"NSE_FO|79734\",\"optionType\":\"CE\",\"strike\":24150,\"action\":\"SELL\",\"limitPrice\":78.10,\"quantity\":2600},
-      {\"instrumentKey\":\"NSE_FO|79738\",\"optionType\":\"CE\",\"strike\":24250,\"action\":\"BUY\", \"limitPrice\":43.55,\"quantity\":2600}
+      {\"instrumentKey\":\"NSE_FO|44617\",\"optionType\":\"PE\",\"strike\":23900,\"action\":\"SELL\",\"limitPrice\":38.15,\"quantity\":2600},
+      {\"instrumentKey\":\"NSE_FO|44615\",\"optionType\":\"PE\",\"strike\":23850,\"action\":\"BUY\", \"limitPrice\":29.45,\"quantity\":2600},
+      {\"instrumentKey\":\"NSE_FO|44635\",\"optionType\":\"CE\",\"strike\":24150,\"action\":\"SELL\",\"limitPrice\":78.10,\"quantity\":2600},
+      {\"instrumentKey\":\"NSE_FO|44642\",\"optionType\":\"CE\",\"strike\":24250,\"action\":\"BUY\", \"limitPrice\":43.55,\"quantity\":2600}
     ]
   }" | grep -E '"executionStatus"|"slippageAlert"'
 echo ""
@@ -221,11 +225,11 @@ curl -s "$A2/api/v1/agent2/monitor-config/$TRADE_IC" \
   -H "X-CE-Long-Fill-Price: 43.55" | grep -E '"actualNetPremiumPerUnit"|"slippageAlert"|"strategy"'
 echo ""
 
-info "Step 3: Evaluate IronCondor — spot=24100"
-info "CE side T1=24150-150=24000: spot 24100 > 24000 → CE at WATCH. Expected: WATCH."
+info "Step 3: Evaluate IronCondor — spot=24060 (CE T1 zone: 24000 ≤ spot < 24075)"
+info "CE T1_UP=24000: 24060 ≥ 24000 → T1 fires. CE T2_UP=24075: 24060 < 24075 → T2 does NOT fire. Expected: WATCH."
 curl -s -X POST "$A3/api/v1/agent3/evaluate/$TRADE_IC" \
   -H "Content-Type: application/json" \
-  -d '{"niftySpot":24100,"vix":20.5,"shortLegLtp":62.00,"longLegLtp":38.00,"shortLegIv":0.192}' \
+  -d '{"niftySpot":24060,"vix":20.5,"shortLegLtp":62.00,"longLegLtp":38.00,"shortLegIv":0.192}' \
   | grep -E '"action"|"reason"'
 echo ""
 

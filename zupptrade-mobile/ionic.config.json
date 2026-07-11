@@ -1,0 +1,7 @@
+{
+  "name": "zupptrade-mobile",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular-standalone"
+}

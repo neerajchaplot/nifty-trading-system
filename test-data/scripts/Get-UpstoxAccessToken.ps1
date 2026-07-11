@@ -8,7 +8,7 @@
 #
 # Usage:
 #   . .\test-data\scripts\Get-UpstoxAccessToken.ps1
-#   $env:EXPIRY_DATE = "2026-07-01"
+#   $env:EXPIRY_DATE = "2026-07-07"
 #   bash test-data/capture/capture_friday.sh
 
 param(
@@ -103,5 +103,5 @@ if ([string]::IsNullOrWhiteSpace($token) -or $token.Contains("PASTE_FRESH") -or 
 $env:UPSTOX_ACCESS_TOKEN = $token
 Write-Host "UPSTOX_ACCESS_TOKEN set in this session (length=$($token.Length))."
 Write-Host "Run capture with:"
-Write-Host '  $env:EXPIRY_DATE = "2026-07-01"'
+Write-Host '  $env:EXPIRY_DATE = "2026-07-07"'
 Write-Host "  bash test-data/capture/capture_friday.sh"

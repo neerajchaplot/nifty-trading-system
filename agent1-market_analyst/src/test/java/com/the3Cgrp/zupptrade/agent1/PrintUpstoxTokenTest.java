@@ -56,7 +56,7 @@ class PrintUpstoxTokenTest {
         System.out.println("  Token prefix : " + token.substring(0, Math.min(12, token.length())) + "...");
         System.out.println();
         System.out.println("  Then run (set EXPIRY_DATE to the next Tuesday expiry):");
-        System.out.println("    export EXPIRY_DATE=2026-07-01");
+        System.out.println("    export EXPIRY_DATE=2026-07-07");
         System.out.println("    bash test-data/capture/capture_friday.sh");
         System.out.println("╚══════════════════════════════════════════════════════════════╝");
         System.out.println();

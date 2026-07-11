@@ -1,57 +1,51 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Nifty Trading System — Docker Compose
+# Nifty Trading System — Docker Compose (Azure VM deployment)
 #
-# Usage:
-#   1. cp .env.example .env  and fill in all secrets
-#   2. Build all JARs first:  mvn clean package -DskipTests
-#   3. docker compose up -d
-#   4. Angular UI:  cd zupptrade-ui && npm start   (runs on host at :4200)
+# Topology:
+#   - Database  : Azure Database for PostgreSQL (managed, external) — NOT a container here.
+#   - Edge      : nginx-proxy-manager is the ONLY service publishing ports (80/443).
+#                 Admin UI (81) is bound to localhost — reach it via SSH tunnel only.
+#   - Agents    : internal-only (expose, not ports) on the private zupptrade-net bridge.
+#                 Agent-to-agent auth stays on X-API-Key.
+#   - Images    : pulled from GHCR (built + pushed by CI). The VM does not build.
 #
-# Service ports:
-#   postgres         : 5432
-#   agent1           : 8081
-#   agent2           : 8082
-#   agent3           : 8083
-#   agent4           : 8084
-#   agent5           : 8085
-#   upstox-auth      : (no port — batch job, runs once daily via docker exec or restart)
+# Usage on the VM:
+#   1. cp .env.example .env   and fill in all secrets + DB_URL + GHCR_OWNER
+#   2. docker login ghcr.io   (PAT with read:packages)
+#   3. docker compose pull
+#   4. docker compose up -d
+#
+# NOTE: healthchecks below are an interim TCP liveness check (bash /dev/tcp).
+#       Task #1 (deferred) replaces them with real HTTP /actuator/health once
+#       Spring Boot Actuator is added to all modules.
 # ──────────────────────────────────────────────────────────────────────────────
 
 services:
 
-  # ── PostgreSQL ───────────────────────────────────────────────────────────────
-  postgres:
-    image: postgres:16-alpine
-    container_name: nifty_postgres
+  # ── Edge / TLS — the only publicly exposed service ───────────────────────────
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nifty_npm
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: nifty_trading
-      POSTGRES_USER: ${DB_USERNAME}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "5432:5432"
+      - "80:80"                 # HTTP + ACME challenge
+      - "443:443"               # HTTPS
+      - "127.0.0.1:81:81"       # Admin UI — localhost only; reach via SSH tunnel
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME} -d nifty_trading"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+    networks:
+      - zupptrade-net
 
   # ── Agent 1 — Market Direction Scoring ───────────────────────────────────────
   agent1:
-    build:
-      context: ./agent1-market_analyst
+    image: ghcr.io/${GHCR_OWNER}/zupptrade-agent1:${IMAGE_TAG:-latest}
     container_name: nifty_agent1
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - "8081:8081"
+    expose:
+      - "8081"
     environment:
-      DB_URL: jdbc:postgresql://postgres:5432/nifty_trading
+      DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
@@ -59,98 +53,100 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       X_API_KEY: ${INTERNAL_API_KEY}
+    networks:
+      - zupptrade-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8081/api/v1/agent1/health || exit 1"]
+      test: ["CMD-SHELL", "timeout 3 bash -c '</dev/tcp/localhost/8081' || exit 1"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
       start_period: 45s
 
   # ── Agent 2 — Trade Recommendation ───────────────────────────────────────────
   agent2:
-    build:
-      context: ./agent2-recommendation
+    image: ghcr.io/${GHCR_OWNER}/zupptrade-agent2:${IMAGE_TAG:-latest}
     container_name: nifty_agent2
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
-      agent1:
-        condition: service_started
-    ports:
-      - "8082:8082"
+      - agent1
+    expose:
+      - "8082"
     environment:
-      DB_URL: jdbc:postgresql://postgres:5432/nifty_trading
+      DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       X_API_KEY: ${INTERNAL_API_KEY}
+    networks:
+      - zupptrade-net
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 3 bash -c '</dev/tcp/localhost/8082' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
 
   # ── Agent 3 — Trade Monitoring ────────────────────────────────────────────────
   agent3:
-    build:
-      context: ./agent3-monitor
+    image: ghcr.io/${GHCR_OWNER}/zupptrade-agent3:${IMAGE_TAG:-latest}
     container_name: nifty_agent3
     restart: unless-stopped
     depends_on:
-      postgres:
-        condition: service_healthy
-      agent1:
-        condition: service_started
-      agent2:
-        condition: service_started
-      agent5:
-        condition: service_started
-    ports:
-      - "8083:8083"
+      - agent1
+      - agent2
+      - agent5
+    expose:
+      - "8083"
     environment:
-      DB_URL: jdbc:postgresql://postgres:5432/nifty_trading
+      DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       X_API_KEY: ${INTERNAL_API_KEY}
-      # Override agent URLs to use Docker service names
+      # Internal service URLs (Docker DNS on zupptrade-net)
       AGENT1_URL: http://agent1:8081
       AGENT2_URL: http://agent2:8082
       AGENT5_URL: http://agent5:8085
+    networks:
+      - zupptrade-net
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 3 bash -c '</dev/tcp/localhost/8083' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
 
   # ── Agent 4 — Trade Analytics & Audit (read-only) ────────────────────────────
   agent4:
-    build:
-      context: ./agent4-backtest
+    image: ghcr.io/${GHCR_OWNER}/zupptrade-agent4:${IMAGE_TAG:-latest}
     container_name: nifty_agent4
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - "8084:8084"
+    expose:
+      - "8084"
     environment:
-      DB_URL: jdbc:postgresql://postgres:5432/nifty_trading
+      DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
+    networks:
+      - zupptrade-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8084/api/v1/agent4/health || exit 1"]
+      test: ["CMD-SHELL", "timeout 3 bash -c '</dev/tcp/localhost/8084' || exit 1"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 30s
+      start_period: 45s
 
   # ── Agent 5 — Trade Execution ─────────────────────────────────────────────────
   agent5:
-    build:
-      context: ./agent5-execution
+    image: ghcr.io/${GHCR_OWNER}/zupptrade-agent5:${IMAGE_TAG:-latest}
     container_name: nifty_agent5
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - "8085:8085"
+    expose:
+      - "8085"
     environment:
-      DB_URL: jdbc:postgresql://postgres:5432/nifty_trading
+      DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
@@ -158,29 +154,45 @@ services:
       UPSTOX_API_SECRET: ${UPSTOX_API_SECRET}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       X_API_KEY: ${INTERNAL_API_KEY}
+    networks:
+      - zupptrade-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8085/api/v1/agent5/health || exit 1"]
+      test: ["CMD-SHELL", "timeout 3 bash -c '</dev/tcp/localhost/8085' || exit 1"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 30s
+      start_period: 45s
+
+  # ── Agent User — Profile / mobile + web BFF (public via NPM) ──────────────────
+  agent-user:
+    image: ghcr.io/${GHCR_OWNER}/zupptrade-agent-user:${IMAGE_TAG:-latest}
+    container_name: nifty_agent_user
+    restart: unless-stopped
+    expose:
+      - "8086"
+    environment:
+      DB_URL: ${DB_URL}
+      DB_USERNAME: ${DB_USERNAME}
+      DB_PASSWORD: ${DB_PASSWORD}
+      X_API_KEY: ${INTERNAL_API_KEY}
+    networks:
+      - zupptrade-net
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 3 bash -c '</dev/tcp/localhost/8086' || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
 
   # ── Upstox Auth — Daily Token Refresh (batch job, no web server) ──────────────
-  # NOTE: upstox-auth/ lives in a separate git repo (gitignored in this repo).
-  # This service only works when that repo is checked out at ./upstox-auth/ locally.
-  # Runs once at startup and again on an 08:30 AM IST schedule via its internal @Scheduled.
-  # Does NOT restart automatically — use "docker compose restart upstox-auth" each morning
-  # if the container exited cleanly after the startup run.
+  # Runs once at startup and again on its internal 08:30 AM IST @Scheduled.
+  # Does NOT auto-restart — "docker compose restart upstox-auth" each morning if it exited.
   upstox-auth:
-    build:
-      context: ./upstox-auth
+    image: ghcr.io/${GHCR_OWNER}/zupptrade-upstox-auth:${IMAGE_TAG:-latest}
     container_name: nifty_upstox_auth
     restart: "no"
-    depends_on:
-      postgres:
-        condition: service_healthy
     environment:
-      DB_URL: jdbc:postgresql://postgres:5432/nifty_trading
+      DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       UPSTOX_API_KEY: ${UPSTOX_API_KEY}
@@ -190,7 +202,15 @@ services:
       UPSTOX_TOTP_SEED: ${UPSTOX_TOTP_SEED}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       UPSTOX_REDIRECT_URI: ${UPSTOX_REDIRECT_URI:-http://localhost:8080/callback}
+    networks:
+      - zupptrade-net
+
+networks:
+  zupptrade-net:
+    driver: bridge
 
 volumes:
-  postgres_data:
+  npm_data:
+    driver: local
+  npm_letsencrypt:
     driver: local

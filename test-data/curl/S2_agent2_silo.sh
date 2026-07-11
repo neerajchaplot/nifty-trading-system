@@ -126,7 +126,7 @@ info "Key assertions:"
 info "  • strategy = BEAR_PUT_SPREAD (debit)"
 info "  • BUY leg is HIGH strike PE (23650), SELL leg is LOW strike PE (23550) — opposite of BullPutSpread"
 info "  • Gate 1 threshold = 35% (debit breakeven PoP), not 80% (credit PoP)"
-info "  • Instrument keys NSE_FO|79700/79701 are placeholders — real keys needed for Agent 5 test"
+info "  • Instrument keys: NSE_FO|44595 (PE 23650) / NSE_FO|44591 (PE 23550) from 2026-07-04 capture"
 info "Expected: status=CONFIRMED, execution_order with BUY PE 23650 + SELL PE 23550"
 curl -s -X POST "$A2/api/v1/agent2/confirm" \
   -H "Content-Type: application/json" \

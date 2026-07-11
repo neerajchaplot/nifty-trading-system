@@ -1,0 +1,133 @@
+<div class="profile-shell">
+
+  <!-- ── Risk Parameters ─────────────────────────────────────────── -->
+  <section class="card">
+    <h3 class="card-title">Risk Parameters</h3>
+    <div class="field-grid">
+
+      <div class="field">
+        <label>Capital (₹)</label>
+        <input type="number" [(ngModel)]="form.capital" min="10000" step="10000" />
+      </div>
+
+      <div class="field">
+        <label>Min PoP required (%)</label>
+        <div class="slider-row">
+          <input type="range" [value]="form.minPop * 100" min="50" max="99" step="1"
+                 (input)="form.minPop = +($any($event.target).value / 100)" />
+          <span class="val">{{ (form.minPop * 100).toFixed(0) }}%</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Max Loss allowed (%)</label>
+        <div class="slider-row">
+          <input type="range" [value]="form.maxLossPct" min="0.1" max="10" step="0.1"
+                 (input)="form.maxLossPct = +$any($event.target).value" />
+          <span class="val">{{ form.maxLossPct.toFixed(1) }}%</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Min RoC expected (%)</label>
+        <div class="slider-row">
+          <input type="range" [value]="form.minRocPct" min="0.1" max="10" step="0.1"
+                 (input)="form.minRocPct = +$any($event.target).value" />
+          <span class="val">{{ form.minRocPct.toFixed(1) }}%</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Max PoP–PoPP gap (%)</label>
+        <div class="slider-row">
+          <input type="range" [value]="form.maxPopPoppGap" min="1" max="50" step="1"
+                 (input)="form.maxPopPoppGap = +$any($event.target).value" />
+          <span class="val">{{ form.maxPopPoppGap.toFixed(0) }}%</span>
+        </div>
+      </div>
+
+      <div class="field field-pair">
+        <label>Spread Width range (pts)</label>
+        <div class="pair-inputs">
+          <input type="number" [(ngModel)]="form.spreadWidthMin" min="50" max="500" step="50"
+                 placeholder="Min" />
+          <span class="to">–</span>
+          <input type="number" [(ngModel)]="form.spreadWidthMax" min="50" max="500" step="50"
+                 placeholder="Max" />
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ── Agent 1 Weight Overrides ────────────────────────────────── -->
+  <section class="card">
+    <div class="card-title-row">
+      <h3 class="card-title">Agent 1 Weight Overrides</h3>
+      <span class="weight-total" [class.valid]="weightValid" [class.invalid]="!weightValid">
+        Total: {{ (weightTotal * 100).toFixed(1) }}%
+        <span *ngIf="!weightValid"> ⚠ Must equal 100%</span>
+      </span>
+    </div>
+    <p class="hint">Changing weights affects which strategy Agent 2 selects for your trades.
+      Total must equal exactly 100%.</p>
+
+    <div class="tier-list">
+      @for (tier of tiers; track tier.key) {
+        <div class="tier-row">
+          <div class="tier-info">
+            <span class="tier-name">{{ tier.label }}</span>
+            <span class="tier-desc">{{ tier.description }}</span>
+          </div>
+          <div class="tier-slider">
+            <input type="range" [value]="tierWeightPct(tier.key)" min="1" max="99" step="1"
+                   (input)="onTierSliderChange(tier.key, +$any($event.target).value)" />
+            <input type="number" class="tier-num" [ngModel]="tierWeightPct(tier.key)"
+                   (ngModelChange)="onTierSliderChange(tier.key, $event)"
+                   min="1" max="99" step="1" />
+            <span class="pct-label">%</span>
+          </div>
+        </div>
+      }
+    </div>
+  </section>
+
+  <!-- ── Save / Reset ────────────────────────────────────────────── -->
+  <div class="actions">
+    <button class="btn-save" [disabled]="!canSave" (click)="save()">
+      {{ saving ? 'Saving…' : 'Save Profile' }}
+    </button>
+    <button class="btn-reset" [disabled]="saving" (click)="profile && resetForm(profile)">
+      Reset
+    </button>
+    <span class="save-ok" *ngIf="saveSuccess">Saved</span>
+    <span class="save-err" *ngIf="saveError">{{ saveError }}</span>
+  </div>
+
+  <!-- ── Audit Trail ──────────────────────────────────────────────── -->
+  <section class="card audit-card">
+    <h3 class="card-title">Change History</h3>
+
+    <div *ngIf="loadingAudit" class="empty-state">Loading…</div>
+    <div *ngIf="!loadingAudit && auditEntries.length === 0" class="empty-state">No changes recorded yet.</div>
+
+    <div class="audit-list" *ngIf="!loadingAudit && auditEntries.length > 0">
+      @for (entry of auditEntries; track entry.id) {
+        <div class="audit-entry">
+          <div class="audit-time">{{ entry.changedAt | date:'dd MMM yyyy HH:mm' }}</div>
+          <div class="audit-fields">
+            @for (field of changedFields(entry); track field) {
+              <div class="audit-field-row">
+                <span class="field-name">{{ auditFieldLabel(field) }}</span>
+                <span class="old-val">{{ auditLabel(entry.oldValues[field]) }}</span>
+                <span class="arrow">→</span>
+                <span class="new-val">{{ auditLabel(entry.newValues[field]) }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  </section>
+
+</div>

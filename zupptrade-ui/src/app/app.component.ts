@@ -11,8 +11,9 @@ import { MarketStripComponent } from './features/market-strip/market-strip.compo
 import { RecommendationComponent } from './features/recommendation/recommendation.component';
 import { LiveMonitorComponent } from './features/live-monitor/live-monitor.component';
 import { AuditComponent } from './features/audit/audit.component';
+import { UserProfileComponent } from './features/user-profile/user-profile.component';
 
-type TabId = 'trading' | 'audit';
+type TabId = 'trading' | 'audit' | 'profile';
 
 @Component({
   selector: 'app-root',
@@ -24,6 +25,7 @@ type TabId = 'trading' | 'audit';
     RecommendationComponent,
     LiveMonitorComponent,
     AuditComponent,
+    UserProfileComponent,
   ],
   template: `
     <div class="shell">
@@ -36,6 +38,9 @@ type TabId = 'trading' | 'audit';
         </button>
         <button class="tab-btn" [class.tab-active]="activeTab === 'audit'" (click)="activeTab = 'audit'">
           Audit
+        </button>
+        <button class="tab-btn" [class.tab-active]="activeTab === 'profile'" (click)="activeTab = 'profile'">
+          Profile
         </button>
       </div>
 
@@ -54,6 +59,9 @@ type TabId = 'trading' | 'audit';
 
       <!-- Audit view -->
       <app-audit *ngIf="activeTab === 'audit'" class="audit-fill"></app-audit>
+
+      <!-- Profile view -->
+      <app-user-profile *ngIf="activeTab === 'profile'" class="audit-fill"></app-user-profile>
     </div>
   `,
   styles: [`

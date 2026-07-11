@@ -7,11 +7,11 @@
 #
 # Pre-requisites: Run 03_seed_agent2_trades.sql first.
 #
-# Instrument keys from Friday 2026-06-27 capture (expiry 2026-06-30, ATM=24050):
-#   NSE_FO|71473 = PE 24000  LTP=64.50   (short leg BullPutSpread)
-#   NSE_FO|79723 = PE 23900  LTP=38.15   (long  leg BullPutSpread)
-#   NSE_FO|79732 = CE 24100  LTP=102.45  (long  leg BullCallSpread)
-#   NSE_FO|79738 = CE 24250  LTP=43.55   (short leg BullCallSpread)
+# Instrument keys from 2026-07-04 capture (expiry 2026-07-07, ATM=24250):
+#   NSE_FO|44621 = PE 24000  LTP=15.65   (short leg BullPutSpread)
+#   NSE_FO|44617 = PE 23900  LTP=9.30    (long  leg BullPutSpread)
+#   NSE_FO|44633 = CE 24100  LTP=209.55  (long  leg BullCallSpread)
+#   NSE_FO|44642 = CE 24250  LTP=102.15  (short leg BullCallSpread)
 # ─────────────────────────────────────────────────────────────────────────────
 source "$(dirname "$0")/vars.sh"
 
@@ -20,7 +20,7 @@ h "S4 — Agent 5 silo tests (sandbox + simulate-fills)"
 # ────────────────────────────────────────────────────────────────────────────
 # S4.1 — Happy path: BullPutSpread execute
 # Trade T-207 is already CONFIRMED.
-# Legs: SELL PE 24000 (NSE_FO|71473), BUY PE 23900 (NSE_FO|79723).
+# Legs: SELL PE 24000 (NSE_FO|44621), BUY PE 23900 (NSE_FO|44617).
 # Expected: status=ACTIVE, fills with SIM- order IDs, slippageAlert=false
 #   actualNet=64.50-38.15=26.35 = expectedNet → no slippage
 # ────────────────────────────────────────────────────────────────────────────
@@ -32,8 +32,8 @@ curl -s -X POST "$A5/api/v1/agent5/execute" \
   -d "{
     \"tradeId\": \"$T_BPS_CONF\",
     \"legs\": [
-      {\"instrumentKey\":\"NSE_FO|71473\",\"optionType\":\"PE\",\"strike\":24000,\"action\":\"SELL\",\"limitPrice\":64.50,\"quantity\":520},
-      {\"instrumentKey\":\"NSE_FO|79723\",\"optionType\":\"PE\",\"strike\":23900,\"action\":\"BUY\", \"limitPrice\":38.15,\"quantity\":520}
+      {\"instrumentKey\":\"NSE_FO|44621\",\"optionType\":\"PE\",\"strike\":24000,\"action\":\"SELL\",\"limitPrice\":64.50,\"quantity\":520},
+      {\"instrumentKey\":\"NSE_FO|44617\",\"optionType\":\"PE\",\"strike\":23900,\"action\":\"BUY\", \"limitPrice\":38.15,\"quantity\":520}
     ]
   }"
 echo ""
@@ -41,7 +41,7 @@ echo ""
 # ────────────────────────────────────────────────────────────────────────────
 # S4.2 — Happy path: BullCallSpread execute
 # Trade T-208 is already CONFIRMED.
-# Legs: BUY CE 24100 (NSE_FO|79732), SELL CE 24250 (NSE_FO|79738).
+# Legs: BUY CE 24100 (NSE_FO|44633), SELL CE 24250 (NSE_FO|44642).
 # Expected: status=ACTIVE, actualNetPremiumPerUnit negative (debit=-58.90), slippageAlert=false
 #   Debit spread: actualNet = -(102.45-43.55) = -58.90 = expectedNet → no slippage
 # ────────────────────────────────────────────────────────────────────────────
@@ -53,8 +53,8 @@ curl -s -X POST "$A5/api/v1/agent5/execute" \
   -d "{
     \"tradeId\": \"$T_BCS_CONF\",
     \"legs\": [
-      {\"instrumentKey\":\"NSE_FO|79732\",\"optionType\":\"CE\",\"strike\":24100,\"action\":\"BUY\", \"limitPrice\":102.45,\"quantity\":130},
-      {\"instrumentKey\":\"NSE_FO|79738\",\"optionType\":\"CE\",\"strike\":24250,\"action\":\"SELL\",\"limitPrice\":43.55,\"quantity\":130}
+      {\"instrumentKey\":\"NSE_FO|44633\",\"optionType\":\"CE\",\"strike\":24100,\"action\":\"BUY\", \"limitPrice\":102.45,\"quantity\":130},
+      {\"instrumentKey\":\"NSE_FO|44642\",\"optionType\":\"CE\",\"strike\":24250,\"action\":\"SELL\",\"limitPrice\":43.55,\"quantity\":130}
     ]
   }"
 echo ""
@@ -76,8 +76,8 @@ curl -s -X POST "$A5/api/v1/agent5/execute" \
   -d "{
     \"tradeId\": \"$T_BPS_CONF\",
     \"legs\": [
-      {\"instrumentKey\":\"NSE_FO|71473\",\"optionType\":\"PE\",\"strike\":24000,\"action\":\"SELL\",\"limitPrice\":56.00,\"quantity\":520},
-      {\"instrumentKey\":\"NSE_FO|79723\",\"optionType\":\"PE\",\"strike\":23900,\"action\":\"BUY\", \"limitPrice\":44.00,\"quantity\":520}
+      {\"instrumentKey\":\"NSE_FO|44621\",\"optionType\":\"PE\",\"strike\":24000,\"action\":\"SELL\",\"limitPrice\":56.00,\"quantity\":520},
+      {\"instrumentKey\":\"NSE_FO|44617\",\"optionType\":\"PE\",\"strike\":23900,\"action\":\"BUY\", \"limitPrice\":44.00,\"quantity\":520}
     ]
   }"
 echo ""
@@ -110,8 +110,8 @@ curl -s -X POST "$A5/api/v1/agent5/execute" \
   -d "{
     \"tradeId\": \"$T_BPS_CONF\",
     \"legs\": [
-      {\"instrumentKey\":\"NSE_FO|71473\",\"optionType\":\"PE\",\"strike\":24000,\"action\":\"SELL\",\"limitPrice\":64.50,\"quantity\":520},
-      {\"instrumentKey\":\"NSE_FO|79723\",\"optionType\":\"PE\",\"strike\":23900,\"action\":\"BUY\", \"limitPrice\":38.15,\"quantity\":520}
+      {\"instrumentKey\":\"NSE_FO|44621\",\"optionType\":\"PE\",\"strike\":24000,\"action\":\"SELL\",\"limitPrice\":64.50,\"quantity\":520},
+      {\"instrumentKey\":\"NSE_FO|44617\",\"optionType\":\"PE\",\"strike\":23900,\"action\":\"BUY\", \"limitPrice\":38.15,\"quantity\":520}
     ]
   }"
 echo ""
@@ -131,8 +131,8 @@ curl -s -X POST "$A5/api/v1/agent5/exit/$T_BPS_CONF" \
     \"tradeId\": \"$T_BPS_CONF\",
     \"reason\": \"MANUAL_TEST_EXIT\",
     \"exitLegs\": [
-      {\"instrumentKey\":\"NSE_FO|71473\",\"originalAction\":\"SELL\",\"quantity\":520},
-      {\"instrumentKey\":\"NSE_FO|79723\",\"originalAction\":\"BUY\", \"quantity\":520}
+      {\"instrumentKey\":\"NSE_FO|44621\",\"originalAction\":\"SELL\",\"quantity\":520},
+      {\"instrumentKey\":\"NSE_FO|44617\",\"originalAction\":\"BUY\", \"quantity\":520}
     ]
   }"
 echo ""

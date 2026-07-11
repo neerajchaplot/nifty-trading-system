@@ -31,6 +31,13 @@ public class RecommendationContext {
     private int dte;
     private OptionChainData optionChainData;
 
+    // ── Pre-Layer 1: User weight recomposition ──────────────────────────────
+    // Set when the user has custom Agent 1 tier weights.
+    // StrategySelector uses these in preference to signal.getBias()/getStrength().
+    private com.the3Cgrp.zupptrade.shared.enums.Bias effectiveBias;
+    private com.the3Cgrp.zupptrade.shared.enums.Strength effectiveStrength;
+    private String weightsSource; // "USER_OVERRIDE" | "SYSTEM_DEFAULT"
+
     // ── Layer 1: Strategy Selection ─────────────────────────────────────────
     private Strategy strategy;
     private SpreadDirection spreadDirection;
@@ -63,6 +70,13 @@ public class RecommendationContext {
     private BigDecimal netDelta;
 
     // ── Getters / Setters ───────────────────────────────────────────────────
+
+    public com.the3Cgrp.zupptrade.shared.enums.Bias getEffectiveBias() { return effectiveBias; }
+    public void setEffectiveBias(com.the3Cgrp.zupptrade.shared.enums.Bias v) { this.effectiveBias = v; }
+    public com.the3Cgrp.zupptrade.shared.enums.Strength getEffectiveStrength() { return effectiveStrength; }
+    public void setEffectiveStrength(com.the3Cgrp.zupptrade.shared.enums.Strength v) { this.effectiveStrength = v; }
+    public String getWeightsSource() { return weightsSource; }
+    public void setWeightsSource(String v) { this.weightsSource = v; }
 
     public Agent1SignalEntity getSignal() { return signal; }
     public void setSignal(Agent1SignalEntity signal) { this.signal = signal; }

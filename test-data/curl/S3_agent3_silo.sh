@@ -10,7 +10,7 @@
 #   PoP 65–74% → READJUST    PoP < 65% → EXIT
 #   VIX > 24 → PAUSE   Spot ≤ short strike (PE) → T3_SHORT_STRIKE_BREACH → EXIT
 #
-# IV overrides calibrated for DTE=4 (test date 2026-06-26, expiry 2026-06-30):
+# IV overrides calibrated for DTE=4 (test date 2026-07-03, expiry 2026-07-07):
 #   HOLD     : spot=24450, σ=0.185 → PoP≈83.8%
 #   WATCH    : spot=24350, σ=0.192 → PoP≈77.2%
 #   READJUST : spot=24200, σ=0.200 → PoP≈66.3%

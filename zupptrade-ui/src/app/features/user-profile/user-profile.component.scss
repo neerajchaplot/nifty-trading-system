@@ -1,0 +1,257 @@
+.profile-shell {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 16px 20px;
+}
+
+.card-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1E293B;
+  margin: 0 0 12px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.weight-total {
+  font-size: 12px;
+  font-weight: 600;
+  &.valid  { color: #16A34A; }
+  &.invalid { color: #DC2626; }
+}
+
+.hint {
+  font-size: 11px;
+  color: #94A3B8;
+  margin: 0 0 14px 0;
+}
+
+/* Risk parameter grid */
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 24px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748B;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  input[type='number'] {
+    border: 1px solid #CBD5E1;
+    border-radius: 5px;
+    padding: 5px 8px;
+    font-size: 13px;
+    color: #1E293B;
+    width: 100%;
+    box-sizing: border-box;
+    &:focus { outline: none; border-color: #2563EB; }
+  }
+}
+
+.field-pair {
+  grid-column: 1 / -1;
+}
+
+.pair-inputs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  input[type='number'] {
+    width: 90px;
+  }
+  .to { color: #94A3B8; font-size: 13px; }
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  input[type='range'] {
+    flex: 1;
+    accent-color: #2563EB;
+  }
+
+  .val {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1E293B;
+    min-width: 40px;
+    text-align: right;
+  }
+}
+
+/* Tier weight rows */
+.tier-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tier-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.tier-info {
+  flex: 0 0 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tier-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1E293B;
+}
+
+.tier-desc {
+  font-size: 10px;
+  color: #94A3B8;
+}
+
+.tier-slider {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  input[type='range'] {
+    flex: 1;
+    accent-color: #2563EB;
+  }
+
+  .tier-num {
+    width: 52px;
+    border: 1px solid #CBD5E1;
+    border-radius: 5px;
+    padding: 4px 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1E293B;
+    text-align: right;
+    &:focus { outline: none; border-color: #2563EB; }
+  }
+
+  .pct-label {
+    font-size: 12px;
+    color: #64748B;
+  }
+}
+
+/* Actions */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-save {
+  background: #2563EB;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  &:disabled { opacity: 0.5; cursor: default; }
+  &:not(:disabled):hover { background: #1D4ED8; }
+}
+
+.btn-reset {
+  background: #F1F5F9;
+  color: #475569;
+  border: 1px solid #CBD5E1;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  &:disabled { opacity: 0.5; cursor: default; }
+  &:not(:disabled):hover { background: #E2E8F0; }
+}
+
+.save-ok  { font-size: 12px; color: #16A34A; font-weight: 600; }
+.save-err { font-size: 12px; color: #DC2626; font-weight: 600; }
+
+/* Audit trail */
+.audit-card { flex-shrink: 0; }
+
+.empty-state {
+  font-size: 12px;
+  color: #94A3B8;
+  text-align: center;
+  padding: 16px 0;
+}
+
+.audit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.audit-entry {
+  border: 1px solid #F1F5F9;
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: #F8FAFC;
+}
+
+.audit-time {
+  font-size: 11px;
+  color: #64748B;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.audit-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.audit-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+
+  .field-name { color: #64748B; min-width: 130px; }
+  .old-val    { color: #DC2626; font-weight: 500; }
+  .arrow      { color: #94A3B8; }
+  .new-val    { color: #16A34A; font-weight: 600; }
+}

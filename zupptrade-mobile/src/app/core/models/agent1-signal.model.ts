@@ -1,0 +1,23 @@
+import { Bias, Confidence, Strength, VixRegime } from './enums';
+
+export interface Agent1Signal {
+  id: string;
+  timestamp: string;
+  expiryDate: string;
+  bias: Bias;
+  strength: Strength;
+  compositeScore: number;
+  confidenceScore: number;
+  confidence: Confidence;
+  vixLevel: number | null;
+  vixRegime: VixRegime | null;
+  vixDirection: string | null;
+  scoreBreakdown: string | null;
+  commentaryDivergence: boolean | null;
+  keyLevels: string | null;
+}
+
+export interface ScoreRequest {
+  commentary?: string;
+  marketaux_fetch: boolean;
+}

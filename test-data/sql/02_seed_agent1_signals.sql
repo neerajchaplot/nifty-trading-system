@@ -1,6 +1,6 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Seed: agent1_signals — 12 scenarios covering all bias/strength/VIX combos
--- Expiry: 2026-06-30 (next Tuesday after weekend — update if needed)
+-- Expiry: 2026-07-07 (next Tuesday — update if needed)
 -- Fixed UUIDs so curl scripts can reference them predictably
 -- ─────────────────────────────────────────────────────────────────────────────
 SET search_path TO zupptrade_dev;
@@ -20,7 +20,7 @@ INSERT INTO agent1_signals (
 -- All 5 tiers bullish. VIX Normal. → Agent 2 should select BullCallSpread (debit)
 (
     'a1000001-0000-0000-0000-000000000001',
-    NOW() - INTERVAL '5 minutes', '2026-06-30',
+    NOW() - INTERVAL '5 minutes', '2026-07-07',
     'BULLISH', 'EXTREME', 0.6200,
     0.82, 'HIGH',
     15.20, 'NORMAL', 'FALLING',
@@ -35,7 +35,7 @@ INSERT INTO agent1_signals (
 -- Most tiers bullish. VIX High. → Agent 2 should select BullPutSpread (credit, IV rich)
 (
     'a1000001-0000-0000-0000-000000000002',
-    NOW() - INTERVAL '5 minutes', '2026-06-30',
+    NOW() - INTERVAL '5 minutes', '2026-07-07',
     'BULLISH', 'MILD', 0.3800,
     0.58, 'MEDIUM',
     20.50, 'HIGH', 'STABLE',
@@ -50,7 +50,7 @@ INSERT INTO agent1_signals (
 -- Consistent mild bullish. VIX Normal. → Agent 2 should select BullPutSpread
 (
     'a1000001-0000-0000-0000-000000000003',
-    NOW() - INTERVAL '5 minutes', '2026-06-30',
+    NOW() - INTERVAL '5 minutes', '2026-07-07',
     'BULLISH', 'MILD', 0.3400,
     0.54, 'MEDIUM',
     15.80, 'NORMAL', 'STABLE',
@@ -65,7 +65,7 @@ INSERT INTO agent1_signals (
 -- Score in 0.10–0.25 range. Agent 2 redirects to Neutral strategy path.
 (
     'a1000001-0000-0000-0000-000000000004',
-    NOW() - INTERVAL '5 minutes', '2026-06-30',
+    NOW() - INTERVAL '5 minutes', '2026-07-07',
     'BULLISH', 'WEAK', 0.1800,
     0.30, 'LOW',
     14.00, 'NORMAL', 'STABLE',
@@ -80,7 +80,7 @@ INSERT INTO agent1_signals (
 -- Tiers split evenly. High IV/HV ratio. → Agent 2 should select IronCondor
 (
     'a1000001-0000-0000-0000-000000000005',
-    NOW() - INTERVAL '5 minutes', '2026-06-30',
+    NOW() - INTERVAL '5 minutes', '2026-07-07',
     'NEUTRAL', 'WEAK', 0.0500,
     0.28, 'LOW',
     21.00, 'HIGH', 'RISING',
@@ -95,7 +95,7 @@ INSERT INTO agent1_signals (
 -- Sideways market, IV elevated. → Agent 2 should select ShortStraddle/Strangle
 (
     'a1000001-0000-0000-0000-000000000006',
-    NOW() - INTERVAL '5 minutes', '2026-06-30',
+    NOW() - INTERVAL '5 minutes', '2026-07-07',
     'NEUTRAL', 'WEAK', 0.0300,
     0.48, 'MEDIUM',
     15.50, 'NORMAL', 'STABLE',
@@ -110,7 +110,7 @@ INSERT INTO agent1_signals (
 -- VIX below 13. IV/HV ratio < 0.85 (cheap). → Agent 2 SKIP — no trade
 (
     'a1000001-0000-0000-0000-000000000007',
-    NOW() - INTERVAL '5 minutes', '2026-06-30',
+    NOW() - INTERVAL '5 minutes', '2026-07-07',
     'NEUTRAL', 'WEAK', 0.0400,
     0.50, 'MEDIUM',
     11.00, 'LOW', 'FALLING',
@@ -125,7 +125,7 @@ INSERT INTO agent1_signals (
 -- VIX > 24. → Agent 2 must SKIP regardless of bias. Alert user.
 (
     'a1000001-0000-0000-0000-000000000008',
-    NOW() - INTERVAL '5 minutes', '2026-06-30',
+    NOW() - INTERVAL '5 minutes', '2026-07-07',
     'NEUTRAL', 'WEAK', 0.0200,
     0.18, 'LOW',
     27.50, 'EXTREME', 'RISING',
@@ -140,7 +140,7 @@ INSERT INTO agent1_signals (
 -- Most tiers bearish. VIX High. → Agent 2 should select BearCallSpread (credit)
 (
     'a1000001-0000-0000-0000-000000000009',
-    NOW() - INTERVAL '5 minutes', '2026-06-30',
+    NOW() - INTERVAL '5 minutes', '2026-07-07',
     'BEARISH', 'MILD', -0.3500,
     0.55, 'MEDIUM',
     20.80, 'HIGH', 'RISING',
@@ -155,7 +155,7 @@ INSERT INTO agent1_signals (
 -- All tiers bearish. VIX High. → Agent 2 should select BearPutSpread (debit)
 (
     'a1000001-0000-0000-0000-000000000010',
-    NOW() - INTERVAL '5 minutes', '2026-06-30',
+    NOW() - INTERVAL '5 minutes', '2026-07-07',
     'BEARISH', 'EXTREME', -0.5800,
     0.74, 'HIGH',
     19.50, 'HIGH', 'RISING',
@@ -171,7 +171,7 @@ INSERT INTO agent1_signals (
 -- Verifies that missing data scores 0 (neutral) and is logged in data_gaps.
 (
     'a1000001-0000-0000-0000-000000000011',
-    NOW() - INTERVAL '5 minutes', '2026-06-30',
+    NOW() - INTERVAL '5 minutes', '2026-07-07',
     'BULLISH', 'MILD', 0.2800,
     0.35, 'LOW',
     17.00, 'NORMAL', 'STABLE',
@@ -188,7 +188,7 @@ INSERT INTO agent1_signals (
 -- Verifies the confidence penalty logic fires correctly.
 (
     'a1000001-0000-0000-0000-000000000012',
-    NOW() - INTERVAL '5 minutes', '2026-06-30',
+    NOW() - INTERVAL '5 minutes', '2026-07-07',
     'BULLISH', 'MILD', 0.2900,
     0.38, 'LOW',
     16.50, 'NORMAL', 'STABLE',

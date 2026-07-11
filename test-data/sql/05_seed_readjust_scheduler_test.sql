@@ -38,9 +38,9 @@
 --   - Valid Upstox access token (option chain fetch required for live LTPs)
 --   - Run AFTER 01–04 seeds so user_profile_id FK is satisfied
 --
--- INSTRUMENTS (Friday 2026-06-27 capture, expiry 2026-06-30, ATM=24050)
---   NSE_FO|71473 = PE 24000  NSE_FO|79723 = PE 23900
---   NSE_FO|79734 = CE 24150  NSE_FO|79738 = CE 24250
+-- INSTRUMENTS (Friday 2026-07-03 capture, expiry 2026-07-07, ATM: update from capture)
+--   NSE_FO|44621 = PE 24000  NSE_FO|44617 = PE 23900
+--   NSE_FO|44635 = CE 24150  NSE_FO|44642 = CE 24250
 --
 -- CLEANUP
 --   Covered by 99_cleanup.sql (agent1_signal_id LIKE 'a1000001-%' cascade).
@@ -56,8 +56,8 @@ DELETE FROM trades                  WHERE id       = 'a3000001-0000-0000-0000-00
 -- ─────────────────────────────────────────────────────────────────────────────
 -- T-401: Iron Condor ACTIVE — P&L calibrated READJUST trigger
 --
---   PE spread : SELL PE 24000 (NSE_FO|71473) / BUY PE 23900 (NSE_FO|79723)
---   CE spread : SELL CE 24150 (NSE_FO|79734) / BUY CE 24250 (NSE_FO|79738)
+--   PE spread : SELL PE 24000 (NSE_FO|44621) / BUY PE 23900 (NSE_FO|44617)
+--   CE spread : SELL CE 24150 (NSE_FO|44635) / BUY CE 24250 (NSE_FO|44642)
 --   lots=5  lotSize=65  qty=325/leg
 --
 --   actualNetPremiumPerUnit = 1.00  ← CALIBRATION KEY
@@ -72,14 +72,14 @@ INSERT INTO trades (
 ) VALUES (
     'a3000001-0000-0000-0000-000000000010',
     '00000001-0000-0000-0000-000000000002',   -- 10L user
-    'ACTIVE', 'IRON_CONDOR', '2026-06-30', 4,
+    'ACTIVE', 'IRON_CONDOR', '2026-07-07', 4,
 
     -- legs: IC 4-leg definition
     '[
-        {"action":"SELL","strike":24000,"optionType":"PE","instrumentKey":"NSE_FO|71473"},
-        {"action":"BUY", "strike":23900,"optionType":"PE","instrumentKey":"NSE_FO|79723"},
-        {"action":"SELL","strike":24150,"optionType":"CE","instrumentKey":"NSE_FO|79734"},
-        {"action":"BUY", "strike":24250,"optionType":"CE","instrumentKey":"NSE_FO|79738"}
+        {"action":"SELL","strike":24000,"optionType":"PE","instrumentKey":"NSE_FO|44621"},
+        {"action":"BUY", "strike":23900,"optionType":"PE","instrumentKey":"NSE_FO|44617"},
+        {"action":"SELL","strike":24150,"optionType":"CE","instrumentKey":"NSE_FO|44635"},
+        {"action":"BUY", "strike":24250,"optionType":"CE","instrumentKey":"NSE_FO|44642"}
     ]'::jsonb,
 
     -- summary: actualNetPremiumPerUnit=1.00 is the calibration key
@@ -109,10 +109,10 @@ INSERT INTO trades (
         "tradeId":   "a3000001-0000-0000-0000-000000000010",
         "strategy":  "IRON_CONDOR",
         "spreadDirection": "CREDIT",
-        "shortLeg":  {"strike":24000,"optionType":"PE","action":"SELL","ltp":64.50,"instrumentKey":"NSE_FO|71473"},
-        "longLeg":   {"strike":23900,"optionType":"PE","action":"BUY", "ltp":38.15,"instrumentKey":"NSE_FO|79723"},
-        "shortLeg2": {"strike":24150,"optionType":"CE","action":"SELL","ltp":78.10,"instrumentKey":"NSE_FO|79734"},
-        "longLeg2":  {"strike":24250,"optionType":"CE","action":"BUY", "ltp":43.55,"instrumentKey":"NSE_FO|79738"},
+        "shortLeg":  {"strike":24000,"optionType":"PE","action":"SELL","ltp":64.50,"instrumentKey":"NSE_FO|44621"},
+        "longLeg":   {"strike":23900,"optionType":"PE","action":"BUY", "ltp":38.15,"instrumentKey":"NSE_FO|44617"},
+        "shortLeg2": {"strike":24150,"optionType":"CE","action":"SELL","ltp":78.10,"instrumentKey":"NSE_FO|44635"},
+        "longLeg2":  {"strike":24250,"optionType":"CE","action":"BUY", "ltp":43.55,"instrumentKey":"NSE_FO|44642"},
         "actualNetPremiumPerUnit": 1.00,
         "lots": 5,
         "lotSize": 65,
@@ -130,7 +130,7 @@ INSERT INTO trades (
             "t2ReadjustNiftyUp": 28100,
             "t3ExitNiftyUp": 29000
         },
-        "expiryDate": "2026-06-30",
+        "expiryDate": "2026-07-07",
         "dte": 4
     }'::jsonb,
 
@@ -139,16 +139,16 @@ INSERT INTO trades (
     -- Combined IC net premium per unit in reality ≈ 60.90, but monitor_config overrides to 1.00
     -- This discrepancy is intentional — it creates an immediate MTM loss on first scheduler cycle.
     '[
-        {"orderId":"SIM-A3000010-L0","instrumentKey":"NSE_FO|71473","action":"SELL","strike":24000,"optionType":"PE","quantityFilled":325,"averageFillPrice":64.50},
-        {"orderId":"SIM-A3000010-L1","instrumentKey":"NSE_FO|79723","action":"BUY", "strike":23900,"optionType":"PE","quantityFilled":325,"averageFillPrice":38.15},
-        {"orderId":"SIM-A3000010-L2","instrumentKey":"NSE_FO|79734","action":"SELL","strike":24150,"optionType":"CE","quantityFilled":325,"averageFillPrice":78.10},
-        {"orderId":"SIM-A3000010-L3","instrumentKey":"NSE_FO|79738","action":"BUY", "strike":24250,"optionType":"CE","quantityFilled":325,"averageFillPrice":43.55}
+        {"orderId":"SIM-A3000010-L0","instrumentKey":"NSE_FO|44621","action":"SELL","strike":24000,"optionType":"PE","quantityFilled":325,"averageFillPrice":64.50},
+        {"orderId":"SIM-A3000010-L1","instrumentKey":"NSE_FO|44617","action":"BUY", "strike":23900,"optionType":"PE","quantityFilled":325,"averageFillPrice":38.15},
+        {"orderId":"SIM-A3000010-L2","instrumentKey":"NSE_FO|44635","action":"SELL","strike":24150,"optionType":"CE","quantityFilled":325,"averageFillPrice":78.10},
+        {"orderId":"SIM-A3000010-L3","instrumentKey":"NSE_FO|44642","action":"BUY", "strike":24250,"optionType":"CE","quantityFilled":325,"averageFillPrice":43.55}
     ]'::jsonb,
 
     NOW() - INTERVAL '3 hours',             -- generated_at
     NOW() - INTERVAL '2 hours 50 minutes',  -- valid_until (in the past — trade is already live)
     NOW() - INTERVAL '2 hours',             -- confirmed_at
-    'T-20260626-0401'                        -- trade_code
+    'T-20260703-0401'                        -- trade_code
 );
 
 -- Verify seed inserted correctly

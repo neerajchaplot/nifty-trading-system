@@ -1,10 +1,10 @@
 {
-  "capturedAt": "2026-06-26T04:04:02Z",
+  "capturedAt": "2026-07-04T04:28:26Z",
   "capturedBy": "capture_friday.sh",
-  "expiryDate": "2026-06-30",
-  "dte": 4,
-  "niftySpot": 24056.0,
-  "indiaVix": 13.05,
+  "expiryDate": "2026-07-07",
+  "dte": 3,
+  "niftySpot": 24270.85,
+  "indiaVix": 11.8,
   "avgMarketauxSentiment": 0.0,
   "files": [
     "option_chain.json",

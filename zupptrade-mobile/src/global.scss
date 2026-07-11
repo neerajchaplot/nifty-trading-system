@@ -1,0 +1,117 @@
+/* ZuppTrade Mobile — Global styles */
+
+:root {
+  /* Brand colour tokens (light) */
+  --zt-blue:    #2563EB;
+  --zt-green:   #16A34A;
+  --zt-red:     #DC2626;
+  --zt-amber:   #D97706;
+  --zt-surface: #F8FAFC;
+  --zt-border:  #E2E8F0;
+  --zt-text:    #0F172A;
+  --zt-sub:     #64748B;
+  --zt-muted:   #94A3B8;
+
+  /* Ionic primary override */
+  --ion-color-primary:         #2563EB;
+  --ion-color-primary-shade:   #1D4ED8;
+  --ion-color-primary-tint:    #3B82F6;
+
+  --ion-color-success:         #16A34A;
+  --ion-color-danger:          #DC2626;
+  --ion-color-warning:         #D97706;
+
+  --ion-font-family:           -apple-system, 'Inter', BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  --ion-background-color:      #F8FAFC;
+  --ion-item-background:       #FFFFFF;
+  --ion-toolbar-background:    #FFFFFF;
+  --ion-tab-bar-background:    #FFFFFF;
+  --ion-tab-bar-border-color:  #E2E8F0;
+  --ion-card-background:       #FFFFFF;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --zt-surface: #0F172A;
+    --zt-border:  #1E293B;
+    --zt-text:    #F1F5F9;
+    --zt-sub:     #94A3B8;
+    --zt-muted:   #475569;
+
+    --ion-background-color:      #0F172A;
+    --ion-item-background:       #1E293B;
+    --ion-toolbar-background:    #0F172A;
+    --ion-tab-bar-background:    #0F172A;
+    --ion-tab-bar-border-color:  #1E293B;
+    --ion-card-background:       #1E293B;
+    --ion-text-color:            #F1F5F9;
+  }
+}
+
+/* Utility classes */
+.text-green  { color: var(--zt-green) !important; }
+.text-red    { color: var(--zt-red)   !important; }
+.text-blue   { color: var(--zt-blue)  !important; }
+.text-amber  { color: var(--zt-amber) !important; }
+.text-muted  { color: var(--zt-muted) !important; }
+.text-sub    { color: var(--zt-sub)   !important; }
+.fw-800      { font-weight: 800 !important; }
+.mono        { font-variant-numeric: tabular-nums; }
+
+/* Section divider label used inside cards */
+.divider-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--zt-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 12px 0 6px;
+}
+
+/* Leg cards (trade legs) */
+.leg-card {
+  border-radius: 8px;
+  padding: 10px 12px;
+  flex: 1;
+}
+.leg-sell { background: rgba(220, 38, 38, 0.07); border: 1px solid rgba(220, 38, 38, 0.18); }
+.leg-buy  { background: rgba(22, 163, 74, 0.07);  border: 1px solid rgba(22, 163, 74, 0.18); }
+
+.leg-action { font-size: 9px; font-weight: 700; color: var(--zt-muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
+.leg-strike { font-size: 17px; font-weight: 800; color: var(--zt-text); line-height: 1.1; }
+.leg-meta   { font-size: 11px; color: var(--zt-sub); margin-top: 2px; }
+
+/* Threshold level pills */
+.level-t1 { color: var(--zt-amber); font-weight: 700; }
+.level-t2 { color: var(--ion-color-warning, #D97706); font-weight: 700; }
+.level-t3 { color: var(--zt-red); font-weight: 700; }
+
+/* Alert banner */
+.alert-t3 { background: rgba(220,38,38,0.10); border: 1px solid rgba(220,38,38,0.25); border-radius: 8px; padding: 8px 12px; color: var(--zt-red); font-size: 12px; font-weight: 700; }
+.alert-t2 { background: rgba(217,119,6,0.10);  border: 1px solid rgba(217,119,6,0.25);  border-radius: 8px; padding: 8px 12px; color: var(--zt-amber); font-size: 12px; font-weight: 700; }
+.alert-t1 { background: rgba(37,99,235,0.08);  border: 1px solid rgba(37,99,235,0.20);  border-radius: 8px; padding: 8px 12px; color: var(--zt-blue); font-size: 12px; font-weight: 600; }
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 8px;
+}
+.empty-icon  { font-size: 40px; opacity: 0.25; }
+.empty-title { font-size: 14px; font-weight: 700; color: var(--zt-sub); }
+.empty-sub   { font-size: 12px; color: var(--zt-muted); text-align: center; }
+
+/* Error banner */
+.error-banner {
+  background: rgba(220,38,38,0.08);
+  border: 1px solid rgba(220,38,38,0.20);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--zt-red);
+  margin-bottom: 12px;
+}

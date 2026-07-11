@@ -8,7 +8,7 @@
 # Usage:
 #   export UPSTOX_ACCESS_TOKEN=your_token
 #   export MARKETAUX_API_KEY=your_key      # optional — for sentiment capture
-#   export EXPIRY_DATE=2026-07-01          # next Tuesday expiry
+#   export EXPIRY_DATE=2026-07-07          # next Tuesday expiry
 #   bash capture_friday.sh
 #
 # Requirements: curl (Git Bash includes it), Python 3 (python / python3 / py)
@@ -28,7 +28,7 @@ set -e
 SNAPSHOT_DIR="$(dirname "$0")/snapshot"
 mkdir -p "$SNAPSHOT_DIR"
 
-EXPIRY_DATE="${EXPIRY_DATE:-2026-07-01}"
+EXPIRY_DATE="${EXPIRY_DATE:-2026-07-07}"
 TOKEN="${UPSTOX_ACCESS_TOKEN:?UPSTOX_ACCESS_TOKEN is required}"
 MX_KEY="${MARKETAUX_API_KEY:-}"
 

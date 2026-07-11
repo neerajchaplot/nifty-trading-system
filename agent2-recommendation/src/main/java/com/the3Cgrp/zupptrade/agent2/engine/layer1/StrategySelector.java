@@ -26,8 +26,9 @@ public class StrategySelector {
     }
 
     public void execute(RecommendationContext ctx) {
-        Bias bias = ctx.getSignal().getBias();
-        Strength strength = ctx.getSignal().getStrength();
+        // Use user-weight-recomputed values if present; fall back to signal values.
+        Bias bias       = ctx.getEffectiveBias()     != null ? ctx.getEffectiveBias()     : ctx.getSignal().getBias();
+        Strength strength = ctx.getEffectiveStrength() != null ? ctx.getEffectiveStrength() : ctx.getSignal().getStrength();
         Confidence confidence = ctx.getSignal().getConfidence();
         VixRegime vixRegime = ctx.getSignal().getVixRegime();
         IvRegime ivRegime = resolveIvRegime(ctx);

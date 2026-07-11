@@ -23,3 +23,6 @@ Thumbs.db
 
 # Auth module — lives in separate repo: github.com/neerajchaplot/upstox-auth
 upstox-auth/
+
+# Claude Code local config
+.claude/

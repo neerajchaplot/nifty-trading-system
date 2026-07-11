@@ -1,195 +1,195 @@
 {
-  "spot": 24056.0,
-  "atm": 24050,
+  "spot": 24270.85,
+  "atm": 24250,
   "captures_at": "",
   "strikes": {
-    "23850": {
+    "24050": {
       "label": "ATM-200",
       "ce": {
-        "instrumentKey": "NSE_FO|79713",
-        "ltp": 276.5,
-        "iv": 9.23,
-        "delta": 0.8373,
-        "theta": -6.4053,
-        "vega": 6.9385,
-        "oi": 457405.0
+        "instrumentKey": "NSE_FO|44622",
+        "ltp": 250.75,
+        "iv": 9.31,
+        "delta": 0.839,
+        "theta": -7.2248,
+        "vega": 6.2097,
+        "oi": 1290900.0
       },
       "pe": {
-        "instrumentKey": "NSE_FO|79714",
-        "ltp": 29.45,
-        "iv": 10.22,
-        "delta": -0.1868,
-        "theta": -7.7381,
-        "vega": 7.5748,
-        "oi": 3242915.0
-      }
-    },
-    "23900": {
-      "label": "ATM-150",
-      "ce": {
-        "instrumentKey": "NSE_FO|79722",
-        "ltp": 234.4,
-        "iv": 9.19,
-        "delta": 0.7863,
-        "theta": -7.5453,
-        "vega": 8.2142,
-        "oi": 2118870.0
-      },
-      "pe": {
-        "instrumentKey": "NSE_FO|79723",
-        "ltp": 38.15,
-        "iv": 10.01,
-        "delta": -0.2329,
-        "theta": -8.6354,
-        "vega": 8.6271,
-        "oi": 7289425.0
-      }
-    },
-    "23950": {
-      "label": "ATM-100",
-      "ce": {
-        "instrumentKey": "NSE_FO|79728",
-        "ltp": 196.0,
-        "iv": 9.04,
-        "delta": 0.7286,
-        "theta": -8.4545,
-        "vega": 9.3516,
-        "oi": 947830.0
-      },
-      "pe": {
-        "instrumentKey": "NSE_FO|79729",
-        "ltp": 49.5,
-        "iv": 9.8,
-        "delta": -0.2869,
-        "theta": -9.4114,
-        "vega": 9.6073,
-        "oi": 3332550.0
-      }
-    },
-    "24000": {
-      "label": "ATM-50",
-      "ce": {
-        "instrumentKey": "NSE_FO|71472",
-        "ltp": 160.95,
-        "iv": 9.0,
-        "delta": 0.6604,
-        "theta": -9.2935,
-        "vega": 10.3319,
-        "oi": 8809615.0
-      },
-      "pe": {
-        "instrumentKey": "NSE_FO|71473",
-        "ltp": 64.5,
-        "iv": 9.7,
-        "delta": -0.3504,
-        "theta": -10.145,
-        "vega": 10.454,
-        "oi": 12706245.0
-      }
-    },
-    "24050": {
-      "label": "ATM",
-      "ce": {
-        "instrumentKey": "NSE_FO|79730",
-        "ltp": 129.15,
-        "iv": 9.03,
-        "delta": 0.5852,
-        "theta": -9.9252,
-        "vega": 10.9969,
-        "oi": 2329405.0
-      },
-      "pe": {
-        "instrumentKey": "NSE_FO|79731",
-        "ltp": 82.8,
-        "iv": 9.57,
-        "delta": -0.4194,
-        "theta": -10.5551,
-        "vega": 11.0239,
-        "oi": 2360215.0
+        "instrumentKey": "NSE_FO|44623",
+        "ltp": 20.7,
+        "iv": 9.41,
+        "delta": -0.1637,
+        "theta": -7.3882,
+        "vega": 6.2781,
+        "oi": 4889625.0
       }
     },
     "24100": {
-      "label": "ATM+50",
+      "label": "ATM-150",
       "ce": {
-        "instrumentKey": "NSE_FO|79732",
-        "ltp": 102.45,
-        "iv": 9.0,
-        "delta": 0.5074,
-        "theta": -10.1303,
-        "vega": 11.2526,
-        "oi": 7892235.0
+        "instrumentKey": "NSE_FO|44633",
+        "ltp": 209.55,
+        "iv": 8.93,
+        "delta": 0.7911,
+        "theta": -8.15,
+        "vega": 7.3043,
+        "oi": 2035280.0
       },
       "pe": {
-        "instrumentKey": "NSE_FO|79733",
-        "ltp": 105.4,
-        "iv": 9.49,
-        "delta": -0.4927,
-        "theta": -10.6798,
-        "vega": 11.2527,
-        "oi": 6270420.0
+        "instrumentKey": "NSE_FO|44634",
+        "ltp": 28.2,
+        "iv": 9.06,
+        "delta": -0.2124,
+        "theta": -8.3565,
+        "vega": 7.3759,
+        "oi": 8210800.0
       }
     },
     "24150": {
-      "label": "ATM+100",
+      "label": "ATM-100",
       "ce": {
-        "instrumentKey": "NSE_FO|79734",
-        "ltp": 78.1,
-        "iv": 8.9,
-        "delta": 0.4285,
-        "theta": -9.8591,
-        "vega": 11.0735,
-        "oi": 3612765.0
+        "instrumentKey": "NSE_FO|44635",
+        "ltp": 169.2,
+        "iv": 8.7,
+        "delta": 0.7269,
+        "theta": -9.1893,
+        "vega": 8.4524,
+        "oi": 1314430.0
       },
       "pe": {
-        "instrumentKey": "NSE_FO|79735",
-        "ltp": 131.2,
-        "iv": 9.47,
-        "delta": -0.567,
-        "theta": -10.5051,
-        "vega": 11.0955,
-        "oi": 1982565.0
+        "instrumentKey": "NSE_FO|44639",
+        "ltp": 38.05,
+        "iv": 8.8,
+        "delta": -0.2755,
+        "theta": -9.3424,
+        "vega": 8.4891,
+        "oi": 4632745.0
       }
     },
     "24200": {
-      "label": "ATM+150",
+      "label": "ATM-50",
       "ce": {
-        "instrumentKey": "NSE_FO|79736",
-        "ltp": 58.7,
-        "iv": 8.87,
-        "delta": 0.3519,
-        "theta": -9.2815,
-        "vega": 10.4695,
-        "oi": 10554895.0
+        "instrumentKey": "NSE_FO|44640",
+        "ltp": 132.15,
+        "iv": 8.44,
+        "delta": 0.6509,
+        "theta": -9.9219,
+        "vega": 9.4068,
+        "oi": 5065190.0
       },
       "pe": {
-        "instrumentKey": "NSE_FO|79737",
-        "ltp": 161.15,
-        "iv": 9.51,
-        "delta": -0.6383,
-        "theta": -10.0492,
-        "vega": 10.5713,
-        "oi": 4866485.0
+        "instrumentKey": "NSE_FO|44641",
+        "ltp": 51.95,
+        "iv": 8.64,
+        "delta": -0.3525,
+        "theta": -10.1993,
+        "vega": 9.4394,
+        "oi": 8708245.0
       }
     },
     "24250": {
-      "label": "ATM+200",
+      "label": "ATM",
       "ce": {
-        "instrumentKey": "NSE_FO|79738",
-        "ltp": 43.55,
-        "iv": 8.91,
-        "delta": 0.2823,
-        "theta": -8.4951,
-        "vega": 9.5333,
-        "oi": 4306835.0
+        "instrumentKey": "NSE_FO|44642",
+        "ltp": 102.15,
+        "iv": 8.43,
+        "delta": 0.5613,
+        "theta": -10.5603,
+        "vega": 10.0212,
+        "oi": 3173625.0
       },
       "pe": {
-        "instrumentKey": "NSE_FO|79739",
-        "ltp": 196.7,
-        "iv": 9.52,
-        "delta": -0.7049,
-        "theta": -9.2694,
-        "vega": 9.7353,
-        "oi": 800800.0
+        "instrumentKey": "NSE_FO|44643",
+        "ltp": 70.85,
+        "iv": 8.54,
+        "delta": -0.4395,
+        "theta": -10.7069,
+        "vega": 10.0242,
+        "oi": 3506035.0
+      }
+    },
+    "24300": {
+      "label": "ATM+50",
+      "ce": {
+        "instrumentKey": "NSE_FO|44645",
+        "ltp": 75.4,
+        "iv": 8.35,
+        "delta": 0.4681,
+        "theta": -10.5463,
+        "vega": 10.1085,
+        "oi": 11024520.0
+      },
+      "pe": {
+        "instrumentKey": "NSE_FO|44646",
+        "ltp": 93.65,
+        "iv": 8.38,
+        "delta": -0.5318,
+        "theta": -10.5949,
+        "vega": 10.1089,
+        "oi": 6765720.0
+      }
+    },
+    "24350": {
+      "label": "ATM+100",
+      "ce": {
+        "instrumentKey": "NSE_FO|44649",
+        "ltp": 53.6,
+        "iv": 8.32,
+        "delta": 0.3759,
+        "theta": -10.0366,
+        "vega": 9.6464,
+        "oi": 7962370.0
+      },
+      "pe": {
+        "instrumentKey": "NSE_FO|44651",
+        "ltp": 122.4,
+        "iv": 8.34,
+        "delta": -0.6239,
+        "theta": -10.0569,
+        "vega": 9.6482,
+        "oi": 2255435.0
+      }
+    },
+    "24400": {
+      "label": "ATM+150",
+      "ce": {
+        "instrumentKey": "NSE_FO|44654",
+        "ltp": 37.15,
+        "iv": 8.22,
+        "delta": 0.2883,
+        "theta": -8.9204,
+        "vega": 8.677,
+        "oi": 11672115.0
+      },
+      "pe": {
+        "instrumentKey": "NSE_FO|44655",
+        "ltp": 154.85,
+        "iv": 8.27,
+        "delta": -0.7106,
+        "theta": -8.9858,
+        "vega": 8.6922,
+        "oi": 1680185.0
+      }
+    },
+    "24450": {
+      "label": "ATM+200",
+      "ce": {
+        "instrumentKey": "NSE_FO|44660",
+        "ltp": 25.4,
+        "iv": 8.29,
+        "delta": 0.2147,
+        "theta": -7.686,
+        "vega": 7.4213,
+        "oi": 3985605.0
+      },
+      "pe": {
+        "instrumentKey": "NSE_FO|44661",
+        "ltp": 193.1,
+        "iv": 8.35,
+        "delta": -0.7836,
+        "theta": -7.7784,
+        "vega": 7.4555,
+        "oi": 350870.0
       }
     }
   }

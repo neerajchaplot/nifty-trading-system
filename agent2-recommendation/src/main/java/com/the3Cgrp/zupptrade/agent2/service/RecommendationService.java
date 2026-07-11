@@ -27,10 +27,12 @@ import com.the3Cgrp.zupptrade.ledger.TradeLedgerService;
 import com.the3Cgrp.zupptrade.ledger.payload.*;
 import com.the3Cgrp.zupptrade.ledger.payload.TradeOverrideConfirmedPayload;
 import com.the3Cgrp.zupptrade.shared.dto.*;
+import com.the3Cgrp.zupptrade.shared.enums.Bias;
 import com.the3Cgrp.zupptrade.shared.enums.LegAction;
 import com.the3Cgrp.zupptrade.shared.enums.OptionType;
 import com.the3Cgrp.zupptrade.shared.enums.SpreadDirection;
 import com.the3Cgrp.zupptrade.shared.enums.Strategy;
+import com.the3Cgrp.zupptrade.shared.enums.Strength;
 import com.the3Cgrp.zupptrade.shared.enums.TradeStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +45,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import com.the3Cgrp.zupptrade.shared.constants.TradingConstants;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -138,6 +141,8 @@ public class RecommendationService {
         ctx.setDte(dte);
         ctx.setOptionChainData(optionChain);
         ctx.setRelaxedGate1PopPct(request.relaxedGate1PopPct());  // null for normal flow; set by ReadjustmentService
+
+        applyUserWeightRecomposition(ctx, signal, userProfile);
 
         engine.execute(ctx);
 
@@ -511,17 +516,18 @@ public class RecommendationService {
 
             // Compute IC thresholds from the actual strikes — trade.thresholds can be stale
             // (all-zeros) when the trade was generated via override from a gate-failed recommendation.
+            // No live option chain here, so use spec-defined fixed buffers (§9: T1=150, T2=75).
             BigDecimal peShortBd = BigDecimal.valueOf(peShort.strike());
             BigDecimal ceShortBd = BigDecimal.valueOf(ceShort.strike());
             BigDecimal icMaxLoss = summary.theoreticalMaxLossTotal() != null
                     && summary.theoreticalMaxLossTotal().compareTo(BigDecimal.ZERO) > 0
                     ? summary.theoreticalMaxLossTotal() : actualMaxLoss;
             MonitorThresholdsDto icThresholds = MonitorThresholdsDto.ironCondor(
-                    peShortBd.add(BigDecimal.valueOf(100)),
-                    peShortBd.add(BigDecimal.valueOf(50)),
+                    peShortBd.add(BigDecimal.valueOf(150)),      // T1 watch: Nifty 150 above PE short
+                    peShortBd.add(BigDecimal.valueOf(75)),       // T2 readjust: Nifty 75 above PE short
                     peShortBd,
-                    ceShortBd.subtract(BigDecimal.valueOf(100)),
-                    ceShortBd.subtract(BigDecimal.valueOf(50)),
+                    ceShortBd.subtract(BigDecimal.valueOf(150)), // T1 watch: Nifty 150 below CE short
+                    ceShortBd.subtract(BigDecimal.valueOf(75)),  // T2 readjust: Nifty 75 below CE short
                     ceShortBd,
                     icMaxLoss.multiply(new BigDecimal("0.30")).setScale(2, RoundingMode.HALF_UP),
                     icMaxLoss);
@@ -688,16 +694,22 @@ public class RecommendationService {
         BigDecimal t3Loss = ctx.getTheoreticalMaxLossTotal();
 
         if (ctx.getStrategy() == Strategy.IRON_CONDOR || ctx.getStrategy() == Strategy.WIDE_IRON_CONDOR) {
-            // Iron Condor: bilateral thresholds — PE short (down side) + CE short (up side)
+            // Iron Condor: bilateral thresholds — PE short (down side) + CE short (up side).
+            // T1/T2 are computed as the Nifty level where live PoP of the short leg equals
+            // POP_HOLD_MINIMUM (T1 WATCH) and POP_WATCH_MINIMUM (T2 READJUST) respectively.
+            // This makes thresholds adaptive to IV and DTE at trade entry.
             BigDecimal peShort = BigDecimal.valueOf(ctx.getShortLeg().strike());
             BigDecimal ceShort = BigDecimal.valueOf(ctx.getShortLeg2().strike());
+            BigDecimal peIv = lookupIv(ctx.getOptionChainData(), ctx.getShortLeg().strike(), OptionType.PE);
+            BigDecimal ceIv = lookupIv(ctx.getOptionChainData(), ctx.getShortLeg2().strike(), OptionType.CE);
+            int dte = ctx.getDte();
             return MonitorThresholdsDto.ironCondor(
-                    peShort.add(BigDecimal.valueOf(100)),      // T1 watch: Nifty 100 above PE short
-                    peShort.add(BigDecimal.valueOf(50)),       // T2 readjust: Nifty 50 above PE short
-                    peShort,                                   // T3 exit: Nifty at PE short (breach)
-                    ceShort.subtract(BigDecimal.valueOf(100)), // T1 watch: Nifty 100 below CE short
-                    ceShort.subtract(BigDecimal.valueOf(50)),  // T2 readjust: Nifty 50 below CE short
-                    ceShort,                                   // T3 exit: Nifty at CE short (breach)
+                    popToNifty(peShort, peIv, dte, TradingConstants.POP_HOLD_MINIMUM,  OptionType.PE),
+                    popToNifty(peShort, peIv, dte, TradingConstants.POP_WATCH_MINIMUM, OptionType.PE),
+                    peShort,
+                    popToNifty(ceShort, ceIv, dte, TradingConstants.POP_HOLD_MINIMUM,  OptionType.CE),
+                    popToNifty(ceShort, ceIv, dte, TradingConstants.POP_WATCH_MINIMUM, OptionType.CE),
+                    ceShort,
                     t2Loss, t3Loss);
         }
 
@@ -708,12 +720,11 @@ public class RecommendationService {
             // Bull Put Spread (PE short): danger is Nifty FALLING → T1/T2 are ABOVE the short strike
             // Bear Call Spread (CE short): danger is Nifty RISING → T1/T2 are BELOW the short strike
             boolean isCeShort = ctx.getShortLeg().optionType() == OptionType.CE;
-            BigDecimal t1 = isCeShort
-                    ? shortStrike.subtract(BigDecimal.valueOf(100))  // 100 pts below CE short
-                    : shortStrike.add(BigDecimal.valueOf(100));       // 100 pts above PE short
-            BigDecimal t2 = isCeShort
-                    ? shortStrike.subtract(BigDecimal.valueOf(50))
-                    : shortStrike.add(BigDecimal.valueOf(50));
+            OptionType shortType = isCeShort ? OptionType.CE : OptionType.PE;
+            BigDecimal shortIv = lookupIv(ctx.getOptionChainData(), ctx.getShortLeg().strike(), shortType);
+            int dte = ctx.getDte();
+            BigDecimal t1 = popToNifty(shortStrike, shortIv, dte, TradingConstants.POP_HOLD_MINIMUM,  shortType);
+            BigDecimal t2 = popToNifty(shortStrike, shortIv, dte, TradingConstants.POP_WATCH_MINIMUM, shortType);
             return MonitorThresholdsDto.twoLeg(t1, t2, shortStrike, t2Loss, t3Loss);
         } else {
             // Debit spreads: profit exit targets (Nifty rising = profit for bull call)
@@ -723,6 +734,35 @@ public class RecommendationService {
                     ctx.getSpot(),                                                                       // T3: entry level (loss exit)
                     t2Loss, t3Loss);
         }
+    }
+
+    /**
+     * Returns the Nifty spot level where live PoP of the short option equals targetPop.
+     * Falls back to spec-defined fixed buffers (T1=150, T2=75 pts) when IV is unavailable.
+     */
+    private BigDecimal popToNifty(BigDecimal strike, BigDecimal iv, int dte,
+                                   double targetPop, OptionType optionType) {
+        if (iv != null && iv.compareTo(BigDecimal.ZERO) > 0 && dte > 0) {
+            BigDecimal computed = blackScholes.inversePopSpot(strike, iv, dte, RISK_FREE_RATE, targetPop, optionType);
+            if (computed != null) {
+                return computed.setScale(0, RoundingMode.HALF_UP);
+            }
+        }
+        // Fallback: spec §9 fixed buffers (T1=150, T2=75 pts from short strike)
+        boolean isT1 = (targetPop >= TradingConstants.POP_WATCH_MINIMUM);
+        BigDecimal buf = BigDecimal.valueOf(isT1 ? 150 : 75);
+        return optionType == OptionType.PE ? strike.add(buf) : strike.subtract(buf);
+    }
+
+    /** Looks up the IV for a specific strike from the option chain. Returns null if not found. */
+    private BigDecimal lookupIv(OptionChainData chain, int strike, OptionType optionType) {
+        if (chain == null) return null;
+        List<StrikeData> strikes = (optionType == OptionType.PE) ? chain.puts() : chain.calls();
+        return strikes.stream()
+                .filter(sd -> sd.strike() == strike)
+                .findFirst()
+                .map(StrikeData::iv)
+                .orElse(null);
     }
 
     private String buildRationale(RecommendationContext ctx) {
@@ -1028,5 +1068,81 @@ public class RecommendationService {
 
         log.info("confirm.threshold.override.applied",
                 kv("tradeId", trade.getId()), kv("t1", t1), kv("t2", t2), kv("t3", t3));
+    }
+
+    /**
+     * Recomputes the Agent 1 composite score using the user's custom tier weights.
+     * Sets effectiveBias and effectiveStrength on the context so Layer 1 StrategySelector
+     * uses user-adjusted signal values rather than the market-wide signal defaults.
+     *
+     * Falls back to signal values (no-op) if score_breakdown is absent or unparseable.
+     */
+    private void applyUserWeightRecomposition(RecommendationContext ctx,
+                                               Agent1SignalEntity signal,
+                                               UserProfileEntity userProfile) {
+        String scoreBreakdownJson = signal.getScoreBreakdown();
+        if (scoreBreakdownJson == null || scoreBreakdownJson.isBlank()) {
+            ctx.setWeightsSource("SYSTEM_DEFAULT");
+            log.warn("agent2.weights.recomp.skipped reason=score_breakdown_absent signalId={}", signal.getId());
+            return;
+        }
+
+        try {
+            TypeReference<List<Map<String, Object>>> listType = new TypeReference<>() {};
+            List<Map<String, Object>> tiers = jsonUtil.fromJson(scoreBreakdownJson, listType);
+
+            Map<String, BigDecimal> tierWeightMap = Map.of(
+                    "TIER_1A_PRICE_STRUCTURE",    userProfile.getTier1aWeight(),
+                    "TIER_1B_TECHNICAL",          userProfile.getTier1bWeight(),
+                    "TIER_2_INSTITUTIONAL_FLOW",  userProfile.getTier2Weight(),
+                    "TIER_3_VOLATILITY_MACRO",    userProfile.getTier3Weight(),
+                    "TIER_4_COMMENTARY_SENTIMENT", userProfile.getTier4Weight()
+            );
+
+            BigDecimal composite = BigDecimal.ZERO;
+            for (Map<String, Object> tier : tiers) {
+                String tierName = (String) tier.get("tierName");
+                Object avgObj   = tier.get("average");
+                if (tierName == null || avgObj == null) continue;
+
+                BigDecimal average    = new BigDecimal(avgObj.toString());
+                BigDecimal userWeight = tierWeightMap.getOrDefault(tierName, BigDecimal.ZERO);
+                composite = composite.add(average.multiply(userWeight));
+            }
+            composite = composite.setScale(4, RoundingMode.HALF_UP);
+
+            Bias     adjustedBias     = deriveEffectiveBias(composite);
+            Strength adjustedStrength = deriveEffectiveStrength(composite);
+
+            ctx.setEffectiveBias(adjustedBias);
+            ctx.setEffectiveStrength(adjustedStrength);
+            ctx.setWeightsSource("USER_OVERRIDE");
+
+            log.info("agent2.weights.recomp.applied signalId={} signalBias={} signalStrength={} "
+                            + "adjustedComposite={} adjustedBias={} adjustedStrength={}",
+                    signal.getId(), signal.getBias(), signal.getStrength(),
+                    composite, adjustedBias, adjustedStrength);
+
+        } catch (Exception ex) {
+            ctx.setWeightsSource("SYSTEM_DEFAULT");
+            log.warn("agent2.weights.recomp.failed signalId={} reason={} — falling back to signal values",
+                    signal.getId(), ex.getMessage());
+        }
+    }
+
+    private static final BigDecimal BIAS_NEUTRAL_BAND = new BigDecimal("0.10");
+    private static final BigDecimal BIAS_MILD         = new BigDecimal("0.25");
+    private static final BigDecimal BIAS_EXTREME      = new BigDecimal("0.50");
+
+    private Bias deriveEffectiveBias(BigDecimal composite) {
+        if (composite.abs().compareTo(BIAS_NEUTRAL_BAND) <= 0) return Bias.NEUTRAL;
+        return composite.compareTo(BigDecimal.ZERO) > 0 ? Bias.BULLISH : Bias.BEARISH;
+    }
+
+    private Strength deriveEffectiveStrength(BigDecimal composite) {
+        BigDecimal abs = composite.abs();
+        if (abs.compareTo(BIAS_EXTREME) > 0) return Strength.EXTREME;
+        if (abs.compareTo(BIAS_MILD) > 0)    return Strength.MILD;
+        return Strength.WEAK;
     }
 }

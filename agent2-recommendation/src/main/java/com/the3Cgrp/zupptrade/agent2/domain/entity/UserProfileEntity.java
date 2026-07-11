@@ -35,6 +35,24 @@ public class UserProfileEntity {
     @Column(name = "spread_width_max", nullable = false)
     private int spreadWidthMax;
 
+    @Column(name = "min_roc_pct", nullable = false, precision = 5, scale = 2)
+    private BigDecimal minRocPct;
+
+    @Column(name = "tier1a_weight", nullable = false, precision = 5, scale = 4)
+    private BigDecimal tier1aWeight;
+
+    @Column(name = "tier1b_weight", nullable = false, precision = 5, scale = 4)
+    private BigDecimal tier1bWeight;
+
+    @Column(name = "tier2_weight", nullable = false, precision = 5, scale = 4)
+    private BigDecimal tier2Weight;
+
+    @Column(name = "tier3_weight", nullable = false, precision = 5, scale = 4)
+    private BigDecimal tier3Weight;
+
+    @Column(name = "tier4_weight", nullable = false, precision = 5, scale = 4)
+    private BigDecimal tier4Weight;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -64,9 +82,21 @@ public class UserProfileEntity {
     public BigDecimal getMaxLossPct() { return maxLossPct; }
     public void setMaxLossPct(BigDecimal maxLossPct) { this.maxLossPct = maxLossPct; }
     public int getSpreadWidthMin() { return spreadWidthMin; }
-    public void setSpreadWidthMin(int spreadWidthMin) { this.spreadWidthMin = spreadWidthMin; }
+    public void setSpreadWidthMin(int v) { this.spreadWidthMin = v; }
     public int getSpreadWidthMax() { return spreadWidthMax; }
-    public void setSpreadWidthMax(int spreadWidthMax) { this.spreadWidthMax = spreadWidthMax; }
+    public void setSpreadWidthMax(int v) { this.spreadWidthMax = v; }
+    public BigDecimal getMinRocPct()          { return minRocPct; }
+    public void setMinRocPct(BigDecimal v)    { this.minRocPct = v; }
+    public BigDecimal getTier1aWeight()       { return tier1aWeight; }
+    public void setTier1aWeight(BigDecimal v) { this.tier1aWeight = v; }
+    public BigDecimal getTier1bWeight()       { return tier1bWeight; }
+    public void setTier1bWeight(BigDecimal v) { this.tier1bWeight = v; }
+    public BigDecimal getTier2Weight()        { return tier2Weight; }
+    public void setTier2Weight(BigDecimal v)  { this.tier2Weight = v; }
+    public BigDecimal getTier3Weight()        { return tier3Weight; }
+    public void setTier3Weight(BigDecimal v)  { this.tier3Weight = v; }
+    public BigDecimal getTier4Weight()        { return tier4Weight; }
+    public void setTier4Weight(BigDecimal v)  { this.tier4Weight = v; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 }

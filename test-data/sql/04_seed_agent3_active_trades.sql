@@ -4,7 +4,7 @@
 -- All tests use the niftySpot override body (offline mode — no Upstox needed).
 -- Override body: { niftySpot, vix, shortLegLtp, longLegLtp, shortLegIv }
 --
--- Expiry: 2026-06-30. Instrument keys from Friday 2026-06-27 capture.
+-- Expiry: 2026-07-07. Instrument keys: PLACEHOLDER — update from 2026-07-03 capture.
 -- ATM=24050. Entry context: spot=24350 (pretend entry was intraday higher).
 --
 -- BullPutSpread (T-301 to T-305): SELL PE 24000 / BUY PE 23900
@@ -16,7 +16,7 @@
 --   PoP 75–79% → WATCH      PoP ≥ 80%  → HOLD
 --   VIX > 24   → PAUSE      Spot breach short strike → EXIT
 --
--- IV overrides calibrated for DTE=4 (test date 2026-06-26, expiry 2026-06-30):
+-- IV overrides calibrated for DTE=4 (test date 2026-07-03, expiry 2026-07-07):
 --   HOLD     : spot=24450, σ=0.185 → PoP≈83.8%
 --   WATCH    : spot=24350, σ=0.192 → PoP≈77.2%
 --   READJUST : spot=24200, σ=0.200 → PoP≈66.3%
@@ -33,8 +33,8 @@ DELETE FROM trades WHERE id::text LIKE 'a3000001-%';
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Shared BullPutSpread config (T-301 to T-305)
---   Short PE 24000: NSE_FO|71473  entryLtp=64.50
---   Long  PE 23900: NSE_FO|79723  entryLtp=38.15
+--   Short PE 24000: NSE_FO|44621  entryLtp=64.50
+--   Long  PE 23900: NSE_FO|44617  entryLtp=38.15
 --   actualNetPremiumPerUnit=26.35, lots=10, qty=650
 --   t2LossThreshold=11968, t3LossThreshold=23937
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -49,10 +49,10 @@ INSERT INTO trades (
 ) VALUES (
     'a3000001-0000-0000-0000-000000000001',
     '00000001-0000-0000-0000-000000000002',   -- 10L user
-    'ACTIVE', 'BULL_PUT_SPREAD', '2026-06-30', 7,
+    'ACTIVE', 'BULL_PUT_SPREAD', '2026-07-07', 7,
     '[
-        {"action":"SELL","strike":24000,"optionType":"PE","instrumentKey":"NSE_FO|71473"},
-        {"action":"BUY", "strike":23900,"optionType":"PE","instrumentKey":"NSE_FO|79723"}
+        {"action":"SELL","strike":24000,"optionType":"PE","instrumentKey":"NSE_FO|44621"},
+        {"action":"BUY", "strike":23900,"optionType":"PE","instrumentKey":"NSE_FO|44617"}
     ]'::jsonb,
     '{"netPremiumPerUnit":26.35,"spreadWidth":100,"lots":10,"lotSize":65,"maxProfitTotal":17128,"theoreticalMaxLossTotal":47873,"realExpectedLossTotal":23937}'::jsonb,
     '{"spot":24350,"vix":18.50,"ivRegime":"RICH","bias":"BULLISH","strength":"MILD","dte":7}'::jsonb,
@@ -62,8 +62,8 @@ INSERT INTO trades (
         "tradeId": "a3000001-0000-0000-0000-000000000001",
         "strategy": "BULL_PUT_SPREAD",
         "spreadDirection": "CREDIT",
-        "shortLeg": {"strike":24000,"optionType":"PE","action":"SELL","ltp":64.50,"instrumentKey":"NSE_FO|71473"},
-        "longLeg":  {"strike":23900,"optionType":"PE","action":"BUY", "ltp":38.15,"instrumentKey":"NSE_FO|79723"},
+        "shortLeg": {"strike":24000,"optionType":"PE","action":"SELL","ltp":64.50,"instrumentKey":"NSE_FO|44621"},
+        "longLeg":  {"strike":23900,"optionType":"PE","action":"BUY", "ltp":38.15,"instrumentKey":"NSE_FO|44617"},
         "actualNetPremiumPerUnit": 26.35,
         "lots": 10,
         "lotSize": 65,
@@ -78,14 +78,14 @@ INSERT INTO trades (
             "t2LossThreshold": 11968,
             "t3LossThreshold": 23937
         },
-        "expiryDate": "2026-06-30",
+        "expiryDate": "2026-07-07",
         "dte": 7
     }'::jsonb,
     '[
-        {"orderId":"SIM-A3000001-L0","instrumentKey":"NSE_FO|71473","action":"SELL","strike":24000,"optionType":"PE","quantityFilled":650,"averageFillPrice":64.50},
-        {"orderId":"SIM-A3000001-L1","instrumentKey":"NSE_FO|79723","action":"BUY","strike":23900,"optionType":"PE","quantityFilled":650,"averageFillPrice":38.15}
+        {"orderId":"SIM-A3000001-L0","instrumentKey":"NSE_FO|44621","action":"SELL","strike":24000,"optionType":"PE","quantityFilled":650,"averageFillPrice":64.50},
+        {"orderId":"SIM-A3000001-L1","instrumentKey":"NSE_FO|44617","action":"BUY","strike":23900,"optionType":"PE","quantityFilled":650,"averageFillPrice":38.15}
     ]'::jsonb,
-    NOW() - INTERVAL '3 hours', NOW() - INTERVAL '2 hours 50 minutes', NOW() - INTERVAL '2 hours', 'T-20260627-0301'
+    NOW() - INTERVAL '3 hours', NOW() - INTERVAL '2 hours 50 minutes', NOW() - INTERVAL '2 hours', 'T-20260703-0301'
 );
 
 -- ── T-302: BullPutSpread — should produce WATCH ──────────────────────────────
@@ -98,10 +98,10 @@ INSERT INTO trades (
 ) VALUES (
     'a3000001-0000-0000-0000-000000000002',
     '00000001-0000-0000-0000-000000000002',   -- 10L user
-    'ACTIVE', 'BULL_PUT_SPREAD', '2026-06-30', 7,
+    'ACTIVE', 'BULL_PUT_SPREAD', '2026-07-07', 7,
     '[
-        {"action":"SELL","strike":24000,"optionType":"PE","instrumentKey":"NSE_FO|71473"},
-        {"action":"BUY", "strike":23900,"optionType":"PE","instrumentKey":"NSE_FO|79723"}
+        {"action":"SELL","strike":24000,"optionType":"PE","instrumentKey":"NSE_FO|44621"},
+        {"action":"BUY", "strike":23900,"optionType":"PE","instrumentKey":"NSE_FO|44617"}
     ]'::jsonb,
     '{"netPremiumPerUnit":26.35,"spreadWidth":100,"lots":10,"lotSize":65,"maxProfitTotal":17128,"theoreticalMaxLossTotal":47873,"realExpectedLossTotal":23937}'::jsonb,
     '{"spot":24350,"vix":18.50,"ivRegime":"RICH","bias":"BULLISH","strength":"MILD","dte":7}'::jsonb,
@@ -111,8 +111,8 @@ INSERT INTO trades (
         "tradeId": "a3000001-0000-0000-0000-000000000002",
         "strategy": "BULL_PUT_SPREAD",
         "spreadDirection": "CREDIT",
-        "shortLeg": {"strike":24000,"optionType":"PE","action":"SELL","ltp":64.50,"instrumentKey":"NSE_FO|71473"},
-        "longLeg":  {"strike":23900,"optionType":"PE","action":"BUY", "ltp":38.15,"instrumentKey":"NSE_FO|79723"},
+        "shortLeg": {"strike":24000,"optionType":"PE","action":"SELL","ltp":64.50,"instrumentKey":"NSE_FO|44621"},
+        "longLeg":  {"strike":23900,"optionType":"PE","action":"BUY", "ltp":38.15,"instrumentKey":"NSE_FO|44617"},
         "actualNetPremiumPerUnit": 26.35,
         "lots": 10,
         "lotSize": 65,
@@ -127,14 +127,14 @@ INSERT INTO trades (
             "t2LossThreshold": 11968,
             "t3LossThreshold": 23937
         },
-        "expiryDate": "2026-06-30",
+        "expiryDate": "2026-07-07",
         "dte": 7
     }'::jsonb,
     '[
-        {"orderId":"SIM-A3000002-L0","instrumentKey":"NSE_FO|71473","action":"SELL","strike":24000,"optionType":"PE","quantityFilled":650,"averageFillPrice":64.50},
-        {"orderId":"SIM-A3000002-L1","instrumentKey":"NSE_FO|79723","action":"BUY","strike":23900,"optionType":"PE","quantityFilled":650,"averageFillPrice":38.15}
+        {"orderId":"SIM-A3000002-L0","instrumentKey":"NSE_FO|44621","action":"SELL","strike":24000,"optionType":"PE","quantityFilled":650,"averageFillPrice":64.50},
+        {"orderId":"SIM-A3000002-L1","instrumentKey":"NSE_FO|44617","action":"BUY","strike":23900,"optionType":"PE","quantityFilled":650,"averageFillPrice":38.15}
     ]'::jsonb,
-    NOW() - INTERVAL '3 hours', NOW() - INTERVAL '2 hours 50 minutes', NOW() - INTERVAL '2 hours', 'T-20260627-0302'
+    NOW() - INTERVAL '3 hours', NOW() - INTERVAL '2 hours 50 minutes', NOW() - INTERVAL '2 hours', 'T-20260703-0302'
 );
 
 -- ── T-303: BullPutSpread — should produce READJUST ───────────────────────────
@@ -147,10 +147,10 @@ INSERT INTO trades (
 ) VALUES (
     'a3000001-0000-0000-0000-000000000003',
     '00000001-0000-0000-0000-000000000002',   -- 10L user
-    'ACTIVE', 'BULL_PUT_SPREAD', '2026-06-30', 7,
+    'ACTIVE', 'BULL_PUT_SPREAD', '2026-07-07', 7,
     '[
-        {"action":"SELL","strike":24000,"optionType":"PE","instrumentKey":"NSE_FO|71473"},
-        {"action":"BUY", "strike":23900,"optionType":"PE","instrumentKey":"NSE_FO|79723"}
+        {"action":"SELL","strike":24000,"optionType":"PE","instrumentKey":"NSE_FO|44621"},
+        {"action":"BUY", "strike":23900,"optionType":"PE","instrumentKey":"NSE_FO|44617"}
     ]'::jsonb,
     '{"netPremiumPerUnit":26.35,"spreadWidth":100,"lots":10,"lotSize":65,"maxProfitTotal":17128,"theoreticalMaxLossTotal":47873,"realExpectedLossTotal":23937}'::jsonb,
     '{"spot":24350,"vix":18.50,"ivRegime":"RICH","bias":"BULLISH","strength":"MILD","dte":7}'::jsonb,
@@ -160,8 +160,8 @@ INSERT INTO trades (
         "tradeId": "a3000001-0000-0000-0000-000000000003",
         "strategy": "BULL_PUT_SPREAD",
         "spreadDirection": "CREDIT",
-        "shortLeg": {"strike":24000,"optionType":"PE","action":"SELL","ltp":64.50,"instrumentKey":"NSE_FO|71473"},
-        "longLeg":  {"strike":23900,"optionType":"PE","action":"BUY", "ltp":38.15,"instrumentKey":"NSE_FO|79723"},
+        "shortLeg": {"strike":24000,"optionType":"PE","action":"SELL","ltp":64.50,"instrumentKey":"NSE_FO|44621"},
+        "longLeg":  {"strike":23900,"optionType":"PE","action":"BUY", "ltp":38.15,"instrumentKey":"NSE_FO|44617"},
         "actualNetPremiumPerUnit": 26.35,
         "lots": 10,
         "lotSize": 65,
@@ -176,14 +176,14 @@ INSERT INTO trades (
             "t2LossThreshold": 11968,
             "t3LossThreshold": 23937
         },
-        "expiryDate": "2026-06-30",
+        "expiryDate": "2026-07-07",
         "dte": 7
     }'::jsonb,
     '[
-        {"orderId":"SIM-A3000003-L0","instrumentKey":"NSE_FO|71473","action":"SELL","strike":24000,"optionType":"PE","quantityFilled":650,"averageFillPrice":64.50},
-        {"orderId":"SIM-A3000003-L1","instrumentKey":"NSE_FO|79723","action":"BUY","strike":23900,"optionType":"PE","quantityFilled":650,"averageFillPrice":38.15}
+        {"orderId":"SIM-A3000003-L0","instrumentKey":"NSE_FO|44621","action":"SELL","strike":24000,"optionType":"PE","quantityFilled":650,"averageFillPrice":64.50},
+        {"orderId":"SIM-A3000003-L1","instrumentKey":"NSE_FO|44617","action":"BUY","strike":23900,"optionType":"PE","quantityFilled":650,"averageFillPrice":38.15}
     ]'::jsonb,
-    NOW() - INTERVAL '3 hours', NOW() - INTERVAL '2 hours 50 minutes', NOW() - INTERVAL '2 hours', 'T-20260627-0303'
+    NOW() - INTERVAL '3 hours', NOW() - INTERVAL '2 hours 50 minutes', NOW() - INTERVAL '2 hours', 'T-20260703-0303'
 );
 
 -- ── T-304: BullPutSpread — should produce EXIT ───────────────────────────────
@@ -197,10 +197,10 @@ INSERT INTO trades (
 ) VALUES (
     'a3000001-0000-0000-0000-000000000004',
     '00000001-0000-0000-0000-000000000002',   -- 10L user
-    'ACTIVE', 'BULL_PUT_SPREAD', '2026-06-30', 7,
+    'ACTIVE', 'BULL_PUT_SPREAD', '2026-07-07', 7,
     '[
-        {"action":"SELL","strike":24000,"optionType":"PE","instrumentKey":"NSE_FO|71473"},
-        {"action":"BUY", "strike":23900,"optionType":"PE","instrumentKey":"NSE_FO|79723"}
+        {"action":"SELL","strike":24000,"optionType":"PE","instrumentKey":"NSE_FO|44621"},
+        {"action":"BUY", "strike":23900,"optionType":"PE","instrumentKey":"NSE_FO|44617"}
     ]'::jsonb,
     '{"netPremiumPerUnit":26.35,"spreadWidth":100,"lots":10,"lotSize":65,"maxProfitTotal":17128,"theoreticalMaxLossTotal":47873,"realExpectedLossTotal":23937}'::jsonb,
     '{"spot":24350,"vix":18.50,"ivRegime":"RICH","bias":"BULLISH","strength":"MILD","dte":7}'::jsonb,
@@ -210,8 +210,8 @@ INSERT INTO trades (
         "tradeId": "a3000001-0000-0000-0000-000000000004",
         "strategy": "BULL_PUT_SPREAD",
         "spreadDirection": "CREDIT",
-        "shortLeg": {"strike":24000,"optionType":"PE","action":"SELL","ltp":64.50,"instrumentKey":"NSE_FO|71473"},
-        "longLeg":  {"strike":23900,"optionType":"PE","action":"BUY", "ltp":38.15,"instrumentKey":"NSE_FO|79723"},
+        "shortLeg": {"strike":24000,"optionType":"PE","action":"SELL","ltp":64.50,"instrumentKey":"NSE_FO|44621"},
+        "longLeg":  {"strike":23900,"optionType":"PE","action":"BUY", "ltp":38.15,"instrumentKey":"NSE_FO|44617"},
         "actualNetPremiumPerUnit": 26.35,
         "lots": 10,
         "lotSize": 65,
@@ -226,14 +226,14 @@ INSERT INTO trades (
             "t2LossThreshold": 11968,
             "t3LossThreshold": 23937
         },
-        "expiryDate": "2026-06-30",
+        "expiryDate": "2026-07-07",
         "dte": 7
     }'::jsonb,
     '[
-        {"orderId":"SIM-A3000004-L0","instrumentKey":"NSE_FO|71473","action":"SELL","strike":24000,"optionType":"PE","quantityFilled":650,"averageFillPrice":64.50},
-        {"orderId":"SIM-A3000004-L1","instrumentKey":"NSE_FO|79723","action":"BUY","strike":23900,"optionType":"PE","quantityFilled":650,"averageFillPrice":38.15}
+        {"orderId":"SIM-A3000004-L0","instrumentKey":"NSE_FO|44621","action":"SELL","strike":24000,"optionType":"PE","quantityFilled":650,"averageFillPrice":64.50},
+        {"orderId":"SIM-A3000004-L1","instrumentKey":"NSE_FO|44617","action":"BUY","strike":23900,"optionType":"PE","quantityFilled":650,"averageFillPrice":38.15}
     ]'::jsonb,
-    NOW() - INTERVAL '3 hours', NOW() - INTERVAL '2 hours 50 minutes', NOW() - INTERVAL '2 hours', 'T-20260627-0304'
+    NOW() - INTERVAL '3 hours', NOW() - INTERVAL '2 hours 50 minutes', NOW() - INTERVAL '2 hours', 'T-20260703-0304'
 );
 
 -- ── T-305: BullPutSpread — VIX spike → PAUSE ─────────────────────────────────
@@ -248,10 +248,10 @@ INSERT INTO trades (
 ) VALUES (
     'a3000001-0000-0000-0000-000000000005',
     '00000001-0000-0000-0000-000000000002',   -- 10L user
-    'ACTIVE', 'BULL_PUT_SPREAD', '2026-06-30', 7,
+    'ACTIVE', 'BULL_PUT_SPREAD', '2026-07-07', 7,
     '[
-        {"action":"SELL","strike":24000,"optionType":"PE","instrumentKey":"NSE_FO|71473"},
-        {"action":"BUY", "strike":23900,"optionType":"PE","instrumentKey":"NSE_FO|79723"}
+        {"action":"SELL","strike":24000,"optionType":"PE","instrumentKey":"NSE_FO|44621"},
+        {"action":"BUY", "strike":23900,"optionType":"PE","instrumentKey":"NSE_FO|44617"}
     ]'::jsonb,
     '{"netPremiumPerUnit":26.35,"spreadWidth":100,"lots":10,"lotSize":65,"maxProfitTotal":17128,"theoreticalMaxLossTotal":47873,"realExpectedLossTotal":23937}'::jsonb,
     '{"spot":24350,"vix":18.50,"ivRegime":"RICH","bias":"BULLISH","strength":"MILD","dte":7}'::jsonb,
@@ -261,8 +261,8 @@ INSERT INTO trades (
         "tradeId": "a3000001-0000-0000-0000-000000000005",
         "strategy": "BULL_PUT_SPREAD",
         "spreadDirection": "CREDIT",
-        "shortLeg": {"strike":24000,"optionType":"PE","action":"SELL","ltp":64.50,"instrumentKey":"NSE_FO|71473"},
-        "longLeg":  {"strike":23900,"optionType":"PE","action":"BUY", "ltp":38.15,"instrumentKey":"NSE_FO|79723"},
+        "shortLeg": {"strike":24000,"optionType":"PE","action":"SELL","ltp":64.50,"instrumentKey":"NSE_FO|44621"},
+        "longLeg":  {"strike":23900,"optionType":"PE","action":"BUY", "ltp":38.15,"instrumentKey":"NSE_FO|44617"},
         "actualNetPremiumPerUnit": 26.35,
         "lots": 10,
         "lotSize": 65,
@@ -277,20 +277,20 @@ INSERT INTO trades (
             "t2LossThreshold": 11968,
             "t3LossThreshold": 23937
         },
-        "expiryDate": "2026-06-30",
+        "expiryDate": "2026-07-07",
         "dte": 7
     }'::jsonb,
     '[
-        {"orderId":"SIM-A3000005-L0","instrumentKey":"NSE_FO|71473","action":"SELL","strike":24000,"optionType":"PE","quantityFilled":650,"averageFillPrice":64.50},
-        {"orderId":"SIM-A3000005-L1","instrumentKey":"NSE_FO|79723","action":"BUY","strike":23900,"optionType":"PE","quantityFilled":650,"averageFillPrice":38.15}
+        {"orderId":"SIM-A3000005-L0","instrumentKey":"NSE_FO|44621","action":"SELL","strike":24000,"optionType":"PE","quantityFilled":650,"averageFillPrice":64.50},
+        {"orderId":"SIM-A3000005-L1","instrumentKey":"NSE_FO|44617","action":"BUY","strike":23900,"optionType":"PE","quantityFilled":650,"averageFillPrice":38.15}
     ]'::jsonb,
-    NOW() - INTERVAL '3 hours', NOW() - INTERVAL '2 hours 50 minutes', NOW() - INTERVAL '2 hours', 'T-20260627-0305'
+    NOW() - INTERVAL '3 hours', NOW() - INTERVAL '2 hours 50 minutes', NOW() - INTERVAL '2 hours', 'T-20260703-0305'
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- BullCallSpread (T-306, T-307)
---   Short CE 24250: NSE_FO|79738  entryLtp=43.55  (SELL leg)
---   Long  CE 24100: NSE_FO|79732  entryLtp=102.45 (BUY  leg)
+--   Short CE 24250: NSE_FO|44642  entryLtp=43.55  (SELL leg)
+--   Long  CE 24100: NSE_FO|44633  entryLtp=102.45 (BUY  leg)
 --   actualNetPremiumPerUnit=58.90 (debit paid), lots=2, qty=130
 --   t1WatchNiftyLevel=24200 (0.5% RoC level → WATCH)
 --   t2ReadjustNiftyLevel=24250 (1% RoC level → EXIT profit)
@@ -310,10 +310,10 @@ INSERT INTO trades (
 ) VALUES (
     'a3000001-0000-0000-0000-000000000006',
     '00000001-0000-0000-0000-000000000002',   -- 10L user
-    'ACTIVE', 'BULL_CALL_SPREAD', '2026-06-30', 7,
+    'ACTIVE', 'BULL_CALL_SPREAD', '2026-07-07', 7,
     '[
-        {"action":"BUY", "strike":24100,"optionType":"CE","instrumentKey":"NSE_FO|79732"},
-        {"action":"SELL","strike":24250,"optionType":"CE","instrumentKey":"NSE_FO|79738"}
+        {"action":"BUY", "strike":24100,"optionType":"CE","instrumentKey":"NSE_FO|44633"},
+        {"action":"SELL","strike":24250,"optionType":"CE","instrumentKey":"NSE_FO|44642"}
     ]'::jsonb,
     '{"netPremiumPerUnit":58.90,"spreadWidth":150,"lots":2,"lotSize":65,"maxProfitTotal":11843,"theoreticalMaxLossTotal":7657,"realExpectedLossTotal":3829}'::jsonb,
     '{"spot":24050,"vix":15.20,"ivRegime":"FAIR","bias":"BULLISH","strength":"EXTREME","dte":7}'::jsonb,
@@ -323,8 +323,8 @@ INSERT INTO trades (
         "tradeId": "a3000001-0000-0000-0000-000000000006",
         "strategy": "BULL_CALL_SPREAD",
         "spreadDirection": "DEBIT",
-        "shortLeg": {"strike":24250,"optionType":"CE","action":"SELL","ltp":43.55,"instrumentKey":"NSE_FO|79738"},
-        "longLeg":  {"strike":24100,"optionType":"CE","action":"BUY", "ltp":102.45,"instrumentKey":"NSE_FO|79732"},
+        "shortLeg": {"strike":24250,"optionType":"CE","action":"SELL","ltp":43.55,"instrumentKey":"NSE_FO|44642"},
+        "longLeg":  {"strike":24100,"optionType":"CE","action":"BUY", "ltp":102.45,"instrumentKey":"NSE_FO|44633"},
         "actualNetPremiumPerUnit": 58.90,
         "lots": 2,
         "lotSize": 65,
@@ -337,14 +337,14 @@ INSERT INTO trades (
             "t2ReadjustNiftyLevel": 24250,
             "t2LossThreshold": 3829
         },
-        "expiryDate": "2026-06-30",
+        "expiryDate": "2026-07-07",
         "dte": 7
     }'::jsonb,
     '[
-        {"orderId":"SIM-A3000006-L0","instrumentKey":"NSE_FO|79732","action":"BUY","strike":24100,"optionType":"CE","quantityFilled":130,"averageFillPrice":102.45},
-        {"orderId":"SIM-A3000006-L1","instrumentKey":"NSE_FO|79738","action":"SELL","strike":24250,"optionType":"CE","quantityFilled":130,"averageFillPrice":43.55}
+        {"orderId":"SIM-A3000006-L0","instrumentKey":"NSE_FO|44633","action":"BUY","strike":24100,"optionType":"CE","quantityFilled":130,"averageFillPrice":102.45},
+        {"orderId":"SIM-A3000006-L1","instrumentKey":"NSE_FO|44642","action":"SELL","strike":24250,"optionType":"CE","quantityFilled":130,"averageFillPrice":43.55}
     ]'::jsonb,
-    NOW() - INTERVAL '3 hours', NOW() - INTERVAL '2 hours 50 minutes', NOW() - INTERVAL '2 hours', 'T-20260627-0306'
+    NOW() - INTERVAL '3 hours', NOW() - INTERVAL '2 hours 50 minutes', NOW() - INTERVAL '2 hours', 'T-20260703-0306'
 );
 
 -- ── T-307: BullCallSpread (debit) — T3 LOSS CUT EXIT ─────────────────────────
@@ -361,10 +361,10 @@ INSERT INTO trades (
 ) VALUES (
     'a3000001-0000-0000-0000-000000000007',
     '00000001-0000-0000-0000-000000000002',   -- 10L user
-    'ACTIVE', 'BULL_CALL_SPREAD', '2026-06-30', 7,
+    'ACTIVE', 'BULL_CALL_SPREAD', '2026-07-07', 7,
     '[
-        {"action":"BUY", "strike":24100,"optionType":"CE","instrumentKey":"NSE_FO|79732"},
-        {"action":"SELL","strike":24250,"optionType":"CE","instrumentKey":"NSE_FO|79738"}
+        {"action":"BUY", "strike":24100,"optionType":"CE","instrumentKey":"NSE_FO|44633"},
+        {"action":"SELL","strike":24250,"optionType":"CE","instrumentKey":"NSE_FO|44642"}
     ]'::jsonb,
     '{"netPremiumPerUnit":58.90,"spreadWidth":150,"lots":2,"lotSize":65,"maxProfitTotal":11843,"theoreticalMaxLossTotal":7657,"realExpectedLossTotal":3829}'::jsonb,
     '{"spot":24050,"vix":15.20,"ivRegime":"FAIR","bias":"BULLISH","strength":"EXTREME","dte":7}'::jsonb,
@@ -374,8 +374,8 @@ INSERT INTO trades (
         "tradeId": "a3000001-0000-0000-0000-000000000007",
         "strategy": "BULL_CALL_SPREAD",
         "spreadDirection": "DEBIT",
-        "shortLeg": {"strike":24250,"optionType":"CE","action":"SELL","ltp":43.55,"instrumentKey":"NSE_FO|79738"},
-        "longLeg":  {"strike":24100,"optionType":"CE","action":"BUY", "ltp":102.45,"instrumentKey":"NSE_FO|79732"},
+        "shortLeg": {"strike":24250,"optionType":"CE","action":"SELL","ltp":43.55,"instrumentKey":"NSE_FO|44642"},
+        "longLeg":  {"strike":24100,"optionType":"CE","action":"BUY", "ltp":102.45,"instrumentKey":"NSE_FO|44633"},
         "actualNetPremiumPerUnit": 58.90,
         "lots": 2,
         "lotSize": 65,
@@ -388,14 +388,14 @@ INSERT INTO trades (
             "t2ReadjustNiftyLevel": 24250,
             "t2LossThreshold": 3829
         },
-        "expiryDate": "2026-06-30",
+        "expiryDate": "2026-07-07",
         "dte": 7
     }'::jsonb,
     '[
-        {"orderId":"SIM-A3000007-L0","instrumentKey":"NSE_FO|79732","action":"BUY","strike":24100,"optionType":"CE","quantityFilled":130,"averageFillPrice":102.45},
-        {"orderId":"SIM-A3000007-L1","instrumentKey":"NSE_FO|79738","action":"SELL","strike":24250,"optionType":"CE","quantityFilled":130,"averageFillPrice":43.55}
+        {"orderId":"SIM-A3000007-L0","instrumentKey":"NSE_FO|44633","action":"BUY","strike":24100,"optionType":"CE","quantityFilled":130,"averageFillPrice":102.45},
+        {"orderId":"SIM-A3000007-L1","instrumentKey":"NSE_FO|44642","action":"SELL","strike":24250,"optionType":"CE","quantityFilled":130,"averageFillPrice":43.55}
     ]'::jsonb,
-    NOW() - INTERVAL '3 hours', NOW() - INTERVAL '2 hours 50 minutes', NOW() - INTERVAL '2 hours', 'T-20260627-0307'
+    NOW() - INTERVAL '3 hours', NOW() - INTERVAL '2 hours 50 minutes', NOW() - INTERVAL '2 hours', 'T-20260703-0307'
 );
 
 SELECT id, strategy, status, expiry_date FROM trades WHERE id::text LIKE 'a3000001-%' ORDER BY id;

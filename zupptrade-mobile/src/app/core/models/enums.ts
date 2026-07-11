@@ -1,0 +1,11 @@
+export type Bias = 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+export type Strength = 'EXTREME' | 'MILD' | 'WEAK';
+export type Confidence = 'LOW' | 'MEDIUM' | 'HIGH';
+export type VixRegime = 'LOW' | 'NORMAL' | 'HIGH' | 'EXTREME';
+export type Strategy = 'BULL_PUT_SPREAD' | 'BEAR_CALL_SPREAD' | 'BULL_CALL_SPREAD' | 'BEAR_PUT_SPREAD' | 'IRON_CONDOR' | 'SHORT_STRADDLE' | 'SHORT_STRANGLE' | 'SKIP';
+export type SpreadDirection = 'CREDIT' | 'DEBIT';
+export type TradeStatus = 'PENDING_CONFIRM' | 'CONFIRMED' | 'REJECTED' | 'EXPIRED' | 'ACTIVE' | 'CLOSED' | 'EXIT_IN_PROGRESS' | 'EXIT_FAILED';
+export type OptionType = 'CE' | 'PE';
+export type LegAction = 'BUY' | 'SELL';
+export type MonitorAction = 'HOLD' | 'WATCH' | 'READJUST' | 'EXIT';
+export type ThresholdHit = 'T1' | 'T2' | 'T3' | 'NONE';
