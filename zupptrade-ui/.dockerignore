@@ -1,0 +1,6 @@
+# Keep the build context small; deps + build output are regenerated in the image
+node_modules/
+dist/
+.angular/
+.vscode/
+*.md

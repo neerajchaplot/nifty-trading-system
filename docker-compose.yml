@@ -6,18 +6,18 @@
 #   - Edge      : nginx-proxy-manager is the ONLY service publishing ports (80/443).
 #                 Admin UI (81) is bound to localhost — reach it via SSH tunnel only.
 #   - Agents    : internal-only (expose, not ports) on the private zupptrade-net bridge.
-#                 Agent-to-agent auth stays on X-API-Key.
 #   - Images    : pulled from GHCR (built + pushed by CI). The VM does not build.
 #
-# Usage on the VM:
-#   1. cp .env.example .env   and fill in all secrets + DB_URL + GHCR_OWNER
-#   2. docker login ghcr.io   (PAT with read:packages)
-#   3. docker compose pull
-#   4. docker compose up -d
+# MEMORY (tuned for a 4 GB B2s VM):
+#   Each JVM is capped with -Xmx (via JAVA_TOOL_OPTIONS, which overrides the image's
+#   MaxRAMPercentage) AND a mem_limit. Budget: 6 agents x 512m + NPM 256m + OS ~500m,
+#   with a 2 GB swapfile on the host to absorb the transient upstox-auth (Chromium) spike.
+#   If containers get OOM-killed under load, resize the VM to B2s_v2 (8 GB).
 #
-# NOTE: healthchecks below are an interim TCP liveness check (bash /dev/tcp).
-#       Task #1 (deferred) replaces them with real HTTP /actuator/health once
-#       Spring Boot Actuator is added to all modules.
+# Usage on the VM (from ~/zupptrade):
+#   docker login ghcr.io   (already done)
+#   docker compose pull
+#   docker compose up -d
 # ──────────────────────────────────────────────────────────────────────────────
 
 services:
@@ -27,6 +27,7 @@ services:
     image: jc21/nginx-proxy-manager:latest
     container_name: nifty_npm
     restart: unless-stopped
+    mem_limit: 256m
     ports:
       - "80:80"                 # HTTP + ACME challenge
       - "443:443"               # HTTPS
@@ -42,9 +43,11 @@ services:
     image: ghcr.io/${GHCR_OWNER}/zupptrade-agent1:${IMAGE_TAG:-latest}
     container_name: nifty_agent1
     restart: unless-stopped
+    mem_limit: 512m
     expose:
       - "8081"
     environment:
+      JAVA_TOOL_OPTIONS: "-Xmx256m"
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
@@ -60,18 +63,20 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 45s
+      start_period: 60s
 
   # ── Agent 2 — Trade Recommendation ───────────────────────────────────────────
   agent2:
     image: ghcr.io/${GHCR_OWNER}/zupptrade-agent2:${IMAGE_TAG:-latest}
     container_name: nifty_agent2
     restart: unless-stopped
+    mem_limit: 512m
     depends_on:
       - agent1
     expose:
       - "8082"
     environment:
+      JAVA_TOOL_OPTIONS: "-Xmx256m"
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
@@ -85,13 +90,14 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 45s
+      start_period: 60s
 
   # ── Agent 3 — Trade Monitoring ────────────────────────────────────────────────
   agent3:
     image: ghcr.io/${GHCR_OWNER}/zupptrade-agent3:${IMAGE_TAG:-latest}
     container_name: nifty_agent3
     restart: unless-stopped
+    mem_limit: 512m
     depends_on:
       - agent1
       - agent2
@@ -99,13 +105,13 @@ services:
     expose:
       - "8083"
     environment:
+      JAVA_TOOL_OPTIONS: "-Xmx256m"
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
       UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       X_API_KEY: ${INTERNAL_API_KEY}
-      # Internal service URLs (Docker DNS on zupptrade-net)
       AGENT1_URL: http://agent1:8081
       AGENT2_URL: http://agent2:8082
       AGENT5_URL: http://agent5:8085
@@ -116,16 +122,18 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 45s
+      start_period: 60s
 
   # ── Agent 4 — Trade Analytics & Audit (read-only) ────────────────────────────
   agent4:
     image: ghcr.io/${GHCR_OWNER}/zupptrade-agent4:${IMAGE_TAG:-latest}
     container_name: nifty_agent4
     restart: unless-stopped
+    mem_limit: 512m
     expose:
       - "8084"
     environment:
+      JAVA_TOOL_OPTIONS: "-Xmx256m"
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
@@ -136,20 +144,26 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 45s
+      start_period: 60s
 
   # ── Agent 5 — Trade Execution ─────────────────────────────────────────────────
   agent5:
     image: ghcr.io/${GHCR_OWNER}/zupptrade-agent5:${IMAGE_TAG:-latest}
     container_name: nifty_agent5
     restart: unless-stopped
+    mem_limit: 512m
     expose:
       - "8085"
     environment:
+      JAVA_TOOL_OPTIONS: "-Xmx256m"
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
+      # Order-placement profile: "sandbox" (default) = simulated fills, NO real orders.
+      # Set AGENT5_PROFILE empty in .env to place REAL orders (production).
+      SPRING_PROFILES_ACTIVE: ${AGENT5_PROFILE:-sandbox}
       UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
+      UPSTOX_SANDBOX_TOKEN: ${UPSTOX_SANDBOX_TOKEN}
       UPSTOX_API_KEY: ${UPSTOX_API_KEY}
       UPSTOX_API_SECRET: ${UPSTOX_API_SECRET}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
@@ -161,16 +175,18 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 45s
+      start_period: 60s
 
   # ── Agent User — Profile / mobile + web BFF (public via NPM) ──────────────────
   agent-user:
     image: ghcr.io/${GHCR_OWNER}/zupptrade-agent-user:${IMAGE_TAG:-latest}
     container_name: nifty_agent_user
     restart: unless-stopped
+    mem_limit: 512m
     expose:
       - "8086"
     environment:
+      JAVA_TOOL_OPTIONS: "-Xmx256m"
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
@@ -182,16 +198,18 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 45s
+      start_period: 60s
 
-  # ── Upstox Auth — Daily Token Refresh (batch job, no web server) ──────────────
-  # Runs once at startup and again on its internal 08:30 AM IST @Scheduled.
-  # Does NOT auto-restart — "docker compose restart upstox-auth" each morning if it exited.
+  # ── Upstox Auth — Daily Token Refresh (batch job, Chromium/Playwright) ────────
+  # Runs once at startup + its internal 08:30 AM IST @Scheduled, then exits (restart: no).
+  # Larger mem_limit because it launches headless Chromium; host swap absorbs the spike.
   upstox-auth:
     image: ghcr.io/${GHCR_OWNER}/zupptrade-upstox-auth:${IMAGE_TAG:-latest}
     container_name: nifty_upstox_auth
     restart: "no"
+    mem_limit: 1g
     environment:
+      JAVA_TOOL_OPTIONS: "-Xmx384m"
       DB_URL: ${DB_URL}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
@@ -202,6 +220,22 @@ services:
       UPSTOX_TOTP_SEED: ${UPSTOX_TOTP_SEED}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       UPSTOX_REDIRECT_URI: ${UPSTOX_REDIRECT_URI:-http://localhost:8080/callback}
+    networks:
+      - zupptrade-net
+
+  # ── Web UI (Angular via nginx; also proxies /api/* to the agents) ─────────────
+  # Internal-only; NPM terminates TLS and proxies the FQDN to this container.
+  zupptrade-ui:
+    image: ghcr.io/${GHCR_OWNER}/zupptrade-ui:${IMAGE_TAG:-latest}
+    container_name: nifty_ui
+    restart: unless-stopped
+    mem_limit: 128m
+    expose:
+      - "80"
+    depends_on:
+      - agent1
+      - agent2
+      - agent-user
     networks:
       - zupptrade-net
 

@@ -60,6 +60,7 @@ jobs:
             [agent4-backtest]=zupptrade-agent4
             [agent5-execution]=zupptrade-agent5
             [agent-user]=zupptrade-agent-user
+            [zupptrade-ui]=zupptrade-ui
           )
 
           for dir in "${!svc[@]}"; do
