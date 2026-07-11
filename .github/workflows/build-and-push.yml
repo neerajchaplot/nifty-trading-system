@@ -31,9 +31,11 @@ jobs:
           java-version: '21'
           cache: maven
 
-      # Runs unit tests; integration/token-print groups are excluded by the parent pom default.
-      - name: Build all modules
-        run: mvn -B clean package
+      # Image pipeline skips tests on purpose: the E2E/Flyway tests boot a full Spring
+      # context and require a PostgreSQL DB (profile "local" + gitignored application-local.yml),
+      # which isn't present in CI. A dedicated test job with a Postgres service is tracked separately.
+      - name: Build all module jars
+        run: mvn -B clean package -DskipTests
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
