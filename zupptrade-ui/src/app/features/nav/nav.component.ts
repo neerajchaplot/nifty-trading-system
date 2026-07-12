@@ -9,7 +9,7 @@ import { MatIconModule } from '@angular/material/icon';
   imports: [CommonModule, MatButtonModule, MatIconModule],
   template: `
     <nav class="nav">
-      <span class="nav-brand">ZuppTrade</span>
+      <img src="assets/wordmark-transparent.png" alt="ZuppTrade" class="nav-logo">
       <span class="nav-sub">Nifty 50 Options Dashboard</span>
       <div class="nav-right">
         <span class="nav-time">{{ clock }}</span>
@@ -31,11 +31,9 @@ import { MatIconModule } from '@angular/material/icon';
       flex-shrink: 0;
       z-index: 100;
     }
-    .nav-brand {
-      font-size: 16px;
-      font-weight: 700;
-      color: #2563EB;
-      letter-spacing: -0.3px;
+    .nav-logo {
+      height: 28px;
+      width: auto;
       margin-right: 8px;
     }
     .nav-sub {

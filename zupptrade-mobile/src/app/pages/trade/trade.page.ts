@@ -2,7 +2,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
   IonHeader, IonToolbar, IonTitle, IonContent, IonCard, IonCardContent,
-  IonButton, IonIcon, IonBadge, IonSpinner, IonAlert,
+  IonButton, IonIcon, IonBadge, IonSpinner, IonAlert, IonButtons,
 } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
 import { checkmarkCircleOutline, closeCircleOutline, refreshOutline } from 'ionicons/icons';
@@ -22,11 +22,14 @@ type PageState = 'ready' | 'loading' | 'tradecard' | 'active' | 'skip';
   imports: [
     CommonModule,
     IonHeader, IonToolbar, IonTitle, IonContent, IonCard, IonCardContent,
-    IonButton, IonIcon, IonBadge, IonSpinner, IonAlert,
+    IonButton, IonIcon, IonBadge, IonSpinner, IonAlert, IonButtons,
   ],
   template: `
     <ion-header>
       <ion-toolbar>
+        <ion-buttons slot="start">
+          <img src="assets/icon-transparent-512.png" alt="ZuppTrade" style="height:26px;width:26px;margin-left:6px;">
+        </ion-buttons>
         <ion-title>Trade</ion-title>
       </ion-toolbar>
     </ion-header>

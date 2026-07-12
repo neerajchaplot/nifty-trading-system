@@ -2,7 +2,7 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import {
   IonHeader, IonToolbar, IonTitle, IonContent, IonRefresher,
-  IonRefresherContent, IonCard, IonCardContent, IonBadge,
+  IonRefresherContent, IonCard, IonCardContent, IonBadge, IonButtons,
 } from '@ionic/angular/standalone';
 import { DashboardStateService } from '../../core/services/dashboard-state.service';
 import { ActiveTrade } from '../../core/models/trade.model';
@@ -13,11 +13,14 @@ import { ActiveTrade } from '../../core/models/trade.model';
   imports: [
     CommonModule,
     IonHeader, IonToolbar, IonTitle, IonContent, IonRefresher,
-    IonRefresherContent, IonCard, IonCardContent, IonBadge,
+    IonRefresherContent, IonCard, IonCardContent, IonBadge, IonButtons,
   ],
   template: `
     <ion-header>
       <ion-toolbar>
+        <ion-buttons slot="start">
+          <img src="assets/icon-transparent-512.png" alt="ZuppTrade" style="height:26px;width:26px;margin-left:6px;">
+        </ion-buttons>
         <ion-title>Monitor</ion-title>
       </ion-toolbar>
     </ion-header>

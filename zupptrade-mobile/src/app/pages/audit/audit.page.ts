@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import {
   IonHeader, IonToolbar, IonTitle, IonContent, IonRefresher,
   IonRefresherContent, IonCard, IonCardContent, IonBadge,
-  IonSkeletonText,
+  IonSkeletonText, IonButtons,
 } from '@ionic/angular/standalone';
 import { AuditService } from '../../core/services/audit.service';
 import { PortfolioSummary, TradeListItem, TradeListResponse } from '../../core/models/audit.models';
@@ -15,11 +15,14 @@ import { PortfolioSummary, TradeListItem, TradeListResponse } from '../../core/m
     CommonModule,
     IonHeader, IonToolbar, IonTitle, IonContent, IonRefresher,
     IonRefresherContent, IonCard, IonCardContent, IonBadge,
-    IonSkeletonText,
+    IonSkeletonText, IonButtons,
   ],
   template: `
     <ion-header>
       <ion-toolbar>
+        <ion-buttons slot="start">
+          <img src="assets/icon-transparent-512.png" alt="ZuppTrade" style="height:26px;width:26px;margin-left:6px;">
+        </ion-buttons>
         <ion-title>Audit</ion-title>
       </ion-toolbar>
     </ion-header>
