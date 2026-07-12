@@ -9,13 +9,16 @@ import com.the3Cgrp.zupptrade.shared.enums.VixRegime;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record Agent1SignalDto(
         UUID id,
-        LocalDateTime timestamp,
+        // Zone-aware instant (serialised with UTC offset, e.g. "…Z") so any client
+        // computes signal age correctly regardless of its own timezone. A zoneless
+        // LocalDateTime here was misread by browsers when the server JVM ran in UTC.
+        OffsetDateTime timestamp,
         LocalDate expiryDate,
         Bias bias,
         Strength strength,
@@ -28,5 +31,7 @@ public record Agent1SignalDto(
         @JsonRawValue String scoreBreakdown,
         Boolean commentaryDivergence,
         @JsonRawValue String keyLevels,
-        @JsonRawValue String dataGaps
+        @JsonRawValue String dataGaps,
+        // Nifty 50 spot captured at scoring time (last close when market is shut).
+        BigDecimal spot
 ) {}

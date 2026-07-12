@@ -10,6 +10,8 @@ import com.the3Cgrp.zupptrade.shared.dto.Agent1SignalDto;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 @Service
@@ -62,13 +64,18 @@ public class Agent1Service {
     }
 
     private Agent1SignalDto toDto(Agent1SignalEntity e) {
+        // The stored timestamp is a UTC wall-clock LocalDateTime (written via
+        // LocalDateTime.now(UTC)); attach the UTC offset so it serialises as "…Z".
+        OffsetDateTime timestamp = e.getTimestamp() == null
+                ? null
+                : e.getTimestamp().atOffset(ZoneOffset.UTC);
         return new Agent1SignalDto(
-                e.getId(), e.getTimestamp(), e.getExpiryDate(),
+                e.getId(), timestamp, e.getExpiryDate(),
                 e.getBias(), e.getStrength(),
                 e.getCompositeScore(), e.getConfidenceScore(), e.getConfidence(),
                 e.getVixLevel(), e.getVixRegime(), e.getVixDirection(),
                 e.getScoreBreakdown(), e.getCommentaryDivergence(), e.getKeyLevels(),
-                e.getDataGaps()
+                e.getDataGaps(), e.getSpot()
         );
     }
 }

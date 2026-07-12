@@ -102,7 +102,7 @@ type TabId = 'trading' | 'audit' | 'profile';
       width: 42%;
       flex-shrink: 0;
       border-right: 1px solid #E2E8F0;
-      background: #F8FAFC;
+      background: #FFFFFF;
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -112,7 +112,7 @@ type TabId = 'trading' | 'audit' | 'profile';
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      background: #F8FAFC;
+      background: #FFFFFF;
     }
     /* Audit fills remaining height */
     .audit-fill {

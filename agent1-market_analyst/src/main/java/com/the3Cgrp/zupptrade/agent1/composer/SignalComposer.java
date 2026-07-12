@@ -98,6 +98,7 @@ public class SignalComposer {
         entity.setCompositeScore(composite.setScale(4, RoundingMode.HALF_UP));
         entity.setConfidenceScore(confidenceScore.setScale(2, RoundingMode.HALF_UP));
         entity.setConfidence(confidenceLabel);
+        entity.setSpot(inputs.getSpot());
         entity.setVixLevel(inputs.getVixLevel());
         entity.setVixRegime(inputs.getVixRegime());
         entity.setVixDirection(vixDirection);

@@ -130,6 +130,8 @@ class BacktestScenarioTest {
                 .isLessThanOrEqualTo(new BigDecimal("0.1000"));
         assertThat(entity.getVixDirection()).isEqualTo("Falling");
         assertThat(entity.getVixRegime()).isEqualTo(VixRegime.HIGH);
+        // Spot must be carried onto the signal so the UI top strip can display Nifty 50.
+        assertThat(entity.getSpot()).isEqualByComparingTo("23412.60");
     }
 
     /**

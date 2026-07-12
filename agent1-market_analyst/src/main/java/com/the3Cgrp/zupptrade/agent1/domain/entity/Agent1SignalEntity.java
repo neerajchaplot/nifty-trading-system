@@ -11,6 +11,7 @@ import org.hibernate.type.SqlTypes;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 @Entity
@@ -47,6 +48,10 @@ public class Agent1SignalEntity {
     @Column(name = "confidence_label", nullable = false, length = 10)
     private Confidence confidence;
 
+    /** Nifty 50 spot at scoring time — promoted from raw_inputs to a queryable column (V108). */
+    @Column(name = "spot", precision = 10, scale = 2)
+    private BigDecimal spot;
+
     @Column(name = "vix_level", precision = 6, scale = 2)
     private BigDecimal vixLevel;
 
@@ -80,7 +85,7 @@ public class Agent1SignalEntity {
     private String status = "ACTIVE";
 
     @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime createdAt = LocalDateTime.now(ZoneOffset.UTC);
 
     public UUID getId() { return id; }
     public LocalDateTime getTimestamp() { return timestamp; }
@@ -97,6 +102,8 @@ public class Agent1SignalEntity {
     public void setConfidenceScore(BigDecimal v) { this.confidenceScore = v; }
     public Confidence getConfidence() { return confidence; }
     public void setConfidence(Confidence v) { this.confidence = v; }
+    public BigDecimal getSpot() { return spot; }
+    public void setSpot(BigDecimal v) { this.spot = v; }
     public BigDecimal getVixLevel() { return vixLevel; }
     public void setVixLevel(BigDecimal v) { this.vixLevel = v; }
     public VixRegime getVixRegime() { return vixRegime; }

@@ -11,10 +11,14 @@ import { ConfidencePillComponent } from '../../shared/components/confidence-pill
   template: `
     <div class="strip-wrapper">
       <div class="strip" (click)="expanded = !expanded">
-        <div class="strip-item">
+        <div class="strip-item strip-item-index">
           <span class="strip-label">Nifty 50</span>
+          <span class="strip-value strip-index-tag">INDEX</span>
+        </div>
+        <div class="strip-item strip-item-price">
+          <span class="strip-label">Live Price <span class="strip-time-sub">{{ signalTime }}</span></span>
           <span class="strip-value">
-            {{ signal?.vixLevel != null ? '—' : '—' }}&nbsp;
+            {{ signal?.spot != null ? (signal?.spot | number:'1.2-2') : '—' }}
           </span>
         </div>
         <div class="strip-item">
@@ -96,6 +100,21 @@ import { ConfidencePillComponent } from '../../shared/components/confidence-pill
       border-right: 1px solid #F1F5F9;
     }
     .strip-item:first-child { padding-left: 0; }
+    .strip-item-index { padding-right: 12px; }
+    .strip-index-tag {
+      font-size: 9px !important;
+      font-weight: 700;
+      color: #94A3B8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .strip-item-price { padding-right: 18px; }
+    .strip-time-sub {
+      font-size: 9px;
+      font-weight: 500;
+      color: #94A3B8;
+      margin-left: 3px;
+    }
     .strip-label {
       font-size: 10px;
       font-weight: 600;
@@ -184,8 +203,19 @@ export class MarketStripComponent {
   get signalAge(): string {
     if (!this.signal?.timestamp) return '—';
     const diffMs = Date.now() - new Date(this.signal.timestamp).getTime();
-    const mins = Math.floor(diffMs / 60000);
-    return mins < 1 ? 'just now' : `${mins} min ago`;
+    const hrs = diffMs / 3600000;
+    if (hrs < 1 / 60) return 'just now';
+    if (hrs < 1) return `${Math.floor(diffMs / 60000)} min ago (${this.signalTime})`;
+    return `${hrs.toFixed(1)} hrs ago (${this.signalTime})`;
+  }
+
+  get signalTime(): string {
+    if (!this.signal?.timestamp) return '';
+    const d = new Date(this.signal.timestamp);
+    const opts: Intl.DateTimeFormatOptions = {
+      timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false,
+    };
+    return new Intl.DateTimeFormat('en-IN', opts).format(d) + ' IST';
   }
 
   get scoreBreakdown(): Record<string, unknown> | null {

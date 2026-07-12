@@ -30,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -90,7 +91,10 @@ public class ScoringPipeline {
 
     /** Step 1-4 outside transaction (no DB writes during external API calls). Step 5 in transaction. */
     public Agent1SignalEntity run(ScoreRequestDto request) {
-        LocalDateTime runTime = LocalDateTime.now();
+        // Capture in UTC (not the JVM default zone) so the persisted wall-clock is
+        // unambiguous — the container runs UTC while dev machines run IST, and a
+        // zoneless timestamp was being misread downstream. See Agent1SignalDto.timestamp.
+        LocalDateTime runTime = LocalDateTime.now(ZoneOffset.UTC);
 
         // Resolve expiry date: use caller-supplied value if present, otherwise auto-fetch next Tuesday expiry
         LocalDate effectiveExpiry = request.expiryDate() != null

@@ -19,11 +19,11 @@ import { PortfolioSummary, TradeListItem, TradeListResponse } from '../../core/m
   ],
   template: `
     <ion-header>
-      <ion-toolbar>
+      <ion-toolbar style="--background:#ffffff; --border-color:#E2E8F0;">
         <ion-buttons slot="start">
-          <img src="assets/icon-transparent-512.png" alt="ZuppTrade" style="height:26px;width:26px;margin-left:6px;">
+          <img src="assets/zupp-logo.jpg" alt="ZuppTrade" style="height:32px;width:auto;margin-left:8px;object-fit:contain;">
         </ion-buttons>
-        <ion-title>Audit</ion-title>
+        <ion-title style="color:#1B4FA8;">Audit</ion-title>
       </ion-toolbar>
     </ion-header>
 

@@ -9,6 +9,7 @@ export interface Agent1Signal {
   compositeScore: number;
   confidenceScore: number;
   confidence: Confidence;
+  spot: number | null;         // Nifty 50 level at scoring time (last close when market shut)
   vixLevel: number | null;
   vixRegime: VixRegime | null;
   vixDirection: string | null;

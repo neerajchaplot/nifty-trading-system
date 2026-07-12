@@ -156,6 +156,15 @@ export class LiveMonitorComponent {
     return s?.replace(/_/g, ' ') ?? '—';
   }
 
+  timeAgo(iso: string | undefined): string {
+    if (!iso) return '';
+    const diffMs = Date.now() - new Date(iso).getTime();
+    const hrs = diffMs / 3600000;
+    if (hrs < 1 / 60) return 'just now';
+    if (hrs < 1) return `${Math.floor(diffMs / 60000)} min ago`;
+    return `${hrs.toFixed(1)} hrs ago`;
+  }
+
   dteLabel(expiryDate: string | undefined): string {
     if (!expiryDate) return '—';
     const dte = Math.ceil((new Date(expiryDate).getTime() - Date.now()) / 86400000);
