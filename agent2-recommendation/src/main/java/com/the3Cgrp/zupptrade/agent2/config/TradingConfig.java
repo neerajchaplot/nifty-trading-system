@@ -21,7 +21,8 @@ public class TradingConfig {
     private int tradeCardValidMinutes = 20;
     private int debitSpreadWidth = 200;               // pts — debit spread width at low VIX
     private BigDecimal maxLossDebitPct = new BigDecimal("0.5");  // 0.5% of capital max loss for debit
-    private BigDecimal maxDebitBreakevenDistancePts = new BigDecimal("30"); // max pts from spot to breakeven
+    private BigDecimal maxDebitBreakevenDistancePts = new BigDecimal("100"); // max pts from spot to breakeven
+    private BigDecimal minDebitRr = new BigDecimal("1.4"); // min max-profit:net-debit ratio (G1D)
     private Upstox upstox = new Upstox();
 
     public static class Upstox {
@@ -79,6 +80,8 @@ public class TradingConfig {
     public void setMaxLossDebitPct(BigDecimal v) { this.maxLossDebitPct = v; }
     public BigDecimal getMaxDebitBreakevenDistancePts() { return maxDebitBreakevenDistancePts; }
     public void setMaxDebitBreakevenDistancePts(BigDecimal v) { this.maxDebitBreakevenDistancePts = v; }
+    public BigDecimal getMinDebitRr() { return minDebitRr; }
+    public void setMinDebitRr(BigDecimal v) { this.minDebitRr = v; }
     public Upstox getUpstox() { return upstox; }
     public void setUpstox(Upstox upstox) { this.upstox = upstox; }
 }

@@ -97,12 +97,17 @@ type TabId = 'trading' | 'audit' | 'profile';
       display: flex;
       flex: 1;
       overflow: hidden;
+      background: #E3E8F0;
+      padding: 12px;
+      gap: 12px;
     }
     .left-zone {
       width: 42%;
       flex-shrink: 0;
-      border-right: 1px solid #E2E8F0;
       background: #FFFFFF;
+      border-radius: 10px;
+      border: 1px solid #D1D9E6;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -113,6 +118,9 @@ type TabId = 'trading' | 'audit' | 'profile';
       flex-direction: column;
       overflow: hidden;
       background: #FFFFFF;
+      border-radius: 10px;
+      border: 1px solid #D1D9E6;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
     }
     /* Audit fills remaining height */
     .audit-fill {

@@ -20,16 +20,20 @@ import static net.logstash.logback.argument.StructuredArguments.kv;
 /**
  * Layer 4 — Gate Validation.
  *
+ * Thresholds: G1/G3/G4 use the user's profile value when set (minPop/maxPopPoppGap/
+ * minRocPct), falling back to system config. G1D/G2D/G4D use system config only —
+ * there is no per-user field for debit R:R or breakeven distance.
+ *
  * Credit path (G1, G2, G3, G4):
- *   G1  (HARD):        PoP ≥ 80% (seller's PoP = 1 − buyer's PoP on short leg)
+ *   G1  (HARD):        PoP ≥ profile.minPop (default 80%; seller's PoP = 1 − buyer's PoP on short leg)
  *   G2  (INDICATIVE):  Max loss per lot — informational, used for sizing only
- *   G3  (HARD):        PoP − PoPP gap ≤ 15%
- *   G4  (HARD):        RoC ≥ 0.5% × (DTE/7) — evaluated after lot sizing
+ *   G3  (HARD):        PoP − PoPP gap ≤ profile.maxPopPoppGap (default 15%)
+ *   G4  (HARD):        RoC ≥ profile.minRocPct × (DTE/7) — evaluated after lot sizing
  *
  * Debit path (G1D, G2, G2D, G3D, G4D):
- *   G1D (HARD):        R:R ≥ 3:1 (max profit / net debit per unit)
+ *   G1D (HARD):        R:R ≥ config.minDebitRr (default 1.4:1, max profit / net debit per unit)
  *   G2  (INDICATIVE):  Net debit and max profit — informational
- *   G2D (HARD):        Breakeven ≤ 30 pts from spot
+ *   G2D (HARD):        Breakeven ≤ config.maxDebitBreakevenDistancePts (default 100 pts) from spot
  *   G3D (HARD):        Confidence ≥ MEDIUM (debit needs directional conviction)
  *   G4D (HARD):        Total debit cost ≤ 0.5% of capital — evaluated after lot sizing
  */
@@ -38,7 +42,6 @@ public class GateValidator {
 
     private static final Logger log = LoggerFactory.getLogger(GateValidator.class);
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
-    private static final BigDecimal THREE = BigDecimal.valueOf(3);
 
     private final TradingConfig config;
 
@@ -81,9 +84,13 @@ public class GateValidator {
     /** G4 (credit) — DTE-adjusted minimum RoC. Called by PositionSizer after sizing. */
     public GateResultDto validateG4(RecommendationContext ctx) {
         BigDecimal roc = ctx.getRoc();
-        // minRoc = 0.5% × (DTE / 7) — DTE is calendar days; 7 = calendar days in a week.
-        // A full weekly trade (DTE=7) must yield ≥ 0.5%. Shorter entries scale proportionally.
-        BigDecimal minRoc = config.getMinRocBasePct()
+        // Base min RoC comes from the user's profile when set, else the system default.
+        BigDecimal minRocBase = (ctx.getUserProfile() != null && ctx.getUserProfile().getMinRocPct() != null)
+                ? ctx.getUserProfile().getMinRocPct()
+                : config.getMinRocBasePct();
+        // minRoc = base% × (DTE / 7) — DTE is calendar days; 7 = calendar days in a week.
+        // A full weekly trade (DTE=7) must yield ≥ base%. Shorter entries scale proportionally.
+        BigDecimal minRoc = minRocBase
                 .multiply(BigDecimal.valueOf(ctx.getDte()))
                 .divide(BigDecimal.valueOf(7), 4, RoundingMode.HALF_UP);
 
@@ -108,9 +115,16 @@ public class GateValidator {
         BigDecimal pop = BigDecimal.ONE.subtract(ctx.getShortLeg().pop()).multiply(HUNDRED);
 
         // Readjustment re-entry uses a relaxed PoP threshold (65% normal VIX, 70% stressed VIX).
-        BigDecimal threshold = (ctx.getRelaxedGate1PopPct() != null)
-                ? ctx.getRelaxedGate1PopPct()
-                : config.getMinPopSellSpread();
+        // Otherwise honour the user's profile min PoP (stored as a 0–1 fraction) when set,
+        // falling back to the system config default. Profile is the user's control surface.
+        BigDecimal threshold;
+        if (ctx.getRelaxedGate1PopPct() != null) {
+            threshold = ctx.getRelaxedGate1PopPct();
+        } else if (ctx.getUserProfile() != null && ctx.getUserProfile().getMinPop() != null) {
+            threshold = ctx.getUserProfile().getMinPop().multiply(HUNDRED);
+        } else {
+            threshold = config.getMinPopSellSpread();
+        }
 
         boolean passed = pop.compareTo(threshold) >= 0;
         String description = (ctx.getRelaxedGate1PopPct() != null)
@@ -144,7 +158,10 @@ public class GateValidator {
         BigDecimal pop = ctx.getShortLeg().pop().multiply(HUNDRED);
         BigDecimal popp = ctx.getLongLeg().pop().multiply(HUNDRED);
         BigDecimal gap = pop.subtract(popp).abs().setScale(2, RoundingMode.HALF_UP);
-        BigDecimal threshold = config.getMaxPopPoppGap();
+        // Honour the user's profile PoP−PoPP gap tolerance when set; else system default.
+        BigDecimal threshold = (ctx.getUserProfile() != null && ctx.getUserProfile().getMaxPopPoppGap() != null)
+                ? ctx.getUserProfile().getMaxPopPoppGap()
+                : config.getMaxPopPoppGap();
 
         boolean passed = gap.compareTo(threshold) <= 0;
 
@@ -198,17 +215,19 @@ public class GateValidator {
         BigDecimal ratio = (netDebitPerUnit.compareTo(BigDecimal.ZERO) > 0)
                 ? maxProfitPerUnit.divide(netDebitPerUnit, 4, RoundingMode.HALF_UP)
                 : BigDecimal.ZERO;
-        boolean passed = ratio.compareTo(THREE) >= 0;
+        BigDecimal minRr = config.getMinDebitRr();
+        boolean passed = ratio.compareTo(minRr) >= 0;
 
         log.info("layer4.gate.g1d",
                 kv("passed", passed),
                 kv("netDebit", netDebitPerUnit),
                 kv("maxProfit", maxProfitPerUnit),
-                kv("rrRatio", ratio));
+                kv("rrRatio", ratio),
+                kv("minRr", minRr));
 
         return new GateResultDto("G1D", passed,
-                "R:R ≥ 3:1 (max profit / net debit per unit)",
-                ratio.setScale(2, RoundingMode.HALF_UP), THREE);
+                "R:R ≥ " + minRr + ":1 (max profit / net debit per unit)",
+                ratio.setScale(2, RoundingMode.HALF_UP), minRr);
     }
 
     private GateResultDto validateG2Debit(RecommendationContext ctx) {

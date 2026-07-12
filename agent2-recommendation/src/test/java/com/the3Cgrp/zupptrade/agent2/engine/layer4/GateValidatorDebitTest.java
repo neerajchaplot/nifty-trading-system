@@ -25,11 +25,11 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   ATM call (long) ltp=60, OTM call at ATM+200 (short) ltp=15.
  *   Net debit = 60 - 15 = 45 per unit.
  *   Spread width = 200 pts. Max profit = 200 - 45 = 155 per unit.
- *   R:R = 155 / 45 = 3.44 → G1D passes (≥ 3:1).
+ *   R:R = 155 / 45 = 3.44 → G1D passes (≥ 1.4:1).
  *
  * Breakeven for call spread = longStrike + netDebit = 24000 + 45 = 24045.
- *   Distance from spot (24010) = 24045 - 24010 = 35 → G2D fails (> 30 pts).
- *   With spot at 24020: distance = 24045 - 24020 = 25 → G2D passes (≤ 30 pts).
+ *   With spot at 24020: distance = 24045 - 24020 = 25 → G2D passes (≤ 100 pts).
+ *   With spot at 23900: distance = 24045 - 23900 = 145 → G2D fails (> 100 pts).
  */
 class GateValidatorDebitTest {
 
@@ -49,11 +49,11 @@ class GateValidatorDebitTest {
         gateValidator = new GateValidator(config);
     }
 
-    // ── G1D: R:R ≥ 3:1 ───────────────────────────────────────────────────────
+    // ── G1D: R:R ≥ 1.4:1 ───────────────────────────────────────────────────────
 
     @Test
     void g1d_rrAboveThreshold_passes() {
-        // netDebit=45, spreadWidth=200, maxProfit=155, R:R=3.44 ≥ 3.0 → passes
+        // netDebit=45, spreadWidth=200, maxProfit=155, R:R=3.44 ≥ 1.4 → passes
         RecommendationContext ctx = buildDebitContext(SPOT_NEAR, Confidence.MEDIUM, LONG_LTP, SHORT_LTP);
         gateValidator.execute(ctx);
 
@@ -64,7 +64,7 @@ class GateValidatorDebitTest {
 
     @Test
     void g1d_rrBelowThreshold_fails() {
-        // netDebit=100, spreadWidth=200, maxProfit=100, R:R=1.0 < 3.0 → fails
+        // netDebit=100, spreadWidth=200, maxProfit=100, R:R=1.0 < 1.4 → fails
         BigDecimal highDebit  = new BigDecimal("110");
         BigDecimal lowCredit  = new BigDecimal("10");
         RecommendationContext ctx = buildDebitContext(SPOT_NEAR, Confidence.MEDIUM, highDebit, lowCredit);
@@ -86,11 +86,11 @@ class GateValidatorDebitTest {
         assertThat(g2.value()).isEqualByComparingTo(new BigDecimal("45")); // net debit = 60 - 15
     }
 
-    // ── G2D: breakeven ≤ 30 pts from spot ────────────────────────────────────
+    // ── G2D: breakeven ≤ 100 pts from spot ────────────────────────────────────
 
     @Test
     void g2d_breakevenWithinLimit_passes() {
-        // breakeven = 24000 + 45 = 24045; spot = 24020; distance = 25 ≤ 30 → passes
+        // breakeven = 24000 + 45 = 24045; spot = 24020; distance = 25 ≤ 100 → passes
         RecommendationContext ctx = buildDebitContext(SPOT_NEAR, Confidence.MEDIUM, LONG_LTP, SHORT_LTP);
         gateValidator.execute(ctx);
 
@@ -101,7 +101,7 @@ class GateValidatorDebitTest {
 
     @Test
     void g2d_breakevenTooFar_fails() {
-        // breakeven = 24045; spot = 23900; distance = 145 > 30 → fails
+        // breakeven = 24045; spot = 23900; distance = 145 > 100 → fails
         RecommendationContext ctx = buildDebitContext(SPOT_FAR, Confidence.MEDIUM, LONG_LTP, SHORT_LTP);
         gateValidator.execute(ctx);
 
@@ -169,6 +169,45 @@ class GateValidatorDebitTest {
         GateResultDto g4d = gateValidator.validateG4D(ctx);
         assertThat(g4d.passed()).isFalse();
         assertThat(g4d.value()).isEqualByComparingTo(new BigDecimal("2925.00")); // 45 × 1 × 65
+    }
+
+    // ── Regression: the real 2026-07-12 rejection now passes with looser thresholds ──
+    // From prod logs: long 24200 @104.0, short 24400 @29.2, spot 24206.9, width 200.
+    //   netDebit=74.8, maxProfit=125.2, R:R=1.67 → G1D needs ≥1.4 → PASS (was 3:1 → FAIL)
+    //   breakeven=24274.8, distance=67.9 → G2D needs ≤100 → PASS (was 30 → FAIL)
+
+    @Test
+    void realRejectedBullCallSpread_nowPassesG1dAndG2d() {
+        RecommendationContext ctx = new RecommendationContext();
+        ctx.setStrategy(Strategy.BULL_CALL_SPREAD);
+        ctx.setSpreadDirection(SpreadDirection.DEBIT);
+        ctx.setSpot(new BigDecimal("24206.9"));
+
+        Agent1SignalEntity signal = new Agent1SignalEntity();
+        signal.setConfidence(Confidence.HIGH);
+        ctx.setSignal(signal);
+
+        TradeLegDto longLeg = new TradeLegDto(OptionType.CE, 24200,
+                new BigDecimal("104.0"), LegAction.BUY, new BigDecimal("0.50"), new BigDecimal("0.50"), null);
+        TradeLegDto shortLeg = new TradeLegDto(OptionType.CE, 24400,
+                new BigDecimal("29.2"), LegAction.SELL, new BigDecimal("0.20"), new BigDecimal("0.20"), null);
+        ctx.setLongLeg(longLeg);
+        ctx.setShortLeg(shortLeg);
+        ctx.setLotSize(65);
+
+        UserProfileEntity profile = new UserProfileEntity();
+        profile.setCapital(new BigDecimal("500000"));
+        profile.setMaxLossPct(new BigDecimal("1.5"));
+        ctx.setUserProfile(profile);
+
+        gateValidator.execute(ctx);
+
+        GateResultDto g1d = findGate(ctx, "G1D");
+        GateResultDto g2d = findGate(ctx, "G2D");
+        assertThat(g1d.passed()).as("G1D R:R 1.67 ≥ 1.4").isTrue();
+        assertThat(g1d.value()).isEqualByComparingTo(new BigDecimal("1.67"));
+        assertThat(g2d.passed()).as("G2D breakeven distance 67.9 ≤ 100").isTrue();
+        assertThat(g2d.value()).isEqualByComparingTo(new BigDecimal("67.90"));
     }
 
     // ── Helper ────────────────────────────────────────────────────────────────

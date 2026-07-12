@@ -169,7 +169,7 @@ class GateValidatorRelaxedGateTest {
 
         UserProfileEntity profile = new UserProfileEntity();
         profile.setCapital(new BigDecimal("500000"));
-        profile.setMinPop(new BigDecimal("80"));
+        profile.setMinPop(new BigDecimal("0.80")); // fraction (0.80 = 80%) — matches DB schema/UI unit
         profile.setMaxPopPoppGap(new BigDecimal("15"));
         profile.setMaxLossPct(new BigDecimal("1.5"));
         profile.setSpreadWidthMin(50);

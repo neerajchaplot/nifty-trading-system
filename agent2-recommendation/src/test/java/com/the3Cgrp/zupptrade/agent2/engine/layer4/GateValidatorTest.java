@@ -50,6 +50,19 @@ class GateValidatorTest {
         assertThat(g1.passed()).isFalse();
     }
 
+    @Test
+    void g1_sellSpread_honoursCustomProfileMinPop() {
+        // Seller's PoP = (1 − 0.25) × 100 = 75%. Fails at the 80% default, but the user
+        // lowered their profile min PoP to 0.70 (70%) → 75% ≥ 70% → now PASSES.
+        RecommendationContext ctx = buildCreditContext(new BigDecimal("0.25"), new BigDecimal("0.20"));
+        ctx.getUserProfile().setMinPop(new BigDecimal("0.70"));
+        gateValidator.execute(ctx);
+
+        GateResultDto g1 = ctx.getGateResults().stream().filter(g -> g.gate().equals("G1")).findFirst().orElseThrow();
+        assertThat(g1.passed()).isTrue();
+        assertThat(g1.threshold()).isEqualByComparingTo(new BigDecimal("70")); // profile-driven, not config 80
+    }
+
     // ── G2 Tests ─────────────────────────────────────────────────────────────
 
     @Test
@@ -134,7 +147,7 @@ class GateValidatorTest {
 
         UserProfileEntity profile = new UserProfileEntity();
         profile.setCapital(new BigDecimal("500000"));
-        profile.setMinPop(new BigDecimal("80"));
+        profile.setMinPop(new BigDecimal("0.80")); // fraction (0.80 = 80%) — matches DB schema/UI unit
         profile.setMaxPopPoppGap(new BigDecimal("15"));
         profile.setMaxLossPct(new BigDecimal("1.5"));
         profile.setSpreadWidthMin(50);

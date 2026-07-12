@@ -14,12 +14,6 @@ import { ThresholdHit } from '../../core/models/enums';
 export class LiveMonitorComponent {
   @Input() trades: ActiveTrade[] = [];
 
-  readonly MAX_SLOTS = 3;
-
-  get emptySlots(): number[] {
-    return Array(Math.max(0, this.MAX_SLOTS - this.trades.length)).fill(0);
-  }
-
   warningClass(trade: ActiveTrade): string {
     const hit = trade.lastThresholdHit;
     if (hit === 'T3') return 'warn-t3';

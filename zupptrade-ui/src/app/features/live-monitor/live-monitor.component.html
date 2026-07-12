@@ -5,7 +5,7 @@
     <div class="section-header">
       <span class="section-heading">Live Trades Monitor</span>
       <div class="header-meta">
-        <span class="slot-label">{{ trades.length }} of {{ MAX_SLOTS }} slots used</span>
+        <span class="slot-label">{{ trades.length }} trade card{{ trades.length !== 1 ? 's' : '' }}</span>
         <span class="trade-count-badge" *ngIf="trades.length > 0">{{ trades.length }}</span>
       </div>
     </div>
@@ -210,11 +210,11 @@
         </div>
       </div>
 
-      <!-- ── Empty slots ────────────────────────────────────────────── -->
-      <div class="empty-slot" *ngFor="let _ of emptySlots">
+      <!-- ── No trades ─────────────────────────────────────────────── -->
+      <div class="empty-slot" *ngIf="trades.length === 0">
         <div class="empty-slot-icon">＋</div>
-        <div><strong>Trade slot available</strong></div>
-        <div>Generate a recommendation from the left panel to use this slot.</div>
+        <div><strong>No active trades</strong></div>
+        <div>Generate a recommendation from the left panel to start monitoring.</div>
       </div>
     </div>
   </div>

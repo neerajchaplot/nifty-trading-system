@@ -49,7 +49,8 @@ trading:
   trade-card-valid-minutes: 20
   debit-spread-width: 200        # pts — debit spread width at low VIX (wider = better R:R when debit cheap)
   max-loss-debit-pct: 0.5        # 0.5% of capital — stricter than credit (1.5%) because debit PoP is lower
-  max-debit-breakeven-distance-pts: 30  # max pts from spot to debit spread breakeven
+  max-debit-breakeven-distance-pts: 100 # max pts from spot to debit spread breakeven (~0.6 SD of a 2-DTE expected move)
+  min-debit-rr: 1.4                     # G1D floor: max-profit ÷ net-debit per unit (near-ATM bull-call spreads sit ~1.4:1)
   upstox:
     base-url: ${UPSTOX_BASE_URL:https://api.upstox.com}
     access-token: ${UPSTOX_ACCESS_TOKEN:}        # fallback if DB token loading is unavailable
