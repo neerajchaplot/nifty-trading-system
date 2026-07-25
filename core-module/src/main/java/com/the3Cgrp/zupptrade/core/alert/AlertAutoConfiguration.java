@@ -21,4 +21,10 @@ public class AlertAutoConfiguration {
     public AlertService alertService(JdbcTemplate jdbc) {
         return new AlertService(jdbc);
     }
+
+    @Bean
+    @ConditionalOnClass(JdbcTemplate.class)
+    public CriticalAlertService criticalAlertService(JdbcTemplate jdbc) {
+        return new CriticalAlertService(jdbc);
+    }
 }

@@ -65,6 +65,12 @@ public class GateValidator {
                 .allMatch(GateResultDto::passed);
         ctx.setAllHardGatesPassed(allPassed);
 
+        // Testing mode: force all gates to pass so PositionSizer always runs.
+        // Gate results still reflect real values so the UI can show which gates failed.
+        if (!ctx.isHardGateEnabled()) {
+            ctx.setAllHardGatesPassed(true);
+        }
+
         log.info("layer4.gate.validation",
                 kv("strategy", ctx.getStrategy()),
                 kv("allHardGatesPassed", allPassed),

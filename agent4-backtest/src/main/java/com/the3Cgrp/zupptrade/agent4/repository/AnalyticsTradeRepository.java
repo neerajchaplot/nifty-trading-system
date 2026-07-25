@@ -69,6 +69,7 @@ public class AnalyticsTradeRepository {
                     COUNT(*) FILTER (WHERE actual_pnl > 0)                         AS win_count,
                     COUNT(*) FILTER (WHERE actual_pnl <= 0)                        AS loss_count,
                     COALESCE(SUM(actual_pnl), 0)                                   AS total_pnl,
+                    COALESCE(SUM(max_profit_total), 0)                            AS total_max_profit,
                     MIN(actual_pnl)                                                AS max_loss,
                     COALESCE(AVG(roc_theoretical_pct), 0)                          AS avg_roc_theoretical,
                     COALESCE(SUM(adjustment_count), 0)                             AS total_adjustments

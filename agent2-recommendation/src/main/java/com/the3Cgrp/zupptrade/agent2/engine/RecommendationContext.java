@@ -55,6 +55,21 @@ public class RecommendationContext {
     private TradeLegDto shortLeg2;
     private TradeLegDto longLeg2;
 
+    // ── Testing mode ────────────────────────────────────────────────────────
+    // Mirrors trading.hard-gate-enabled from TradingConfig. When false: SKIP/NO_TRADE
+    // decisions are overridden to a real fallback strategy, and all hard gates are forced
+    // to pass so PositionSizer always runs. Allows end-to-end testing without live conditions.
+    private boolean hardGateEnabled = true;
+    private boolean skipDecision = false;  // true when Layer 1 returned a HARD NO_TRADE (VIX EXTREME / LOW-conf directional credit)
+    private String skipReason;             // e.g. "SKIP", "NO_TRADE", "VIX_EXTREME"
+
+    // ── Soft skip ───────────────────────────────────────────────────────────
+    // Set when Layer 1 picked a low-conviction / thin-premium strategy it would rather avoid,
+    // but still produces so the RoC/PoP/loss gates and the user make the final call.
+    // Unlike skipDecision, a soft skip does NOT force REJECTED — the gates determine status.
+    private boolean softSkip = false;
+    private String softSkipReason;
+
     // ── Layer 4: Gate Validation ────────────────────────────────────────────
     private List<GateResultDto> gateResults = new ArrayList<>();
     private boolean allHardGatesPassed;
@@ -70,6 +85,17 @@ public class RecommendationContext {
     private BigDecimal netDelta;
 
     // ── Getters / Setters ───────────────────────────────────────────────────
+
+    public boolean isHardGateEnabled() { return hardGateEnabled; }
+    public void setHardGateEnabled(boolean v) { this.hardGateEnabled = v; }
+    public boolean isSkipDecision() { return skipDecision; }
+    public void setSkipDecision(boolean v) { this.skipDecision = v; }
+    public String getSkipReason() { return skipReason; }
+    public void setSkipReason(String v) { this.skipReason = v; }
+    public boolean isSoftSkip() { return softSkip; }
+    public void setSoftSkip(boolean v) { this.softSkip = v; }
+    public String getSoftSkipReason() { return softSkipReason; }
+    public void setSoftSkipReason(String v) { this.softSkipReason = v; }
 
     public com.the3Cgrp.zupptrade.shared.enums.Bias getEffectiveBias() { return effectiveBias; }
     public void setEffectiveBias(com.the3Cgrp.zupptrade.shared.enums.Bias v) { this.effectiveBias = v; }

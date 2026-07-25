@@ -98,6 +98,15 @@
   background: #EFF6FF;
   color: #2563EB;
 }
+.lt-live-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 99px;
+  background: #ECFDF5;
+  color: #059669;
+  margin-left: 4px;
+}
 .lt-status-group { display: flex; align-items: center; gap: 8px; }
 .lt-status {
   font-size: 10px;
@@ -304,6 +313,7 @@
 }
 .capital-label { color: #94A3B8; font-weight: 500; }
 .capital-val   { font-weight: 700; color: #0F172A; }
+.capital-val.muted { color: #94A3B8; font-weight: 500; }
 .capital-track {
   height: 8px;
   background: #F1F5F9;

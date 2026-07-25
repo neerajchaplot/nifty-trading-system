@@ -125,12 +125,16 @@ public class MonitorEvaluationService {
                 .map(MonitoringEvaluationEntity::getVixLevel)
                 .orElse(null);
         BigDecimal entryVix = extractEntryVix(trade.marketContextJson());
+        boolean readjustmentEntry = extractReadjustmentEntry(trade.marketContextJson());
         int currentDte = (int) ChronoUnit.DAYS.between(LocalDate.now(), config.expiryDate());
 
         MonitorEvaluationContext ctx = new MonitorEvaluationContext(
                 config, liveData, currentDte, previousVix, entryVix);
 
         EvaluationResult result = strategyFactory.resolve(config.strategy()).evaluate(ctx);
+        // A trade opened as a readjustment re-entry is EXIT-only — never readjusted again.
+        // At DTE=0 no trade is ever readjusted (expiry day) — exit instead. Both downgrade READJUST → EXIT.
+        result = applyReadjustmentExitGuard(result, readjustmentEntry, currentDte);
 
         log.info("agent3.evaluation.complete tradeId={} tradeCode={} action={} threshold={} pop={} pnl={}",
                 tradeId, trade.tradeCode(), result.action(), result.thresholdHit(),
@@ -178,6 +182,40 @@ public class MonitorEvaluationService {
         }
     }
 
+    /** True when the trade was opened as a readjustment re-entry (from market_context JSONB). */
+    private boolean extractReadjustmentEntry(String marketContextJson) {
+        if (marketContextJson == null) return false;
+        try {
+            MarketContextSnapshot snap = jsonUtil.fromJson(marketContextJson, MarketContextSnapshot.class);
+            return snap.readjustmentEntry() != null && snap.readjustmentEntry();
+        } catch (Exception e) {
+            log.warn("agent3.market_context.parse_error error={}", e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Downgrades a READJUST decision to EXIT when the trade must not be readjusted:
+     *   - it was itself opened as a readjustment re-entry (one readjustment only), or
+     *   - it is expiry day (DTE=0) — no trade is ever readjusted on expiry, only exited.
+     * All other actions (HOLD/WATCH/EXIT/PAUSE) pass through unchanged. Pure and deterministic.
+     */
+    static EvaluationResult applyReadjustmentExitGuard(EvaluationResult result,
+                                                       boolean readjustmentEntry, int currentDte) {
+        if (result == null || result.action() != MonitorAction.READJUST) {
+            return result; // only READJUST is ever downgraded
+        }
+        if (!readjustmentEntry && currentDte != 0) {
+            return result; // normal trade, not expiry day — readjustment allowed
+        }
+        String why = readjustmentEntry
+                ? "readjustment re-entry is EXIT-only — not readjusted again"
+                : "expiry day (DTE=0) — exit instead of readjust";
+        String reason = "[READJUST → EXIT: " + why + "] " + result.reason();
+        return new EvaluationResult(MonitorAction.EXIT, result.thresholdHit(), reason,
+                result.currentNetPremium(), result.markToMarketPnl(), result.livePop(), result.detail());
+    }
+
     @Transactional
     protected MonitoringEvaluationEntity persist(UUID tradeId,
                                                   LiveMarketSnapshot liveData,
@@ -221,9 +259,10 @@ public class MonitorEvaluationService {
         );
     }
 
-    /** Minimal projection to extract VIX from market_context JSONB. */
+    /** Minimal projection to extract VIX and the readjustment flag from market_context JSONB. */
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record MarketContextSnapshot(
-            @JsonProperty("vix") BigDecimal vix
+            @JsonProperty("vix") BigDecimal vix,
+            @JsonProperty("readjustmentEntry") Boolean readjustmentEntry
     ) {}
 }

@@ -19,7 +19,9 @@ import com.the3Cgrp.zupptrade.agent1.dto.ScoreRequestDto;
 import com.the3Cgrp.zupptrade.agent1.repository.Agent1SignalRepository;
 import com.the3Cgrp.zupptrade.agent1.scoring.TierScorer;
 import com.the3Cgrp.zupptrade.agent1.service.CommentaryExtractorService;
+import com.the3Cgrp.zupptrade.agent1.service.NiftyCloseRecorderService;
 import com.the3Cgrp.zupptrade.agent1.service.TechnicalIndicatorService;
+import com.the3Cgrp.zupptrade.agent1.service.TierWeightResolver;
 import com.the3Cgrp.zupptrade.core.expiry.ExpiryDateService;
 import com.the3Cgrp.zupptrade.shared.enums.VixRegime;
 import org.slf4j.Logger;
@@ -28,11 +30,13 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static net.logstash.logback.argument.StructuredArguments.kv;
@@ -64,6 +68,8 @@ public class ScoringPipeline {
     private final CommentaryExtractorService commentaryExtractor;
     private final TechnicalIndicatorService technicalIndicatorService;
     private final ExpiryDateService expiryDateService;
+    private final TierWeightResolver tierWeightResolver;
+    private final NiftyCloseRecorderService niftyCloseRecorder;
 
     public ScoringPipeline(List<TierScorer> tierScorers,
                            SignalComposer composer,
@@ -75,7 +81,9 @@ public class ScoringPipeline {
                            GiftNiftyClient giftNiftyClient,
                            CommentaryExtractorService commentaryExtractor,
                            TechnicalIndicatorService technicalIndicatorService,
-                           ExpiryDateService expiryDateService) {
+                           ExpiryDateService expiryDateService,
+                           TierWeightResolver tierWeightResolver,
+                           NiftyCloseRecorderService niftyCloseRecorder) {
         this.tierScorers = tierScorers;
         this.composer = composer;
         this.repository = repository;
@@ -87,6 +95,8 @@ public class ScoringPipeline {
         this.commentaryExtractor = commentaryExtractor;
         this.technicalIndicatorService = technicalIndicatorService;
         this.expiryDateService = expiryDateService;
+        this.tierWeightResolver = tierWeightResolver;
+        this.niftyCloseRecorder = niftyCloseRecorder;
     }
 
     /** Step 1-4 outside transaction (no DB writes during external API calls). Step 5 in transaction. */
@@ -117,11 +127,16 @@ public class ScoringPipeline {
             log.info("agent1.tier_result tier={} signals={} average={} contribution={}",
                     t.tierName(), t.signals(), t.average(), t.contribution()));
 
-        // Step 3: Compose signal
-        Agent1SignalEntity signal = composer.compose(tierScores, inputs, runTime);
+        // Resolve per-tier weights from the user profile (falls back to system config weights).
+        // These drive the composite ONCE, so bias, strength and confidence all follow the weighting.
+        TierWeightResolver.ResolvedWeights weights = tierWeightResolver.resolve();
+        log.info("agent1.weights source={} weights={}", weights.source(), weights.byTier());
 
-        // Step 4: Attach JSON audit data
-        signal.setScoreBreakdown(buildScoreBreakdownJson(tierScores));
+        // Step 3: Compose signal using the resolved weights
+        Agent1SignalEntity signal = composer.compose(tierScores, inputs, runTime, weights.byTier());
+
+        // Step 4: Attach JSON audit data (score_breakdown reflects the weights actually used)
+        signal.setScoreBreakdown(buildScoreBreakdownJson(tierScores, weights.byTier()));
         signal.setRawInputs(buildRawInputsJson(inputs));
         // BUG-05 fix: only persist key_levels when commentary was actually provided
         boolean hasCommentary = request.commentary() != null && !request.commentary().isBlank();
@@ -135,6 +150,10 @@ public class ScoringPipeline {
     private MarketInputs fetchInputs(ScoreRequestDto request, LocalDate expiryDate) {
         // Historical candles for TA4J (200+ days)
         List<OhlcCandle> candles = safeGet(() -> historicalClient.fetchDailyCandles(200), List.of());
+
+        // Record settled daily closes as a byproduct (no extra Upstox call) for Agent 4's
+        // signal-accuracy metric. Best-effort — never breaks scoring.
+        niftyCloseRecorder.record(candles);
 
         // Pre-compute TA4J indicators from candle history
         PrecomputedIndicators indicators = technicalIndicatorService.compute(candles);
@@ -174,12 +193,17 @@ public class ScoringPipeline {
         }
 
         // LLM commentary extraction — keep full CommentarySignal for key_levels JSONB
+        boolean hasCommentary = request.commentary() != null && !request.commentary().isBlank();
         CommentarySignal commentarySignal = CommentarySignal.neutral();
-        if (request.commentary() != null && !request.commentary().isBlank()) {
+        if (hasCommentary) {
             commentarySignal = safeGet(
                     () -> commentaryExtractor.extract(request.commentary(), marketauxSentiment),
                     CommentarySignal.neutral());
         }
+        // commentaryBias == null signals Tier 4 that NO user commentary was provided, so it takes
+        // Marketaux at face value instead of averaging with a 0 LLM vote. A genuinely NEUTRAL user
+        // view still yields a non-null "NEUTRAL" bias and keeps the two-signal average.
+        String commentaryBias = hasCommentary ? commentarySignal.bias() : null;
 
         return MarketInputs.builder()
                 .spot(chain != null ? chain.spot() : null)
@@ -199,7 +223,7 @@ public class ScoringPipeline {
                 .giftNiftyPremium(giftNiftyPremium)
                 .marketauxSentiment(marketauxSentiment)
                 .marketauxDetails(marketauxResult)
-                .commentaryBias(commentarySignal.bias())
+                .commentaryBias(commentaryBias)
                 .commentarySignal(commentarySignal)
                 .indicators(indicators)
                 .expiryDate(expiryDate)
@@ -235,16 +259,21 @@ public class ScoringPipeline {
         return saved;
     }
 
-    private String buildScoreBreakdownJson(List<TierScore> tierScores) {
-        // Simple JSON — full Jackson serialization wired in Agent1Service
+    private String buildScoreBreakdownJson(List<TierScore> tierScores, Map<String, BigDecimal> weightByTier) {
+        // Simple JSON — full Jackson serialization wired in Agent1Service.
+        // Weight and contribution reflect the resolved (user or config) weights actually applied,
+        // so summing the five contributions reproduces composite_score.
         StringBuilder sb = new StringBuilder("{");
         for (int i = 0; i < tierScores.size(); i++) {
             TierScore t = tierScores.get(i);
+            BigDecimal weight = weightByTier == null ? null : weightByTier.get(t.tierName());
+            if (weight == null) weight = t.weight();
+            BigDecimal contribution = t.average().multiply(weight).setScale(4, RoundingMode.HALF_UP);
             if (i > 0) sb.append(",");
             sb.append("\"").append(t.tierName()).append("\":{")
               .append("\"average\":").append(t.average()).append(",")
-              .append("\"contribution\":").append(t.contribution()).append(",")
-              .append("\"weight\":").append(t.weight())
+              .append("\"contribution\":").append(contribution).append(",")
+              .append("\"weight\":").append(weight)
               .append("}");
         }
         sb.append("}");

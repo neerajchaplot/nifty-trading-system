@@ -14,5 +14,8 @@ public record MarketContext(
         IvRegime ivRegime,
         VixRegime vixRegime,
         BigDecimal expectedMove,
-        BigDecimal oneFourSdBoundary
+        BigDecimal oneFourSdBoundary,
+        // True when this trade was opened as a readjustment re-entry (relaxed G1 gate). Agent 3 uses
+        // this to make a readjusted trade EXIT-only — it is never readjusted a second time.
+        boolean readjustmentEntry
 ) {}

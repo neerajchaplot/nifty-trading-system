@@ -4,14 +4,16 @@ import tools.jackson.databind.json.JsonMapper;
 import com.the3Cgrp.zupptrade.agent5.client.UpstoxOrderClient;
 import com.the3Cgrp.zupptrade.agent5.client.UpstoxOrderClient.UpstoxOrderException;
 import com.the3Cgrp.zupptrade.agent5.client.request.MarginCheckRequest;
-import com.the3Cgrp.zupptrade.agent5.client.request.MultiOrderRequest;
+import com.the3Cgrp.zupptrade.agent5.client.request.PlaceOrderV3Request;
 import com.the3Cgrp.zupptrade.agent5.client.response.FundsAndMarginResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.MarginCheckResponse;
-import com.the3Cgrp.zupptrade.agent5.client.response.MultiOrderResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.OrderStatusResponse;
+import com.the3Cgrp.zupptrade.agent5.client.response.PlaceOrderV3Response;
+import com.the3Cgrp.zupptrade.agent5.client.response.TaggedOrdersResponse;
 import com.the3Cgrp.zupptrade.agent5.config.Agent5ExecutionProperties;
 import com.the3Cgrp.zupptrade.agent5.dto.*;
 import com.the3Cgrp.zupptrade.core.alert.AlertService;
+import com.the3Cgrp.zupptrade.core.alert.CriticalAlertService;
 import com.the3Cgrp.zupptrade.ledger.LedgerEventType;
 import com.the3Cgrp.zupptrade.ledger.TradeLedgerService;
 import com.the3Cgrp.zupptrade.ledger.payload.*;
@@ -27,26 +29,24 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static net.logstash.logback.argument.StructuredArguments.kv;
 
 /**
- * Orchestrates the full trade execution lifecycle.
+ * Orchestrates the full trade execution lifecycle on the Upstox v3 order API.
  *
- * Entry flow:
- *   1. Read expected net premium + expiry from DB (tradeId → trades table)
- *   2. Margin check — all legs together (SPAN spread benefit). Reject if insufficient.
- *   3. multi/place — both legs in ONE HTTP call (simultaneous routing to exchange)
- *      Payload errors → nothing executed → REJECTED
- *   4. Poll both order_ids simultaneously until complete / timeout
- *      Timeout → modifyToMarket (or cancel, per config)
- *   5. Exchange rejection of any leg → cancel unfilled sibling → rollback filled leg
- *   6. Slippage check — alert only, trade stays live
- *   7. Persist fills to trades.entry_fills, set status ACTIVE
+ * Entry flow (sequential, protective-leg-first):
+ *   1. Read expected net premium from DB (tradeId → trades table, status = CONFIRMED)
+ *   2. Reject any leg whose quantity exceeds the exchange freeze limit (no auto-slicing)
+ *   3. Margin check (all legs together — SPAN spread benefit) + available-funds check
+ *   4. Place legs ONE AT A TIME via POST /v3/order/place, each with a UNIQUE per-leg tag
+ *      (the tag replaces v2's correlation_id). Poll each to fill before placing the next.
+ *   5. Any leg failure → roll back already-filled legs (reverse MARKET) and stop.
+ *      Ambiguous (5xx/timeout) placement failure → reconcile by tag and drive to flat.
+ *   6. Slippage check — alert only, trade stays live.
+ *   7. Persist fills to trades.entry_fills, set status ACTIVE.
  *
- * Exit flow:
- *   multi/place with reversed transaction_type + MARKET order_type
+ * Exit flow: place a reverse MARKET order per leg (BUY→SELL, SELL→BUY), each with its own tag.
  */
 @Service
 public class TradeExecutionService {
@@ -58,6 +58,7 @@ public class TradeExecutionService {
     private final JdbcTemplate              jdbc;
     private final JsonMapper                mapper;
     private final AlertService              alertService;
+    private final CriticalAlertService      criticalAlertService;
     private final TradeLedgerService        ledger;
 
     public TradeExecutionService(UpstoxOrderClient orderClient,
@@ -65,28 +66,27 @@ public class TradeExecutionService {
                                  JdbcTemplate jdbc,
                                  JsonMapper mapper,
                                  AlertService alertService,
+                                 CriticalAlertService criticalAlertService,
                                  TradeLedgerService ledger) {
-        this.orderClient  = orderClient;
-        this.props        = props;
-        this.jdbc         = jdbc;
-        this.mapper       = mapper;
-        this.alertService = alertService;
-        this.ledger       = ledger;
+        this.orderClient          = orderClient;
+        this.props                = props;
+        this.jdbc                 = jdbc;
+        this.mapper               = mapper;
+        this.alertService         = alertService;
+        this.criticalAlertService = criticalAlertService;
+        this.ledger               = ledger;
     }
 
     // ── Entry ───────────────────────────────────────────────────────────────
 
     public ExecuteTradeResponse execute(ExecuteTradeRequest request) {
         UUID tradeId = request.tradeId();
-        String tag   = OrderTagBuilder.tag(tradeId);
 
-        log.info("execution.start", kv("tradeId", tradeId), kv("tag", tag),
-                kv("legCount", request.legs().size()));
+        log.info("execution.start", kv("tradeId", tradeId), kv("legCount", request.legs().size()));
 
-        // Read expected net premium from DB — Agent 5 never trusts caller for financial figures
-        // Query is gated on status = 'CONFIRMED' so null means trade is not CONFIRMED (may be ACTIVE,
-        // CLOSED, etc.). Do NOT update the trade's DB status in this case — the trade is in a valid
-        // state; this is simply an invalid execution attempt.
+        // Read expected net premium from DB — Agent 5 never trusts caller for financial figures.
+        // Query is gated on status = 'CONFIRMED'; null means the trade is not CONFIRMED — reject
+        // WITHOUT changing the trade's DB status (it is in a valid state; this is just an invalid attempt).
         BigDecimal expectedNet = readExpectedNetPremium(tradeId);
         if (expectedNet == null) {
             log.warn("execution.not.confirmed tradeId={} — execution rejected, trade status unchanged", tradeId);
@@ -96,7 +96,22 @@ public class TradeExecutionService {
                     LocalDateTime.now());
         }
 
-        // ── Step 1: Margin check — required margin from /v2/charges/margin ────
+        // ── Step 1: Reject oversized legs (no auto-slicing) ──────────────────
+        // Upstox rejects a single order above the exchange freeze quantity. We do NOT slice;
+        // a leg over the limit is rejected up front so the user splits it into two orders.
+        for (int i = 0; i < request.legs().size(); i++) {
+            int qty = request.legs().get(i).quantity();
+            if (qty > props.getMaxOrderQuantity()) {
+                String reason = "Leg " + i + " quantity " + qty + " exceeds the max order quantity "
+                        + props.getMaxOrderQuantity() + " (exchange freeze limit). Split into smaller orders.";
+                log.warn("execution.quantity.exceeds_freeze",
+                        kv("tradeId", tradeId), kv("legIndex", i), kv("quantity", qty),
+                        kv("max", props.getMaxOrderQuantity()));
+                return rejected(tradeId, expectedNet, "QUANTITY_LIMIT", reason);
+            }
+        }
+
+        // ── Step 2: Margin check — required margin from /v2/charges/margin ────
         MarginCheckResponse margin;
         try {
             margin = orderClient.checkMargin(buildMarginRequest(request));
@@ -104,10 +119,9 @@ public class TradeExecutionService {
             log.error("execution.margin.failed", kv("tradeId", tradeId), kv("error", e.getMessage()));
             return rejected(tradeId, expectedNet, "MARGIN_CHECK", "Margin check failed: " + e.getMessage());
         }
-
         BigDecimal requiredMargin = margin.data().finalMargin();
 
-        // ── Step 1b: Available funds check — /v2/user/fund-and-margin ─────────
+        // ── Step 2b: Available funds check — /v2/user/get-funds-and-margin ────
         if (props.isBypassMarginCheck()) {
             log.warn("execution.margin.bypassed",
                     kv("tradeId", tradeId), kv("required", requiredMargin),
@@ -130,97 +144,87 @@ public class TradeExecutionService {
             }
         }
 
-        // ── Step 2: multi/place — all legs simultaneously ────────────────────
-        // Upstox sandbox does not carry weekly NIFTY option contracts; simulate fills when flag set.
+        // Sandbox may not fill weekly NIFTY on a resting LIMIT — simulate fills when flag set.
         if (props.isSimulateFills()) {
             return executeSimulated(tradeId, request, expectedNet);
         }
 
-        MultiOrderResponse placed;
-        try {
-            placed = orderClient.placeMultiOrder(buildMultiOrderRequest(request, tag));
-        } catch (UpstoxOrderException e) {
-            log.error("execution.place.failed", kv("tradeId", tradeId), kv("error", e.getMessage()));
-            return rejected(tradeId, expectedNet, "ORDER_PLACEMENT", "Order placement failed: " + e.getMessage());
-        }
+        // ── Step 3: Sequential placement — protective (BUY) legs first ───────
+        // One leg per call (place → poll to fill → next). At any failure, the only live orders are
+        // the ones already filled (tracked in filledInPlacementOrder) — reverse them and stop.
+        LegFillDto[] fillsByIndex = new LegFillDto[request.legs().size()];
+        List<LegFillDto> filledInPlacementOrder = new ArrayList<>();
 
-        // ── Step 3: Check payload validation result ──────────────────────────
-        if (placed.hasPayloadErrors()) {
-            String errors = placed.errors().stream()
-                    .map(e -> e.correlationId() + ": " + e.message())
-                    .collect(Collectors.joining("; "));
-            log.warn("execution.payload.errors", kv("tradeId", tradeId), kv("errors", errors));
-            return rejected(tradeId, expectedNet, "ORDER_PLACEMENT", "Payload error — no orders sent to exchange: " + errors);
-        }
+        for (int legIndex : protectiveFirstOrder(request.legs())) {
+            LegOrderRequest leg = request.legs().get(legIndex);
+            String legTag       = OrderTagBuilder.entryTag(tradeId, legIndex);
 
-        // ── Ledger: TRADE_PLACED — orders are live on exchange ───────────────
-        recordSilently(tradeId, LedgerEventType.TRADE_PLACED, buildTradePlacedPayload(request, placed),
-                "AGENT5:SYSTEM");
-
-        // Build correlationId → orderId map from response
-        Map<String, String> correlationToOrderId = new HashMap<>();
-        if (placed.data() != null) {
-            placed.data().forEach(d -> correlationToOrderId.put(d.correlationId(), d.orderId()));
-        }
-
-        // Check for exchange-level errors (partial submission)
-        if (!placed.allLegsAccepted()) {
-            String errors = placed.errors() != null ? placed.errors().stream()
-                    .map(e -> e.correlationId() + ": " + e.message())
-                    .collect(Collectors.joining("; ")) : "unknown";
-            log.warn("execution.partial.rejection", kv("tradeId", tradeId), kv("errors", errors));
-            // Cancel any accepted orders — do not leave a naked position
-            correlationToOrderId.values().forEach(orderId -> {
-                try { orderClient.cancelOrder(orderId); }
-                catch (UpstoxOrderException ex) {
-                    log.error("execution.cancel.failed MANUAL INTERVENTION REQUIRED",
-                            kv("tradeId", tradeId), kv("orderId", orderId));
+            PlaceOrderV3Response placed;
+            try {
+                placed = orderClient.placeOrder(PlaceOrderV3Request.limit(
+                        leg.instrumentKey(), leg.action().name(), props.getProduct(),
+                        leg.quantity(), leg.limitPrice(), legTag));
+            } catch (UpstoxOrderException e) {
+                if (e.isAmbiguous()) {
+                    // 5xx/timeout — the order may or may not have reached the exchange. We do NOT
+                    // retry (would risk a duplicate). Reconcile by tag and drive to flat.
+                    log.error("execution.place.ambiguous_failure",
+                            kv("tradeId", tradeId), kv("legIndex", legIndex), kv("error", e.getMessage()));
+                    return reconcileAndFlatten(tradeId, request, filledInPlacementOrder,
+                            legIndex, e.getMessage(), expectedNet);
                 }
-            });
-            return rejected(tradeId, expectedNet, "ORDER_PLACEMENT", "Exchange rejected one or more legs: " + errors);
-        }
-
-        // ── Step 4: Poll all orders to completion ────────────────────────────
-        List<LegFillDto> fills = new ArrayList<>();
-        List<String> unfilledOrderIds = new ArrayList<>();
-
-        for (int i = 0; i < request.legs().size(); i++) {
-            LegOrderRequest leg      = request.legs().get(i);
-            String correlationId     = OrderTagBuilder.correlationId(tradeId, i);
-            String orderId           = correlationToOrderId.get(correlationId);
-
-            if (orderId == null) {
-                log.error("execution.order.id.missing",
-                        kv("tradeId", tradeId), kv("correlationId", correlationId));
+                // Deterministic 4xx — nothing was placed for this leg. Roll back prior fills, reject.
+                log.warn("execution.leg.rejected",
+                        kv("tradeId", tradeId), kv("legIndex", legIndex), kv("error", e.getMessage()));
+                rollback(filledInPlacementOrder, tradeId);
                 return rejected(tradeId, expectedNet, "ORDER_PLACEMENT",
-                        "No order_id returned for correlation_id=" + correlationId);
+                        "Leg " + legIndex + " rejected: " + e.getMessage() + ". Filled legs rolled back.");
             }
 
-            LegFillDto fill = pollToCompletion(orderId, leg, correlationId, tradeId);
-            if (fill == null) {
-                // This leg rejected/cancelled — rollback everything already filled
-                log.warn("execution.leg.failed", kv("tradeId", tradeId), kv("orderId", orderId));
-                rollback(fills, tag, tradeId);
-                unfilledOrderIds.stream()
-                        .filter(id -> !id.equals(orderId))
-                        .forEach(id -> {
-                            try { orderClient.cancelOrder(id); }
-                            catch (UpstoxOrderException ex) {
-                                log.error("execution.cancel.unfilled.failed", kv("orderId", id));
-                            }
-                        });
-                return rejected(tradeId, expectedNet, "FILL_TIMEOUT",
-                        "Leg " + i + " (orderId=" + orderId + ") rejected by exchange. Rollback attempted.");
+            // We never slice, so expect exactly one order_id. Any other count is unexpected — an
+            // order MAY exist, so reconcile by tag rather than assume nothing happened.
+            String orderId = placed.singleOrderId();
+            if (orderId == null) {
+                log.error("execution.order.id.unexpected",
+                        kv("tradeId", tradeId), kv("legIndex", legIndex), kv("orderIds", placed.orderIds()));
+                return reconcileAndFlatten(tradeId, request, filledInPlacementOrder,
+                        legIndex, "unexpected order_ids: " + placed.orderIds(), expectedNet);
             }
-            fills.add(fill);
-            unfilledOrderIds.add(orderId);
+
+            // Ledger: TRADE_PLACED — this leg is live on the exchange
+            recordSilently(tradeId, LedgerEventType.TRADE_PLACED,
+                    new TradePlacedPayload(List.of(new TradePlacedPayload.LegOrder(
+                            legTag, orderId, leg.instrumentKey(), leg.action().name(), leg.quantity()))),
+                    "AGENT5:SYSTEM");
+
+            // Poll this leg to a fill before placing the next
+            PollResult poll = pollToCompletion(orderId, leg, legTag, tradeId);
+            if (!poll.fullyFilled()) {
+                // If it PARTIALLY filled, that position is real and must be compensated too —
+                // include it so rollback reverses exactly the filled qty, not the ordered qty.
+                if (poll.fill() != null) {
+                    filledInPlacementOrder.add(poll.fill());
+                    log.warn("execution.leg.partial",
+                            kv("tradeId", tradeId), kv("legIndex", legIndex),
+                            kv("filled", poll.fill().quantityFilled()), kv("ordered", leg.quantity()));
+                }
+                log.warn("execution.leg.failed",
+                        kv("tradeId", tradeId), kv("legIndex", legIndex), kv("orderId", orderId));
+                rollback(filledInPlacementOrder, tradeId);
+                return rejected(tradeId, expectedNet, "FILL_TIMEOUT",
+                        "Leg " + legIndex + " (orderId=" + orderId + ") did not fully fill. "
+                                + "Filled legs (including partial fills) rolled back.");
+            }
+            fillsByIndex[legIndex] = poll.fill();
+            filledInPlacementOrder.add(poll.fill());
         }
 
-        // ── Step 5: Slippage check ───────────────────────────────────────────
+        // ── Step 4: All legs filled — persist in original leg order ──────────
+        List<LegFillDto> fills = Arrays.stream(fillsByIndex).filter(Objects::nonNull).toList();
+
         BigDecimal actualNet = computeActualNet(fills);
         boolean slippage     = isSlippage(actualNet, expectedNet);
         String slippageMsg   = null;
-
         if (slippage) {
             slippageMsg = String.format(
                     "Slippage alert: actual net ₹%.2f vs expected ₹%.2f. Trade is live.",
@@ -229,10 +233,8 @@ public class TradeExecutionService {
                     kv("actual", actualNet), kv("expected", expectedNet));
         }
 
-        // ── Step 6: Persist fills and set ACTIVE ────────────────────────────
         persistFills(tradeId, fills);
 
-        // Ledger: TRADE_EXECUTED — both legs filled, trade is ACTIVE
         recordSilently(tradeId, LedgerEventType.TRADE_EXECUTED,
                 buildTradeExecutedPayload(fills, actualNet, slippage, slippageMsg),
                 "AGENT5:SYSTEM");
@@ -248,16 +250,11 @@ public class TradeExecutionService {
 
     public ExitTradeResponse exit(ExitTradeRequest request) {
         UUID tradeId = request.tradeId();
-        String exitTag = OrderTagBuilder.exitTag(tradeId);
 
         log.info("exit.start", kv("tradeId", tradeId),
                 kv("reason", request.reason()), kv("legCount", request.exitLegs().size()));
 
         // ── Guard: validate exit-eligible status ─────────────────────────────
-        // Agent 3 sets EXIT_IN_PROGRESS before calling this endpoint (scheduler-side
-        // dedup). We proceed if status is ACTIVE, EXIT_IN_PROGRESS, or EXIT_FAILED.
-        // Any other status (CLOSED, REJECTED, PENDING_CONFIRM) means the exit is
-        // not applicable — return without placing orders.
         TradeStatus current = readCurrentStatus(tradeId);
         if (current == null || (current != TradeStatus.ACTIVE &&
                                  current != TradeStatus.EXIT_IN_PROGRESS &&
@@ -267,7 +264,7 @@ public class TradeExecutionService {
                     "Trade not in exit-eligible status: " + current, null);
         }
 
-        // ── Simulate exit (sandbox only) — skip Upstox entirely, mark CLOSED ────
+        // ── Simulate exit (sandbox only) — skip Upstox entirely, mark CLOSED ──
         if (props.isSimulateExit()) {
             log.warn("exit.fills.simulated tradeId={} — simulate-exit=true, NEVER use in production", tradeId);
             LocalDateTime closedAt = LocalDateTime.now();
@@ -279,52 +276,40 @@ public class TradeExecutionService {
             return new ExitTradeResponse(tradeId, TradeStatus.CLOSED, null, closedAt);
         }
 
-        // ── Ensure EXIT_IN_PROGRESS is set (idempotent if Agent 3 already set it) ──
+        // Ensure EXIT_IN_PROGRESS is set (idempotent if Agent 3 already set it).
         setTradeStatus(tradeId, TradeStatus.EXIT_IN_PROGRESS, null);
 
-        // ── Build reverse MARKET multi-order ─────────────────────────────────
-        List<MultiOrderRequest.OrderLeg> legs = new ArrayList<>();
+        // ── Place a reverse MARKET order per leg (one call each) ─────────────
+        List<String> failures = new ArrayList<>();
         for (int i = 0; i < request.exitLegs().size(); i++) {
             ExitTradeRequest.ExitLeg leg = request.exitLegs().get(i);
             String reverse = leg.originalAction() == LegAction.SELL ? "BUY" : "SELL";
-            legs.add(MultiOrderRequest.OrderLeg.market(
-                    leg.instrumentKey(), reverse, props.getProduct(), leg.quantity(),
-                    exitTag, OrderTagBuilder.exitCorrelationId(tradeId, i)));
+            try {
+                orderClient.placeOrder(PlaceOrderV3Request.market(
+                        leg.instrumentKey(), reverse, props.getProduct(),
+                        leg.quantity(), OrderTagBuilder.exitTag(tradeId, i)));
+                log.info("exit.leg.placed", kv("tradeId", tradeId), kv("legIndex", i),
+                        kv("instrument", leg.instrumentKey()), kv("reverse", reverse));
+            } catch (UpstoxOrderException e) {
+                failures.add("leg " + i + " (" + leg.instrumentKey() + "): " + e.getMessage());
+                log.error("exit.leg.failed", kv("tradeId", tradeId), kv("legIndex", i),
+                        kv("instrument", leg.instrumentKey()), kv("error", e.getMessage()));
+            }
         }
 
-        MultiOrderResponse placed;
-        try {
-            placed = orderClient.placeMultiOrder(new MultiOrderRequest(legs));
-        } catch (UpstoxOrderException e) {
-            String reason = "Exit order placement failed: " + e.getMessage();
-            log.error("exit.place.failed — MANUAL INTERVENTION REQUIRED",
-                    kv("tradeId", tradeId), kv("error", e.getMessage()));
+        if (!failures.isEmpty()) {
+            String reason = "Exit order placement failed for: " + String.join("; ", failures);
+            log.error("exit.failed — MANUAL INTERVENTION REQUIRED", kv("tradeId", tradeId), kv("failures", reason));
             alertService.critical(tradeId, "exit_failed",
                     "Trade " + tradeId + " exit FAILED — position may still be open. " +
-                    "MANUAL INTERVENTION REQUIRED. Error: " + e.getMessage());
+                    "MANUAL INTERVENTION REQUIRED. " + reason);
             setTradeStatus(tradeId, TradeStatus.EXIT_FAILED, reason);
             recordSilently(tradeId, LedgerEventType.EXIT_FAILED,
-                    new ExitFailedPayload("ORDER_PLACEMENT", reason, 1), "AGENT5:SYSTEM");
+                    new ExitFailedPayload("ORDER_PLACEMENT", reason, failures.size()), "AGENT5:SYSTEM");
             return new ExitTradeResponse(tradeId, TradeStatus.EXIT_FAILED, reason, null);
         }
 
-        // ── Check for payload validation errors ──────────────────────────────
-        if (placed.hasPayloadErrors()) {
-            String errors = placed.errors().stream()
-                    .map(err -> err.correlationId() + ": " + err.message())
-                    .collect(Collectors.joining("; "));
-            String reason = "Exit payload error — orders not sent to exchange: " + errors;
-            log.error("exit.payload.error", kv("tradeId", tradeId), kv("errors", errors));
-            alertService.critical(tradeId, "exit_payload_error",
-                    "Trade " + tradeId + " exit failed — payload rejected by Upstox before reaching exchange. " +
-                    "MANUAL INTERVENTION REQUIRED. Errors: " + errors);
-            setTradeStatus(tradeId, TradeStatus.EXIT_FAILED, reason);
-            recordSilently(tradeId, LedgerEventType.EXIT_FAILED,
-                    new ExitFailedPayload("ORDER_PLACEMENT", reason, 1), "AGENT5:SYSTEM");
-            return new ExitTradeResponse(tradeId, TradeStatus.EXIT_FAILED, reason, null);
-        }
-
-        // ── Mark CLOSED — exit MARKET orders fill near-instantly ─────────────
+        // ── All reverse orders placed — mark CLOSED (MARKET orders fill near-instantly) ──
         LocalDateTime closedAt = LocalDateTime.now();
         setTradeStatusClosed(tradeId, request.reason(), closedAt);
         recordSilently(tradeId, LedgerEventType.TRADE_CLOSED,
@@ -332,23 +317,25 @@ public class TradeExecutionService {
                 "AGENT5:SYSTEM");
 
         log.info("exit.complete", kv("tradeId", tradeId), kv("reason", request.reason()),
-                kv("success", placed.summary() != null ? placed.summary().success() : 0));
+                kv("legs", request.exitLegs().size()));
 
         return new ExitTradeResponse(tradeId, TradeStatus.CLOSED, null, closedAt);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private MultiOrderRequest buildMultiOrderRequest(ExecuteTradeRequest request, String tag) {
-        List<MultiOrderRequest.OrderLeg> legs = new ArrayList<>();
-        for (int i = 0; i < request.legs().size(); i++) {
-            LegOrderRequest leg = request.legs().get(i);
-            legs.add(MultiOrderRequest.OrderLeg.limit(
-                    leg.instrumentKey(), leg.action().name(), props.getProduct(),
-                    leg.quantity(), leg.limitPrice(),
-                    tag, OrderTagBuilder.correlationId(request.tradeId(), i)));
+    /**
+     * Placement order: protective (BUY) legs first, premium-collecting (SELL) legs last.
+     * Returns original leg indices in that order (stable within each group).
+     */
+    private List<Integer> protectiveFirstOrder(List<LegOrderRequest> legs) {
+        List<Integer> buys  = new ArrayList<>();
+        List<Integer> sells = new ArrayList<>();
+        for (int i = 0; i < legs.size(); i++) {
+            if (legs.get(i).action() == LegAction.BUY) buys.add(i); else sells.add(i);
         }
-        return new MultiOrderRequest(legs);
+        buys.addAll(sells);
+        return buys;
     }
 
     private MarginCheckRequest buildMarginRequest(ExecuteTradeRequest request) {
@@ -360,8 +347,20 @@ public class TradeExecutionService {
         return new MarginCheckRequest(instruments);
     }
 
-    private LegFillDto pollToCompletion(String orderId, LegOrderRequest leg,
-                                        String correlationId, UUID tradeId) {
+    /**
+     * Outcome of polling one leg to a terminal state.
+     * `fill` is present whenever ANY quantity filled — full OR partial — so a partial fill can be
+     * compensated by reversing exactly {@code fill.quantityFilled()}. `fullyFilled` distinguishes
+     * a complete fill from a partial one.
+     */
+    private record PollResult(boolean fullyFilled, LegFillDto fill) {
+        static PollResult full(LegFillDto f)    { return new PollResult(true,  f); }
+        static PollResult partial(LegFillDto f) { return new PollResult(false, f); }
+        static PollResult none()                { return new PollResult(false, null); }
+    }
+
+    private PollResult pollToCompletion(String orderId, LegOrderRequest leg,
+                                        String legTag, UUID tradeId) {
         long start         = System.currentTimeMillis();
         long timeout       = props.getFillTimeoutMs();
         long pollInterval  = props.getFillPollIntervalMs();
@@ -373,31 +372,31 @@ public class TradeExecutionService {
                 status = orderClient.getOrderStatus(orderId);
             } catch (UpstoxOrderException e) {
                 log.error("execution.poll.error", kv("orderId", orderId), kv("error", e.getMessage()));
-                return null;
+                return PollResult.none();
             }
 
             if (status.isComplete()) {
-                return toLegFill(orderId, correlationId, leg, status);
+                return PollResult.full(toLegFill(orderId, legTag, leg, status));
             }
             if (status.isRejected() || status.isCancelled()) {
                 log.warn("execution.order.terminal",
                         kv("orderId", orderId),
                         kv("orderStatus", status.data() != null ? status.data().orderStatus() : "unknown"));
-                return null;
+                return partialOrNone(orderId, legTag, leg, status);
             }
 
             long elapsed = System.currentTimeMillis() - start;
             if (elapsed >= timeout && !marketSent) {
                 if (props.isCancelOnTimeoutInsteadOfMarket()) {
                     try { orderClient.cancelOrder(orderId); } catch (UpstoxOrderException ignore) {}
-                    return null;
+                    return partialOrNone(orderId, legTag, leg, safeStatus(orderId));
                 } else {
                     try {
                         orderClient.modifyToMarket(orderId, leg.quantity());
                         marketSent = true;
                     } catch (UpstoxOrderException e) {
                         log.error("execution.modify.market.failed", kv("orderId", orderId));
-                        return null;
+                        return partialOrNone(orderId, legTag, leg, safeStatus(orderId));
                     }
                 }
             }
@@ -405,26 +404,223 @@ public class TradeExecutionService {
         }
     }
 
-    private void rollback(List<LegFillDto> filledLegs, String tag, UUID tradeId) {
-        log.warn("execution.rollback.start",
-                kv("tradeId", tradeId), kv("filledLegs", filledLegs.size()));
+    /**
+     * Builds a PARTIAL-fill result from a terminal/cancelled status, or none() if nothing filled.
+     * The LegFillDto carries the ACTUAL filled quantity, so rollback reverses exactly what filled.
+     */
+    private PollResult partialOrNone(String orderId, String legTag,
+                                     LegOrderRequest leg, OrderStatusResponse status) {
+        int filled = (status != null && status.data() != null) ? status.data().filledQuantity() : 0;
+        if (filled <= 0) {
+            return PollResult.none();
+        }
+        log.warn("execution.leg.partial_fill",
+                kv("orderId", orderId), kv("filled", filled), kv("ordered", leg.quantity()));
+        return PollResult.partial(toLegFill(orderId, legTag, leg, status));
+    }
+
+    /** Best-effort final status read — returns null if Upstox is unreachable. */
+    private OrderStatusResponse safeStatus(String orderId) {
+        try {
+            return orderClient.getOrderStatus(orderId);
+        } catch (UpstoxOrderException e) {
+            log.error("execution.final_status.read.failed",
+                    kv("orderId", orderId), kv("error", e.getMessage()));
+            return null;
+        }
+    }
+
+    /** Reverses each already-filled leg with a MARKET order at its actual filled quantity. */
+    private void rollback(List<LegFillDto> filledLegs, UUID tradeId) {
+        if (filledLegs.isEmpty()) return;
+        log.warn("execution.rollback.start", kv("tradeId", tradeId), kv("filledLegs", filledLegs.size()));
 
         for (int i = 0; i < filledLegs.size(); i++) {
-            LegFillDto fill  = filledLegs.get(i);
-            String reverse   = fill.action() == LegAction.SELL ? "BUY" : "SELL";
-            String rbCorrId  = tag + "_RB_L" + i;
+            LegFillDto fill = filledLegs.get(i);
+            String reverse  = fill.action() == LegAction.SELL ? "BUY" : "SELL";
             try {
-                orderClient.placeMultiOrder(new MultiOrderRequest(List.of(
-                        MultiOrderRequest.OrderLeg.market(fill.instrumentKey(), reverse,
-                                props.getProduct(), fill.quantityFilled(), tag + "_RB", rbCorrId))));
+                orderClient.placeOrder(PlaceOrderV3Request.market(
+                        fill.instrumentKey(), reverse, props.getProduct(),
+                        fill.quantityFilled(), OrderTagBuilder.rollbackTag(tradeId, i)));
                 log.info("execution.rollback.leg.placed",
                         kv("tradeId", tradeId), kv("instrument", fill.instrumentKey()));
             } catch (UpstoxOrderException e) {
                 log.error("execution.rollback.leg.FAILED — MANUAL INTERVENTION REQUIRED",
                         kv("tradeId", tradeId), kv("instrument", fill.instrumentKey()),
                         kv("quantity", fill.quantityFilled()), kv("error", e.getMessage()));
+                alertService.critical(tradeId, "rollback_failed",
+                        "Rollback of filled leg " + fill.instrumentKey() + " (qty " +
+                        fill.quantityFilled() + ") failed for trade " + tradeId +
+                        ". Position may still be open — MANUAL INTERVENTION REQUIRED. Error: " + e.getMessage());
             }
         }
+    }
+
+    // ── Ambiguous-placement-failure reconciliation ───────────────────────────
+
+    /** One position to flatten — from an in-memory fill or the order book, keyed by order_id. */
+    private record ReconcileItem(String orderId, String instrumentKey,
+                                 LegAction action, boolean openInBook, int knownFilledQty) {}
+
+    /**
+     * Recovers from an AMBIGUOUS placement failure (5xx/timeout) on the leg at failedLegIndex, where
+     * we cannot know whether the order reached the exchange. Retrying would risk a duplicate, so we
+     * ask the exchange what exists under that leg's unique tag and drive everything flat:
+     *   wait → query order book by the failed leg's tag → union with in-memory known fills (prior
+     *   legs) keyed by order_id → for each: cancel-if-open, re-read, reverse the confirmed fill.
+     *
+     * Every reconciliation records a critical_alert with a transparent JSON snapshot. Status becomes
+     * REJECTED only when we are confident the position is flat; otherwise RECONCILE_REQUIRED.
+     */
+    private ExecuteTradeResponse reconcileAndFlatten(UUID tradeId, ExecuteTradeRequest request,
+                                                     List<LegFillDto> knownFills, int failedLegIndex,
+                                                     String triggerError, BigDecimal expectedNet) {
+        sleep(props.getReconcileDelayMs());
+        String failedTag = OrderTagBuilder.entryTag(tradeId, failedLegIndex);
+
+        // 1. Query the order book by the failed leg's tag (idempotent GET — retried in the client).
+        TaggedOrdersResponse book;
+        try {
+            book = orderClient.getOrderDetailsByTag(failedTag);
+        } catch (UpstoxOrderException e) {
+            String reason = "Order placement failed AND reconciliation query failed for tag " + failedTag +
+                    " — position state UNKNOWN. Check the Upstox order book for tag " + failedTag +
+                    " and clean up manually.";
+            criticalAlertService.record(tradeId, reason,
+                    reconcileSnapshot(tradeId, failedTag, request, knownFills, failedLegIndex,
+                            triggerError, "tag query failed: " + e.getMessage(), List.of()));
+            log.error("execution.reconcile.query_failed — MANUAL INTERVENTION REQUIRED",
+                    kv("tradeId", tradeId), kv("tag", failedTag), kv("error", e.getMessage()));
+            setTradeStatus(tradeId, TradeStatus.RECONCILE_REQUIRED, "Reconcile query failed: " + e.getMessage());
+            recordSilently(tradeId, LedgerEventType.TRADE_FAILED,
+                    new TradeFailedPayload("RECONCILE_QUERY_FAILED", triggerError, null), "AGENT5:SYSTEM");
+            return reconcileResponse(tradeId, TradeStatus.RECONCILE_REQUIRED, expectedNet, reason);
+        }
+
+        // 2. Flatten set keyed by order_id: in-memory prior fills + the failed leg's book orders.
+        Map<String, ReconcileItem> toFlatten = new LinkedHashMap<>();
+        for (LegFillDto f : knownFills) {
+            if (f.orderId() != null) {
+                toFlatten.put(f.orderId(), new ReconcileItem(
+                        f.orderId(), f.instrumentKey(), f.action(), false, f.quantityFilled()));
+            }
+        }
+        for (TaggedOrdersResponse.TaggedOrder o : book.orders()) {
+            if (o.tag() == null || !failedTag.equals(o.tag()) || o.orderId() == null) continue;
+            toFlatten.put(o.orderId(), new ReconcileItem(
+                    o.orderId(), o.instrumentToken(),
+                    "BUY".equalsIgnoreCase(o.transactionType()) ? LegAction.BUY : LegAction.SELL,
+                    o.isOpen(), o.filledQuantity()));
+        }
+
+        // 3. Nothing found under the tag AND no prior fills — suspicious after a 5xx.
+        if (toFlatten.isEmpty()) {
+            String reason = "nothing found: doesn't sound right, go and check for trade_id " + tradeId +
+                    " (tag " + failedTag + ") and clean please";
+            criticalAlertService.record(tradeId, reason,
+                    reconcileSnapshot(tradeId, failedTag, request, knownFills, failedLegIndex,
+                            triggerError, "no orders found under tag", List.of()));
+            log.error("execution.reconcile.nothing_found — MANUAL CHECK REQUIRED",
+                    kv("tradeId", tradeId), kv("tag", failedTag));
+            setTradeStatus(tradeId, TradeStatus.RECONCILE_REQUIRED, "Placement failed; nothing found under tag");
+            recordSilently(tradeId, LedgerEventType.TRADE_FAILED,
+                    new TradeFailedPayload("RECONCILE_NOTHING_FOUND", triggerError, null), "AGENT5:SYSTEM");
+            return reconcileResponse(tradeId, TradeStatus.RECONCILE_REQUIRED, expectedNet, reason);
+        }
+
+        // 4. Drive each found order to flat: cancel-if-open → re-read → reverse confirmed fill.
+        List<Map<String, Object>> actions = new ArrayList<>();
+        boolean allClean = true;
+        int rbSeq = 0;
+        for (ReconcileItem item : toFlatten.values()) {
+            Map<String, Object> a = new LinkedHashMap<>();
+            a.put("orderId", item.orderId());
+            a.put("instrumentKey", item.instrumentKey());
+            try {
+                if (item.openInBook()) {
+                    orderClient.cancelOrder(item.orderId());
+                    a.put("cancelled", true);
+                }
+                int filled = item.knownFilledQty();
+                OrderStatusResponse fs = safeStatus(item.orderId());
+                if (fs != null && fs.data() != null) filled = fs.data().filledQuantity();
+                a.put("filledQty", filled);
+                if (filled > 0) {
+                    String reverse = item.action() == LegAction.SELL ? "BUY" : "SELL";
+                    orderClient.placeOrder(PlaceOrderV3Request.market(
+                            item.instrumentKey(), reverse, props.getProduct(),
+                            filled, OrderTagBuilder.rollbackTag(tradeId, rbSeq++)));
+                    a.put("reversed", true);
+                    a.put("reverseAction", reverse);
+                } else {
+                    a.put("reversed", false);
+                }
+            } catch (UpstoxOrderException ex) {
+                allClean = false;
+                a.put("error", ex.getMessage());
+                log.error("execution.reconcile.item.FAILED — MANUAL INTERVENTION REQUIRED",
+                        kv("tradeId", tradeId), kv("orderId", item.orderId()),
+                        kv("instrument", item.instrumentKey()), kv("error", ex.getMessage()));
+            }
+            actions.add(a);
+        }
+
+        // 5. Always record a critical alert — a live position may have existed and we made adjustments.
+        String reason = allClean
+                ? "Order placement failed (ambiguous); reconciled trade " + tradeId +
+                  " to flat by reversing filled legs. Review the adjustments."
+                : "Order placement failed (ambiguous); reconciliation of trade " + tradeId +
+                  " did NOT complete cleanly — a position may still be open. MANUAL INTERVENTION REQUIRED.";
+        criticalAlertService.record(tradeId, reason,
+                reconcileSnapshot(tradeId, failedTag, request, knownFills, failedLegIndex, triggerError,
+                        allClean ? "reconciled to flat" : "reconciliation incomplete", actions));
+
+        TradeStatus finalStatus = allClean ? TradeStatus.REJECTED : TradeStatus.RECONCILE_REQUIRED;
+        setTradeStatus(tradeId, finalStatus,
+                allClean ? "Ambiguous placement failure; reconciled flat"
+                         : "Ambiguous placement failure; reconcile incomplete");
+        recordSilently(tradeId, LedgerEventType.TRADE_FAILED,
+                new TradeFailedPayload(allClean ? "RECONCILED_FLAT" : "RECONCILE_INCOMPLETE", triggerError, null),
+                "AGENT5:SYSTEM");
+
+        return reconcileResponse(tradeId, finalStatus, expectedNet, reason);
+    }
+
+    private ExecuteTradeResponse reconcileResponse(UUID tradeId, TradeStatus status,
+                                                   BigDecimal expectedNet, String reason) {
+        return new ExecuteTradeResponse(tradeId, status, List.of(),
+                null, expectedNet, false, null, reason, LocalDateTime.now());
+    }
+
+    /** Transparent snapshot of the trade state as we knew it — stored as critical_alert JSON. */
+    private Map<String, Object> reconcileSnapshot(UUID tradeId, String failedTag, ExecuteTradeRequest request,
+                                                  List<LegFillDto> knownFills, int failedLegIndex,
+                                                  String triggerError, String outcome, List<?> actions) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("tradeId", tradeId.toString());
+        m.put("failedLegTag", failedTag);
+        m.put("triggerError", triggerError);
+        m.put("failedLegIndex", failedLegIndex);
+        m.put("outcome", outcome);
+        m.put("attemptedLegs", request.legs().stream().map(l -> {
+            Map<String, Object> leg = new LinkedHashMap<>();
+            leg.put("instrumentKey", l.instrumentKey());
+            leg.put("action", l.action().name());
+            leg.put("quantity", l.quantity());
+            leg.put("limitPrice", l.limitPrice());
+            return leg;
+        }).toList());
+        m.put("knownFilledLegs", knownFills.stream().map(f -> {
+            Map<String, Object> leg = new LinkedHashMap<>();
+            leg.put("orderId", f.orderId());
+            leg.put("instrumentKey", f.instrumentKey());
+            leg.put("action", f.action().name());
+            leg.put("quantityFilled", f.quantityFilled());
+            return leg;
+        }).toList());
+        m.put("reconcileActions", actions);
+        m.put("recordedAt", LocalDateTime.now().toString());
+        return m;
     }
 
     private BigDecimal computeActualNet(List<LegFillDto> fills) {
@@ -442,21 +638,17 @@ public class TradeExecutionService {
     // Detect spread direction from actual fill net (SELL_total - BUY_total):
     //   Credit spread (received) → actual > 0 → slippage when actual < expected × (1 - threshold)
     //   Debit spread (paid out)  → actual < 0 → slippage when abs(actual) > abs(expected) × (1 + threshold)
-    // Using actual sign (not expected sign) because Agent 2 always stores netPremiumPerUnit
-    // as a positive magnitude for both credit and debit spreads.
     private boolean isSlippage(BigDecimal actual, BigDecimal expected) {
         if (expected == null || expected.signum() == 0) return false;
         BigDecimal threshold = props.getSlippageAlertThreshold();
         if (actual.signum() >= 0) {
-            // Credit spread — slippage means receiving less than expected
             return actual.compareTo(expected.abs().multiply(BigDecimal.ONE.subtract(threshold))) < 0;
         } else {
-            // Debit spread — slippage means paying more than expected
             return actual.abs().compareTo(expected.abs().multiply(BigDecimal.ONE.add(threshold))) > 0;
         }
     }
 
-    private LegFillDto toLegFill(String orderId, String correlationId,
+    private LegFillDto toLegFill(String orderId, String legTag,
                                   LegOrderRequest leg, OrderStatusResponse status) {
         BigDecimal avgPrice = status.data().averagePrice() != null
                 ? status.data().averagePrice().setScale(2, RoundingMode.HALF_UP)
@@ -464,7 +656,7 @@ public class TradeExecutionService {
         BigDecimal slippage = leg.action() == LegAction.SELL
                 ? leg.limitPrice().subtract(avgPrice)
                 : avgPrice.subtract(leg.limitPrice());
-        return new LegFillDto(orderId, correlationId, leg.instrumentKey(), leg.optionType(),
+        return new LegFillDto(orderId, legTag, leg.instrumentKey(), leg.optionType(),
                 leg.strike(), leg.action(), status.data().filledQuantity(),
                 leg.limitPrice(), avgPrice, slippage.setScale(2, RoundingMode.HALF_UP));
     }
@@ -484,16 +676,13 @@ public class TradeExecutionService {
     // ── Simulate fills (sandbox only) ─────────────────────────────────────────
 
     /**
-     * Bypasses Upstox order placement entirely.
-     * Builds synthetic fills at each leg's limitPrice (zero slippage), then runs the
-     * normal downstream path: slippage check → persistFills → ACTIVE.
-     * Allows end-to-end execution flow testing when the sandbox doesn't support the instrument.
+     * Bypasses Upstox order placement entirely. Builds synthetic fills at each leg's limitPrice
+     * (zero slippage), then runs the normal downstream path: slippage check → persistFills → ACTIVE.
      */
     private ExecuteTradeResponse executeSimulated(UUID tradeId, ExecuteTradeRequest request,
                                                   BigDecimal expectedNet) {
         log.warn("execution.fills.simulated",
-                kv("tradeId", tradeId),
-                kv("legCount", request.legs().size()),
+                kv("tradeId", tradeId), kv("legCount", request.legs().size()),
                 kv("note", "simulate-fills=true — NEVER use in production"));
 
         List<LegFillDto> fills = buildSimulatedFills(request);
@@ -529,7 +718,7 @@ public class TradeExecutionService {
             String simulatedOrderId = "SIM-" + request.tradeId().toString().substring(0, 8).toUpperCase() + "-L" + i;
             fills.add(new LegFillDto(
                     simulatedOrderId,
-                    OrderTagBuilder.correlationId(request.tradeId(), i),
+                    OrderTagBuilder.entryTag(request.tradeId(), i),
                     leg.instrumentKey(),
                     leg.optionType(),
                     leg.strike(),
@@ -568,10 +757,6 @@ public class TradeExecutionService {
 
     // ── Ledger helpers ────────────────────────────────────────────────────────
 
-    /**
-     * Records a ledger event without propagating failures.
-     * Used for post-Upstox events where trade state on exchange takes precedence.
-     */
     private void recordSilently(UUID tradeId, LedgerEventType eventType,
                                   Object payload, String occurredBy) {
         try {
@@ -583,23 +768,6 @@ public class TradeExecutionService {
                     "Ledger write failed for event " + eventType + " on trade " + tradeId +
                     ". Audit trail has a gap. DB error: " + e.getMessage());
         }
-    }
-
-    private TradePlacedPayload buildTradePlacedPayload(ExecuteTradeRequest request,
-                                                        MultiOrderResponse placed) {
-        List<TradePlacedPayload.LegOrder> legOrders = new ArrayList<>();
-        for (int i = 0; i < request.legs().size(); i++) {
-            LegOrderRequest leg = request.legs().get(i);
-            String corrId  = OrderTagBuilder.correlationId(request.tradeId(), i);
-            String orderId = placed.data() != null
-                    ? placed.data().stream()
-                        .filter(d -> d.correlationId().equals(corrId))
-                        .findFirst().map(d -> d.orderId()).orElse(null)
-                    : null;
-            legOrders.add(new TradePlacedPayload.LegOrder(corrId, orderId,
-                    leg.instrumentKey(), leg.action().name(), leg.quantity()));
-        }
-        return new TradePlacedPayload(legOrders);
     }
 
     private TradeExecutedPayload buildTradeExecutedPayload(List<LegFillDto> fills,

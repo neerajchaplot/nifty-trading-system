@@ -39,5 +39,8 @@ public record TradeCardDto(
         String rationale,
         LocalDateTime generatedAt,
         LocalDateTime validUntil,          // generatedAt + 20 min
-        TradeStatus status
+        TradeStatus status,
+        boolean testingModeActive,         // true when trading.hard-gate-enabled=false (env flag)
+        boolean skipDecision,              // true when Layer 1 would have returned SKIP/NO_TRADE
+        String skipReason                  // e.g. "SKIP", "NO_TRADE", "VIX_EXTREME", "LOW_CONFIDENCE"
 ) {}

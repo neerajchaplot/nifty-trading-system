@@ -67,32 +67,39 @@ class PortfolioMetricsCalculatorTest {
                 .isEqualByComparingTo(new BigDecimal("2.0000"));
     }
 
-    // ── rocCaptureRatio ───────────────────────────────────────────────────────
+    // ── rocCaptureRatio (Σpnl ÷ ΣmaxProfit × 100) ───────────────────────────────
 
     @Test
-    void rocCaptureRatioZeroTheoreticalReturnsZero() {
-        assertThat(PortfolioMetricsCalculator.rocCaptureRatio(bd("1.5"), BigDecimal.ZERO))
+    void rocCaptureRatioZeroMaxProfitReturnsZero() {
+        // no theoretical profit to capture → guard against divide-by-zero
+        assertThat(PortfolioMetricsCalculator.rocCaptureRatio(bd("15000"), BigDecimal.ZERO))
                 .isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     @Test
-    void rocCaptureRatioNullTheoreticalReturnsZero() {
-        assertThat(PortfolioMetricsCalculator.rocCaptureRatio(bd("1.5"), null))
+    void rocCaptureRatioNullMaxProfitReturnsZero() {
+        assertThat(PortfolioMetricsCalculator.rocCaptureRatio(bd("15000"), null))
+                .isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    void rocCaptureRatioNullPnlReturnsZero() {
+        assertThat(PortfolioMetricsCalculator.rocCaptureRatio(null, bd("20000")))
                 .isEqualByComparingTo(BigDecimal.ZERO);
     }
 
     @Test
     void rocCaptureRatioTypical() {
-        // actual = 1.5, theoretical = 2.0 → capture = 75%
-        assertThat(PortfolioMetricsCalculator.rocCaptureRatio(bd("1.5"), bd("2.0")))
+        // realised 15,000 of 20,000 theoretical max profit → captured 75%
+        assertThat(PortfolioMetricsCalculator.rocCaptureRatio(bd("15000"), bd("20000")))
                 .isEqualByComparingTo(new BigDecimal("75.00"));
     }
 
     @Test
-    void rocCaptureRatioAbove100WhenActualExceedsTheoretical() {
-        // actual = 3.0, theoretical = 2.0 → 150%
-        assertThat(PortfolioMetricsCalculator.rocCaptureRatio(bd("3.0"), bd("2.0")))
-                .isEqualByComparingTo(new BigDecimal("150.00"));
+    void rocCaptureRatioNegativeOnNetLoss() {
+        // net loss against positive theoretical max profit → negative capture
+        assertThat(PortfolioMetricsCalculator.rocCaptureRatio(bd("-5000"), bd("20000")))
+                .isEqualByComparingTo(new BigDecimal("-25.00"));
     }
 
     // ── strategyMix ───────────────────────────────────────────────────────────
@@ -137,6 +144,25 @@ class PortfolioMetricsCalculatorTest {
     void winRateByGroupEmptyRowsReturnsEmptyMap() {
         assertThat(PortfolioMetricsCalculator
                 .winRateByGroup(Collections.emptyList(), "entry_vix_regime")).isEmpty();
+    }
+
+    @Test
+    void winRateByGroupBucketsNullRegimeAsUnknownNotLiteralNull() {
+        // A trade whose entry_vix_regime was not captured must show as "UNKNOWN",
+        // never the literal string "null".
+        Map<String, Object> nullRegime = new java.util.HashMap<>();
+        nullRegime.put("entry_vix_regime", null);
+        nullRegime.put("trade_count", 2L);
+        nullRegime.put("win_count", 1L);   // 1/2 = 50%
+
+        List<Map<String, Object>> rows = List.of(row("NORMAL", 1L, 1L), nullRegime);
+        Map<String, BigDecimal> result =
+                PortfolioMetricsCalculator.winRateByGroup(rows, "entry_vix_regime");
+
+        assertThat(result).containsKey("UNKNOWN");
+        assertThat(result).doesNotContainKey("null");
+        assertThat(result.get("UNKNOWN")).isEqualByComparingTo(new BigDecimal("50.00"));
+        assertThat(result.get("NORMAL")).isEqualByComparingTo(new BigDecimal("100.00"));
     }
 
     // ── adjustmentRecoveryRate ────────────────────────────────────────────────

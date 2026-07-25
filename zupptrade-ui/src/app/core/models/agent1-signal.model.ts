@@ -28,3 +28,8 @@ export interface ScoreRequest {
   commentary?: string;
   marketaux_fetch: boolean;
 }
+
+export interface ExpiryResponse {
+  nextExpiry: string;
+  allUpcoming: string[];
+}

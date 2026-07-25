@@ -5,7 +5,6 @@ import com.the3Cgrp.zupptrade.agent2.engine.layer2.ExpectedMoveCalculator;
 import com.the3Cgrp.zupptrade.agent2.engine.layer3.StrikeSelector;
 import com.the3Cgrp.zupptrade.agent2.engine.layer4.GateValidator;
 import com.the3Cgrp.zupptrade.agent2.engine.layer5.PositionSizer;
-import com.the3Cgrp.zupptrade.shared.enums.Strategy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -48,17 +47,17 @@ public class RecommendationEngine {
                 kv("vix", ctx.getVix()));
 
         strategySelector.execute(ctx);
-
-        if (ctx.getStrategy() == Strategy.NO_TRADE || ctx.getStrategy() == Strategy.SKIP) {
-            log.info("engine.early.exit", kv("reason", ctx.getStrategy()));
-            return ctx;
-        }
+        // StrategySelector always sets a real strategy — SKIP/NO_TRADE decisions are recorded
+        // as skipDecision=true on the context, and a fallback strategy is used instead.
+        // The service layer converts skipDecision → REJECTED (prod) or PENDING_CONFIRM (testing).
 
         expectedMoveCalculator.execute(ctx);
         strikeSelector.execute(ctx);
         gateValidator.execute(ctx);
 
-        if (!ctx.isAllHardGatesPassed()) {
+        // In testing mode (hardGateEnabled=false) GateValidator forces allHardGatesPassed=true,
+        // so this check is effectively bypassed and PositionSizer always runs.
+        if (!ctx.isAllHardGatesPassed() && ctx.isHardGateEnabled()) {
             log.info("engine.early.exit", kv("reason", "HARD_GATE_FAILURE"));
             return ctx;
         }

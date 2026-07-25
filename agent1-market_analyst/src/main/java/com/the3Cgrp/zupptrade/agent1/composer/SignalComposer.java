@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Converts a list of TierScores into a final Agent1SignalEntity.
@@ -45,8 +46,20 @@ public class SignalComposer {
         this.props = props;
     }
 
+    /** Legacy entry — system config weights (each tier's own {@code getWeight()}). */
     public Agent1SignalEntity compose(List<TierScore> tierScores, MarketInputs inputs, LocalDateTime runTime) {
-        BigDecimal composite = computeComposite(tierScores);
+        return compose(tierScores, inputs, runTime, null);
+    }
+
+    /**
+     * Composes the signal using resolved per-tier weights. When {@code weightByTier} is null or
+     * empty the system config weights are used (identical to the legacy behaviour). Otherwise the
+     * composite is computed once from these weights, so bias, strength AND confidence all follow
+     * the user's weighting — the tiers are never weighted twice.
+     */
+    public Agent1SignalEntity compose(List<TierScore> tierScores, MarketInputs inputs, LocalDateTime runTime,
+                                      Map<String, BigDecimal> weightByTier) {
+        BigDecimal composite = computeComposite(tierScores, weightByTier);
         Bias bias = determineActualBias(composite);
         Strength strength = determineStrength(composite);
 
@@ -112,6 +125,23 @@ public class SignalComposer {
     BigDecimal computeComposite(List<TierScore> tierScores) {
         return tierScores.stream()
                 .map(TierScore::contribution)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * Composite from resolved weights: sum of (tier average × weight). A tier not present in the
+     * map falls back to its own config weight. Null/empty map ⇒ legacy sum-of-contributions.
+     * Uses the same average × weight, HALF_UP(4) formula the scorers use, so when the resolved
+     * weights equal the config weights the result is identical to {@link #computeComposite(List)}.
+     */
+    BigDecimal computeComposite(List<TierScore> tierScores, Map<String, BigDecimal> weightByTier) {
+        if (weightByTier == null || weightByTier.isEmpty()) {
+            return computeComposite(tierScores);
+        }
+        return tierScores.stream()
+                .map(t -> t.average()
+                        .multiply(weightByTier.getOrDefault(t.tierName(), t.weight()))
+                        .setScale(4, RoundingMode.HALF_UP))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 

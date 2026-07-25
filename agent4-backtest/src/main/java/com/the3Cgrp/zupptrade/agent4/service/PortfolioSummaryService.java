@@ -1,9 +1,11 @@
 package com.the3Cgrp.zupptrade.agent4.service;
 
 import com.the3Cgrp.zupptrade.agent4.calculator.Agent1AccuracyCalculator;
+import com.the3Cgrp.zupptrade.agent4.calculator.Agent1AccuracyCalculator.Thresholds;
 import com.the3Cgrp.zupptrade.agent4.calculator.DrawdownCalculator;
 import com.the3Cgrp.zupptrade.agent4.calculator.PortfolioMetricsCalculator;
 import com.the3Cgrp.zupptrade.agent4.domain.dto.response.PortfolioSummaryResponse;
+import com.the3Cgrp.zupptrade.agent4.repository.AccuracyThresholdsRepository;
 import com.the3Cgrp.zupptrade.agent4.repository.AnalyticsTradeRepository;
 import com.the3Cgrp.zupptrade.agent4.repository.SignalQualityRepository;
 import org.springframework.stereotype.Service;
@@ -19,11 +21,14 @@ public class PortfolioSummaryService {
 
     private final AnalyticsTradeRepository tradeRepository;
     private final SignalQualityRepository  signalRepository;
+    private final AccuracyThresholdsRepository thresholdsRepository;
 
     public PortfolioSummaryService(AnalyticsTradeRepository tradeRepository,
-                                   SignalQualityRepository signalRepository) {
+                                   SignalQualityRepository signalRepository,
+                                   AccuracyThresholdsRepository thresholdsRepository) {
         this.tradeRepository  = tradeRepository;
         this.signalRepository = signalRepository;
+        this.thresholdsRepository = thresholdsRepository;
     }
 
     public PortfolioSummaryResponse getSummary(LocalDate from, LocalDate to) {
@@ -34,6 +39,7 @@ public class PortfolioSummaryService {
         int winCount                  = toInt(agg.get("win_count"));
         int lossCount                 = toInt(agg.get("loss_count"));
         BigDecimal totalPnl           = toBd(agg.get("total_pnl"));
+        BigDecimal totalMaxProfit     = toBd(agg.get("total_max_profit"));
         BigDecimal maxLoss            = toBd(agg.get("max_loss"));
         BigDecimal avgRocTheoretical  = toBd(agg.get("avg_roc_theoretical"));
         int totalAdjustments          = toInt(agg.get("total_adjustments"));
@@ -41,8 +47,11 @@ public class PortfolioSummaryService {
         // Ordered PnL list for drawdown and actual RoC
         List<Map<String, Object>> pnlRows = tradeRepository.findOrderedPnlList(from, to);
         BigDecimal avgRocAchieved = PortfolioMetricsCalculator.avgRocAchieved(pnlRows);
+        // Capture = realised profit as a share of theoretical max profit (rupee ÷ rupee),
+        // NOT achieved-RoC ÷ theoretical-RoC — those two RoCs use different denominators
+        // (return-on-risk vs return-on-capital) and their ratio is meaningless.
         BigDecimal rocCapture     = PortfolioMetricsCalculator.rocCaptureRatio(
-                avgRocAchieved, avgRocTheoretical);
+                totalPnl, totalMaxProfit);
 
         List<BigDecimal> pnlList  = pnlRows.stream()
                 .map(r -> PortfolioMetricsCalculator.toBd(r.get("actual_pnl")))
@@ -60,12 +69,12 @@ public class PortfolioSummaryService {
         BigDecimal adjustmentRecovery = PortfolioMetricsCalculator
                 .adjustmentRecoveryRate(tradeRepository.findClosedTrades(from, to, 0, Integer.MAX_VALUE));
 
-        // Agent 1 accuracy from signal quality view
+        // Agent 1 accuracy: price-based, graded per signal (bias+strength vs expiry-day move).
+        // Null when nothing is measurable → surfaced as N/A, not a misleading 0%.
         List<Map<String, Object>> signalRows = signalRepository.findSignals(from, to);
-        List<String> verdicts = signalRows.stream()
-                .map(r -> String.valueOf(r.getOrDefault("accuracy_verdict", "NO_TRADE")))
-                .collect(Collectors.toList());
-        BigDecimal agent1Accuracy = Agent1AccuracyCalculator.accuracyRate(verdicts);
+        Thresholds thresholds = thresholdsRepository.get();
+        BigDecimal agent1Accuracy = Agent1AccuracyCalculator.accuracyRate(
+                signalRows, LocalDate.now(), thresholds);
 
         return new PortfolioSummaryResponse(
                 from,

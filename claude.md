@@ -482,13 +482,15 @@ Missing signals score 0 — never skip, never throw exception.
 
 | Higher highs/lows (3 days) | HH + HL | LH + LL | Mixed |
 
-| Futures premium | Premium > 20 pts | Discount > 20 pts | Within ±20 |
+| ~~Futures premium~~ **(EXCLUDED — not scored)** | — | — | — |
 
 | PCR | PCR > 1.2 | PCR < 0.8 | Between |
 
 | Max pain vs spot | Spot < max\_pain\_mid - 100 | Spot > max\_pain\_mid + 100 | Within ±100 |
 
 
+
+\*\*Excluded from scoring (June 2026):\*\* Futures premium is still fetched and logged for audit but does NOT vote. Tier 1A is therefore a \*\*6-signal\*\* tier (average over 6). The Upstox futures LTP fetch proved unreliable and the signal was non-additive.
 
 \*\*EMA Calculation:\*\* Use TA4J. Minimum 200 candles required for 200 EMA.
 
@@ -532,7 +534,7 @@ NaN = treat as 0 (neutral). Log to data\_gaps.
 
 | FII net in index futures (₹Cr) | Net buy > 500 Cr | Net sell > 500 Cr | Within ±500 Cr |
 
-| FII long/short ratio | Long ratio > 60% | Long ratio < 40% | 40–60% |
+| ~~FII long/short ratio~~ **(EXCLUDED — not scored)** | — | — | — |
 
 | FII net in index options | Net call buyer | Net put buyer | Mixed |
 
@@ -544,9 +546,7 @@ NaN = treat as 0 (neutral). Log to data\_gaps.
 Segments: \`NSE\_FO|INDEX\_FUTURES\` (net futures + long ratio), \`NSE\_FO|INDEX\_OPTIONS\` (net options), \`NSE\_EQ|CASH\` (DII net cash).
 Query last 7 days (\`from=today-7d\`) — entries returned newest-first; \`entries.get(0)\` is always the most recent trading session.
 
-\*\*Note:\*\* FII long ratio improving (even if still net short) — store trend separately
-
-in score\_breakdown JSONB. Do not change the score but note it for confidence.
+\*\*Excluded from scoring (June 2026):\*\* FII long/short ratio is still fetched, logged, and stored in raw\_inputs for audit but does NOT vote — Tier 2 is a \*\*3-signal\*\* tier (average over 3). It frequently contradicts same-day net flow (outstanding position vs today's flow), so it was removed from the score. The 5-day FII trend is still stored in score\_breakdown JSONB for context.
 
 
 
@@ -579,6 +579,10 @@ in score\_breakdown JSONB. Do not change the score but note it for confidence.
 | LLM commentary extraction | Bullish bias extracted | Bearish bias extracted | Neutral/range |
 
 
+
+\*\*Tier 4 averaging rule (updated June 2026):\*\*
+\- \*\*User commentary provided\*\* → Tier 4 = average of the two ±1 votes (Marketaux vote + LLM bias vote), a 2-signal tier.
+\- \*\*No user commentary\*\* → do NOT dilute with a 0 LLM vote. Tier 4 average = the \*\*raw Marketaux sentiment\*\* score itself (already in [-1, 1]), taken at face value. If Marketaux is also absent → Tier 4 = 0.
 
 \*\*Marketaux:\*\* Fetch 3 articles for ^NSEI. Average `entity.sentiment\_score` where
 
@@ -688,7 +692,7 @@ If Tier 4 direction ≠ overall direction → multiply vix\_adjusted × 0.80
 
 
 
-Confidence labels: Low (< 0.41), Medium (0.41–0.70), High (> 0.70)
+Confidence labels: Low (< 0.25, i.e. ≤ 0.24), Medium (0.25–0.65 inclusive), High (> 0.65)   *(updated June 2026 — was 0.41 / 0.70)*
 
 
 

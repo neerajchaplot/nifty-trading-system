@@ -24,6 +24,12 @@ public class MonitoringProperties {
     // Debit spread theta exit (days to expiry)
     private int debitThetaExitDte = 2;
 
+    // Debit spread PoP monitoring (Bull Call / Bear Put).
+    //   Disaster stop: exit when directional PoP falls ≥ this fraction of entry PoP.
+    //   Give-back lock: exit when the PoP−PoPP gap widens ≥ this many points (fraction) above entry gap.
+    private BigDecimal debitPopDropFraction    = new BigDecimal("0.20");  // 20% of entry PoP
+    private BigDecimal debitGapWidenThreshold  = new BigDecimal("0.10");  // 10 percentage points
+
     // Expiry day (DTE=0) proximity buffers for credit spreads.
     // Black-Scholes is degenerate at DTE=0 (returns binary 1/0), so PoP ladder
     // is replaced with spot-distance checks on the final trading day.
@@ -68,6 +74,12 @@ public class MonitoringProperties {
 
     public int getDebitThetaExitDte()              { return debitThetaExitDte; }
     public void setDebitThetaExitDte(int v)        { this.debitThetaExitDte = v; }
+
+    public BigDecimal getDebitPopDropFraction()          { return debitPopDropFraction; }
+    public void setDebitPopDropFraction(BigDecimal v)    { this.debitPopDropFraction = v; }
+
+    public BigDecimal getDebitGapWidenThreshold()        { return debitGapWidenThreshold; }
+    public void setDebitGapWidenThreshold(BigDecimal v)  { this.debitGapWidenThreshold = v; }
 
     public int getExpiryDayExitBufferPts()         { return expiryDayExitBufferPts; }
     public void setExpiryDayExitBufferPts(int v)   { this.expiryDayExitBufferPts = v; }

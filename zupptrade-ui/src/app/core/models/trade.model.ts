@@ -33,6 +33,10 @@ export interface MonitorThresholds {
   t1WatchNiftyUp: number | null;
   t2ReadjustNiftyUp: number | null;
   t3ExitNiftyUp: number | null;
+  // Entry seller PoP — Agent 3 re-derives the 70/64/57 ladder from this each cycle
+  entryPop?: number | null;
+  entryPopDown?: number | null;
+  entryPopUp?: number | null;
 }
 
 export interface TradeCard {
@@ -63,6 +67,9 @@ export interface TradeCard {
   generatedAt: string;
   validUntil: string;
   status: TradeStatus;
+  testingModeActive: boolean;    // true when trading.hard-gate-enabled=false on backend
+  skipDecision: boolean;         // true when Layer 1 would have returned SKIP/NO_TRADE; fallback strategy used
+  skipReason: string | null;     // e.g. "SKIP", "NO_TRADE", "VIX_EXTREME"
 }
 
 export interface MonitorConfig {
@@ -101,6 +108,10 @@ export interface ActiveTrade {
   shortLegLtp: number | null;
   longLegLtp: number | null;
   lastEvaluatedAt: string | null;
+  // Live-recomputed credit ladder from the latest evaluation (recomputed each cycle from live IV+DTE).
+  //   2-leg: liveT1NiftyLevel/liveT2NiftyLevel/liveT3NiftyLevel + t1/t2/t3TargetPop
+  //   IC:    liveT1NiftyDown.. + liveT1NiftyUp..
+  liveThresholds: { [key: string]: number } | null;
 }
 
 export interface RecommendRequest {
@@ -116,6 +127,7 @@ export interface OverrideThresholds {
 }
 
 export interface OverrideParams {
+  optionType: OptionType;        // primary pair type — CE for call spreads, PE for put spreads / IC primary
   peShortStrike: number;
   peLongStrike: number;
   ceShortStrike: number | null;
@@ -147,6 +159,7 @@ export interface ConfirmRequest {
 
 export interface CalculateOverrideRequest {
   tradeId: string;
+  optionType: OptionType;        // primary pair type — CE for call spreads, PE otherwise
   peShortStrike: number;
   peLongStrike: number;
   ceShortStrike?: number | null;
@@ -171,6 +184,7 @@ export interface CalculateOverrideResult {
   roc: number;
   popBlocked: boolean;
   lossBlocked: boolean;
+  testingModeActive: boolean;    // true when trading.hard-gate-enabled=false on backend
 }
 
 export interface MarginCheckRequest {
@@ -219,4 +233,11 @@ export interface ExecuteTradeResponse {
   slippageMessage: string | null;
   rejectionReason: string | null;
   executedAt: string | null;
+}
+
+export interface MarginUtilization {
+  usedMargin: number;
+  availableMargin: number;
+  totalMargin: number;
+  utilizationPct: number;
 }

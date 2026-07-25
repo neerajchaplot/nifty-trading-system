@@ -63,8 +63,9 @@ nifty:
       rsi-oversold: 40
       dii-significant-crore: 500
     confidence:
-      low-below: 0.41
-      high-above: 0.70
+      # LOW < 0.25 (≤0.24) | MEDIUM 0.25–0.65 inclusive | HIGH > 0.65
+      low-below: 0.25
+      high-above: 0.65
       divergence-penalty: 0.80
     vix-modifier:
       low: 1.10

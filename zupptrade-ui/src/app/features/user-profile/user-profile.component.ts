@@ -9,15 +9,26 @@ interface WeightTier {
   key: keyof Pick<UpdateUserProfileRequest, 'tier1aWeight' | 'tier1bWeight' | 'tier2Weight' | 'tier3Weight' | 'tier4Weight'>;
   label: string;
   description: string;
+  defaultPct: number;
 }
 
 const WEIGHT_TIERS: WeightTier[] = [
-  { key: 'tier1aWeight', label: 'Tier 1A — Price Structure',       description: 'EMA, PCR, futures premium, max pain (default 30%)' },
-  { key: 'tier1bWeight', label: 'Tier 1B — Technical Indicators',  description: 'RSI, MACD, EMA crossovers, candlestick patterns (default 20%)' },
-  { key: 'tier2Weight',  label: 'Tier 2 — Institutional Flow',     description: 'FII/DII net futures, options, cash flows (default 30%)' },
-  { key: 'tier3Weight',  label: 'Tier 3 — Volatility & Macro',     description: 'VIX change, OI shift, Gift Nifty premium (default 10%)' },
-  { key: 'tier4Weight',  label: 'Tier 4 — Commentary & Sentiment', description: 'Marketaux news sentiment, LLM commentary extraction (default 10%)' },
+  { key: 'tier1aWeight', label: 'Tier 1A — Price Structure',       description: 'EMA, PCR, futures premium, max pain',          defaultPct: 30 },
+  { key: 'tier1bWeight', label: 'Tier 1B — Technical Indicators',  description: 'RSI, MACD, EMA crossovers, candlestick patterns', defaultPct: 20 },
+  { key: 'tier2Weight',  label: 'Tier 2 — Institutional Flow',     description: 'FII/DII net futures, options, cash flows',      defaultPct: 30 },
+  { key: 'tier3Weight',  label: 'Tier 3 — Volatility & Macro',     description: 'VIX change, OI shift, Gift Nifty premium',     defaultPct: 10 },
+  { key: 'tier4Weight',  label: 'Tier 4 — Commentary & Sentiment', description: 'Marketaux news sentiment, LLM commentary',      defaultPct: 10 },
 ];
+
+const PROFILE_DEFAULTS = {
+  capital:       500000,
+  minPop:        0.80,
+  maxLossPct:    1.50,
+  maxPopPoppGap: 15.00,
+  minRocPct:     0.50,
+  spreadWidthMin: 50,
+  spreadWidthMax: 150,
+};
 
 @Component({
   selector: 'app-user-profile',
@@ -31,6 +42,7 @@ export class UserProfileComponent implements OnInit {
   form: UpdateUserProfileRequest = this.emptyForm();
   auditEntries: UserProfileAuditEntry[] = [];
   readonly tiers = WEIGHT_TIERS;
+  readonly DEFAULTS = PROFILE_DEFAULTS;
 
   saving = false;
   saveSuccess = false;
@@ -157,13 +169,7 @@ export class UserProfileComponent implements OnInit {
 
   private emptyForm(): UpdateUserProfileRequest {
     return {
-      capital: 500000,
-      minPop: 0.80,
-      maxLossPct: 1.50,
-      maxPopPoppGap: 15.00,
-      minRocPct: 0.50,
-      spreadWidthMin: 50,
-      spreadWidthMax: 150,
+      ...PROFILE_DEFAULTS,
       tier1aWeight: 0.3000,
       tier1bWeight: 0.2000,
       tier2Weight:  0.3000,

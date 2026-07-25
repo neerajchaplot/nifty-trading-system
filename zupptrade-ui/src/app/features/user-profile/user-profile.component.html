@@ -7,11 +7,13 @@
 
       <div class="field">
         <label>Capital (₹)</label>
+        <span class="field-hint">Default ₹5,00,000</span>
         <input type="number" [(ngModel)]="form.capital" min="10000" step="10000" />
       </div>
 
       <div class="field">
         <label>Min PoP required (%)</label>
+        <span class="field-hint">Default 80% &nbsp;·&nbsp; range 50–99%</span>
         <div class="slider-row">
           <input type="range" [value]="form.minPop * 100" min="50" max="99" step="1"
                  (input)="form.minPop = +($any($event.target).value / 100)" />
@@ -21,6 +23,7 @@
 
       <div class="field">
         <label>Max Loss allowed (%)</label>
+        <span class="field-hint">Default 1.5% &nbsp;·&nbsp; range 0.1–10%</span>
         <div class="slider-row">
           <input type="range" [value]="form.maxLossPct" min="0.1" max="10" step="0.1"
                  (input)="form.maxLossPct = +$any($event.target).value" />
@@ -30,6 +33,7 @@
 
       <div class="field">
         <label>Min RoC expected (%)</label>
+        <span class="field-hint">Default 0.5% &nbsp;·&nbsp; range 0.1–10%</span>
         <div class="slider-row">
           <input type="range" [value]="form.minRocPct" min="0.1" max="10" step="0.1"
                  (input)="form.minRocPct = +$any($event.target).value" />
@@ -39,6 +43,7 @@
 
       <div class="field">
         <label>Max PoP–PoPP gap (%)</label>
+        <span class="field-hint">Default 15% &nbsp;·&nbsp; range 1–50%</span>
         <div class="slider-row">
           <input type="range" [value]="form.maxPopPoppGap" min="1" max="50" step="1"
                  (input)="form.maxPopPoppGap = +$any($event.target).value" />
@@ -48,6 +53,7 @@
 
       <div class="field field-pair">
         <label>Spread Width range (pts)</label>
+        <span class="field-hint">Default 50 – 150 pts &nbsp;·&nbsp; range 50–500 pts</span>
         <div class="pair-inputs">
           <input type="number" [(ngModel)]="form.spreadWidthMin" min="50" max="500" step="50"
                  placeholder="Min" />
@@ -78,6 +84,7 @@
           <div class="tier-info">
             <span class="tier-name">{{ tier.label }}</span>
             <span class="tier-desc">{{ tier.description }}</span>
+            <span class="field-hint">Default {{ tier.defaultPct }}%</span>
           </div>
           <div class="tier-slider">
             <input type="range" [value]="tierWeightPct(tier.key)" min="1" max="99" step="1"

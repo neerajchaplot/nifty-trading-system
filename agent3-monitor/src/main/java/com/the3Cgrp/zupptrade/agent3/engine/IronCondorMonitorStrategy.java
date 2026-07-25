@@ -5,9 +5,11 @@ import com.the3Cgrp.zupptrade.agent3.model.EvaluationResult;
 import com.the3Cgrp.zupptrade.agent3.model.MonitorEvaluationContext;
 import com.the3Cgrp.zupptrade.agent3.service.LivePopService;
 import com.the3Cgrp.zupptrade.agent3.service.PnlCalculationService;
+import com.the3Cgrp.zupptrade.shared.calc.CreditLadderCalculator;
 import com.the3Cgrp.zupptrade.shared.dto.MonitorConfigDto;
 import com.the3Cgrp.zupptrade.shared.dto.MonitorThresholdsDto;
 import com.the3Cgrp.zupptrade.shared.enums.MonitorAction;
+import com.the3Cgrp.zupptrade.shared.enums.OptionType;
 import com.the3Cgrp.zupptrade.shared.enums.Strategy;
 import com.the3Cgrp.zupptrade.shared.enums.ThresholdHit;
 import org.slf4j.Logger;
@@ -129,8 +131,36 @@ public class IronCondorMonitorStrategy implements MonitorStrategy {
             }
         }
 
+        // Recompute bilateral T1/T2/T3 Nifty levels each cycle from each side's entry seller PoP
+        // (70/64/57-style ladder) + live IV + current DTE — so they tighten with DTE (gamma) and
+        // widen with VIX, instead of using the frozen entry-day levels. The live snapshot carries
+        // only the PE-side IV, so the CE side reuses it as a shared vol proxy (both move together);
+        // refine by fetching CE-leg IV. Falls back to stored levels for legacy trades without entryPop.
+        MonitorThresholdsDto effThr = thr;
+        BigDecimal liveIv = context.liveData().shortLegIv();
+        if (thr != null && thr.entryPopDown() != null && thr.entryPopUp() != null
+                && liveIv != null && liveIv.signum() > 0
+                && config.shortLeg() != null && config.shortLeg2() != null) {
+            CreditLadderCalculator.TargetPops downT = CreditLadderCalculator.targetPops(thr.entryPopDown());
+            CreditLadderCalculator.TargetPops upT   = CreditLadderCalculator.targetPops(thr.entryPopUp());
+            CreditLadderCalculator.Ladder down = CreditLadderCalculator.levels(
+                    config.shortLeg().strike(),  OptionType.PE, downT, liveIv, currentDte, props.getRiskFreeRate());
+            CreditLadderCalculator.Ladder up   = CreditLadderCalculator.levels(
+                    config.shortLeg2().strike(), OptionType.CE, upT,   liveIv, currentDte, props.getRiskFreeRate());
+            effThr = MonitorThresholdsDto.ironCondorCredit(
+                    down.t1Nifty(), down.t2Nifty(), down.t3Nifty(),
+                    up.t1Nifty(),   up.t2Nifty(),   up.t3Nifty(),
+                    thr.t2LossThreshold(), thr.t3LossThreshold(), thr.entryPopDown(), thr.entryPopUp());
+            detail.put("liveT1NiftyDown", down.t1Nifty());
+            detail.put("liveT2NiftyDown", down.t2Nifty());
+            detail.put("liveT3NiftyDown", down.t3Nifty());
+            detail.put("liveT1NiftyUp", up.t1Nifty());
+            detail.put("liveT2NiftyUp", up.t2Nifty());
+            detail.put("liveT3NiftyUp", up.t3Nifty());
+        }
+
         // ── 5 & 6. Nifty proximity thresholds (bilateral) ─────────────────────
-        String pressureSide = detectPressure(thr, spot);
+        String pressureSide = detectPressure(effThr, spot);
         if (pressureSide != null) {
             boolean isT2 = pressureSide.startsWith("T2");
             MonitorAction action = isT2 ? MonitorAction.READJUST : MonitorAction.WATCH;

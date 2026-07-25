@@ -2,10 +2,10 @@ package com.the3Cgrp.zupptrade.agent5;
 
 import com.the3Cgrp.zupptrade.agent5.client.UpstoxOrderClient;
 import com.the3Cgrp.zupptrade.agent5.client.request.MarginCheckRequest;
-import com.the3Cgrp.zupptrade.agent5.client.request.MultiOrderRequest;
+import com.the3Cgrp.zupptrade.agent5.client.request.PlaceOrderV3Request;
 import com.the3Cgrp.zupptrade.agent5.client.response.MarginCheckResponse;
-import com.the3Cgrp.zupptrade.agent5.client.response.MultiOrderResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.OrderStatusResponse;
+import com.the3Cgrp.zupptrade.agent5.client.response.PlaceOrderV3Response;
 import com.the3Cgrp.zupptrade.agent5.dto.ExecuteTradeRequest;
 import com.the3Cgrp.zupptrade.agent5.dto.ExecuteTradeResponse;
 import com.the3Cgrp.zupptrade.agent5.dto.LegOrderRequest;
@@ -69,7 +69,6 @@ class TradeExecutionSandboxIT {
     // ── Shared test data ─────────────────────────────────────────────────────
     // Fixed UUID so all orders in this run share the same tag — makes cleanup easy
     private static final UUID   TEST_TRADE_ID  = UUID.fromString("00000000-0000-0000-0000-000000000001");
-    private static final String EXPECTED_TAG   = OrderTagBuilder.tag(TEST_TRADE_ID);
 
     // NIFTY PUT spread — update expiry date to the next live Tuesday expiry before running
     private static final String SHORT_LEG_KEY  = "NFO_OPT|NIFTY|2026-06-09|24500|PE";
@@ -139,7 +138,7 @@ class TradeExecutionSandboxIT {
         assertThat(response.data()).isNotNull();
         assertThat(response.data().requiredMargin()).isNotNull().isGreaterThan(BigDecimal.ZERO);
         assertThat(response.data().finalMargin()).isNotNull().isGreaterThan(BigDecimal.ZERO);
-        // Available margin is fetched separately via GET /v2/user/fund-and-margin (see T1b)
+        // Available margin is fetched separately via GET /v2/user/get-funds-and-margin (see T1b)
 
         log.info("sandbox.T1.margin.result requiredMargin={} finalMargin={}",
                 response.data().requiredMargin(), response.data().finalMargin());
@@ -149,40 +148,25 @@ class TradeExecutionSandboxIT {
 
     @Test
     @Order(2)
-    @DisplayName("T2: multi/place sends both legs and returns order_ids with correct correlation_ids")
-    void multiPlace_shouldReturnOrderIdsForBothLegs() {
-        log.info("sandbox.T2.multi.place tradeId={} tag={}", TEST_TRADE_ID, EXPECTED_TAG);
+    @DisplayName("T2: v3 place order returns an order_id for each leg (one call per leg)")
+    void placeOrders_shouldReturnOrderIdForEachLeg() {
+        log.info("sandbox.T2.place tradeId={}", TEST_TRADE_ID);
 
-        MultiOrderRequest request = new MultiOrderRequest(List.of(
-                MultiOrderRequest.OrderLeg.limit(
-                        SHORT_LEG_KEY, "SELL", "D", LOT_SIZE, new BigDecimal("50.00"),
-                        EXPECTED_TAG, OrderTagBuilder.correlationId(TEST_TRADE_ID, 0)),
-                MultiOrderRequest.OrderLeg.limit(
-                        LONG_LEG_KEY, "BUY", "D", LOT_SIZE, new BigDecimal("25.00"),
-                        EXPECTED_TAG, OrderTagBuilder.correlationId(TEST_TRADE_ID, 1))
-        ));
+        String[]     keys   = { SHORT_LEG_KEY, LONG_LEG_KEY };
+        String[]     txns   = { "SELL", "BUY" };
+        BigDecimal[] prices = { new BigDecimal("50.00"), new BigDecimal("25.00") };
 
-        MultiOrderResponse response = orderClient.placeMultiOrder(request);
+        for (int i = 0; i < keys.length; i++) {
+            PlaceOrderV3Response response = orderClient.placeOrder(PlaceOrderV3Request.limit(
+                    keys[i], txns[i], "D", LOT_SIZE, prices[i], OrderTagBuilder.entryTag(TEST_TRADE_ID, i)));
 
-        assertThat(response).isNotNull();
-        assertThat(response.isApiSuccess()).isTrue();
-        assertThat(response.summary()).isNotNull();
-        assertThat(response.summary().payloadError()).isEqualTo(0);
-        assertThat(response.summary().total()).isEqualTo(2);
-        assertThat(response.data()).isNotNull().hasSize(2);
-
-        List<String> returnedCorrelationIds = response.data().stream()
-                .map(MultiOrderResponse.OrderData::correlationId)
-                .toList();
-        assertThat(returnedCorrelationIds).contains(
-                OrderTagBuilder.correlationId(TEST_TRADE_ID, 0),
-                OrderTagBuilder.correlationId(TEST_TRADE_ID, 1));
-
-        response.data().forEach(d -> {
-            assertThat(d.orderId()).isNotBlank();
-            placedOrderIds.add(d.orderId());
-            log.info("sandbox.T2.order.placed correlationId={} orderId={}", d.correlationId(), d.orderId());
-        });
+            assertThat(response).isNotNull();
+            assertThat(response.isApiSuccess()).isTrue();
+            String orderId = response.singleOrderId();
+            assertThat(orderId).as("v3 place with no slicing returns exactly one order_id").isNotBlank();
+            placedOrderIds.add(orderId);
+            log.info("sandbox.T2.order.placed legIndex={} orderId={}", i, orderId);
+        }
         assertThat(placedOrderIds).hasSize(2);
     }
 

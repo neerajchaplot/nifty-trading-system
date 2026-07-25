@@ -62,7 +62,9 @@ public class PriceStructureScorer implements TierScorer {
         signals.put("spot_vs_ema50",     vEma50);
         signals.put("spot_vs_ema200",    vEma200);
         signals.put("higher_highs_lows", vHHL);
-        signals.put("futures_premium",   vFut);
+        // futures_premium is intentionally EXCLUDED from the score (6-signal tier).
+        // Still computed and logged above for audit; the Upstox futures LTP fetch is
+        // unreliable and the signal was deemed non-additive. Do not add it back to the map.
         signals.put("pcr",               vPcr);
         signals.put("max_pain",          vMp);
 

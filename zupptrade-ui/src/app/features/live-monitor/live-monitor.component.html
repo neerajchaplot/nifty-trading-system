@@ -35,6 +35,8 @@
         <div class="lt-subheader">
           <span class="lt-sub-left">
             <span class="lt-dte-pill">{{ dteLabel(trade.expiryDate) }}</span>
+            <span class="lt-live-pill" *ngIf="hasLiveLevels(trade)"
+                  title="T1/T2/T3 recomputed from live IV + DTE this cycle">● live levels</span>
             <span class="lt-expiry">· {{ trade.expiryDate }}</span>
           </span>
           <span class="lt-status">
@@ -166,30 +168,61 @@
 
             <!-- 2-leg spreads: single direction -->
             <ng-template #singleDirThresholds>
-              <div class="threshold-row">
-                <span class="threshold-label tl-t1">T1 Watch</span>
-                <app-threshold-bar [progress]="thresholdProgress(trade, 'T1')" [variant]="thresholdVariant(trade, 'T1')"></app-threshold-bar>
-                <span class="threshold-level tl-t1">
-                  {{ t1Level(trade) | number:'1.0-0' }}
-                  {{ trade.lastThresholdHit === 'T1' || trade.lastThresholdHit === 'T2' || trade.lastThresholdHit === 'T3' ? '✓' : '' }}
-                </span>
-              </div>
-              <div class="threshold-row">
-                <span class="threshold-label tl-t2">T2 Readjust</span>
-                <app-threshold-bar [progress]="thresholdProgress(trade, 'T2')" [variant]="thresholdVariant(trade, 'T2')"></app-threshold-bar>
-                <span class="threshold-level tl-t2">
-                  {{ t2Level(trade) | number:'1.0-0' }}
-                  {{ trade.lastThresholdHit === 'T2' || trade.lastThresholdHit === 'T3' ? '✓' : '' }}
-                </span>
-              </div>
-              <div class="threshold-row">
-                <span class="threshold-label tl-t3">T3 Exit</span>
-                <app-threshold-bar [progress]="thresholdProgress(trade, 'T3')" [variant]="thresholdVariant(trade, 'T3')"></app-threshold-bar>
-                <span class="threshold-level tl-t3">
-                  {{ t3Level(trade) | number:'1.0-0' }}
-                  {{ trade.lastThresholdHit === 'T3' ? '✓' : '' }}
-                </span>
-              </div>
+
+              <!-- Debit (Bull Call / Bear Put): no readjustment — profit-book / loss-cut + PoP gauges -->
+              <ng-container *ngIf="isDebit(trade); else creditThresholds">
+                <div class="threshold-row">
+                  <span class="threshold-label">Breakeven</span>
+                  <span class="threshold-level">{{ debitBreakeven(trade) | number:'1.0-0' }}</span>
+                </div>
+                <div class="threshold-row">
+                  <span class="threshold-label tl-t1">Profit-Book</span>
+                  <span class="threshold-level tl-t1">{{ debitProfitBook(trade) | number:'1.0-0' }}</span>
+                </div>
+                <div class="threshold-row">
+                  <span class="threshold-label tl-t3">Loss-Cut</span>
+                  <span class="threshold-level tl-t3">
+                    {{ debitLossCut(trade) | number:'1.0-0' }}
+                    {{ trade.lastThresholdHit === 'DEBIT_POP_DISASTER' ? '✓' : '' }}
+                  </span>
+                </div>
+                <div class="threshold-row" *ngIf="debitPopPct(trade) != null">
+                  <span class="threshold-label">PoP / PoPP</span>
+                  <span class="threshold-level">
+                    {{ debitPopPct(trade) | number:'1.0-0' }}% / {{ debitPoppPct(trade) | number:'1.0-0' }}%
+                    <small>(gap {{ debitGapPct(trade) | number:'1.0-0' }}pp)</small>
+                    {{ trade.lastThresholdHit === 'DEBIT_GIVEBACK_LOCK' ? '· 🔒 give-back' : '' }}
+                  </span>
+                </div>
+              </ng-container>
+
+              <!-- Credit (Bull Put / Bear Call): T1/T2/T3 ladder -->
+              <ng-template #creditThresholds>
+                <div class="threshold-row">
+                  <span class="threshold-label tl-t1">T1 Watch</span>
+                  <app-threshold-bar [progress]="thresholdProgress(trade, 'T1')" [variant]="thresholdVariant(trade, 'T1')"></app-threshold-bar>
+                  <span class="threshold-level tl-t1">
+                    {{ t1Level(trade) | number:'1.0-0' }}
+                    {{ trade.lastThresholdHit === 'T1' || trade.lastThresholdHit === 'T2' || trade.lastThresholdHit === 'T3' ? '✓' : '' }}
+                  </span>
+                </div>
+                <div class="threshold-row">
+                  <span class="threshold-label tl-t2">T2 Readjust</span>
+                  <app-threshold-bar [progress]="thresholdProgress(trade, 'T2')" [variant]="thresholdVariant(trade, 'T2')"></app-threshold-bar>
+                  <span class="threshold-level tl-t2">
+                    {{ t2Level(trade) | number:'1.0-0' }}
+                    {{ trade.lastThresholdHit === 'T2' || trade.lastThresholdHit === 'T3' ? '✓' : '' }}
+                  </span>
+                </div>
+                <div class="threshold-row">
+                  <span class="threshold-label tl-t3">T3 Exit</span>
+                  <app-threshold-bar [progress]="thresholdProgress(trade, 'T3')" [variant]="thresholdVariant(trade, 'T3')"></app-threshold-bar>
+                  <span class="threshold-level tl-t3">
+                    {{ t3Level(trade) | number:'1.0-0' }}
+                    {{ trade.lastThresholdHit === 'T3' ? '✓' : '' }}
+                  </span>
+                </div>
+              </ng-template>
             </ng-template>
           </div>
 
@@ -219,46 +252,80 @@
     </div>
   </div>
 
-  <!-- ── P&L SUMMARY (stubbed) ──────────────────────────────────────── -->
+  <!-- ── P&L SUMMARY ───────────────────────────────────────────────── -->
   <div>
     <div class="section-header">
       <span class="section-heading">P&amp;L Summary</span>
     </div>
     <div class="pnl-summary-card">
       <div class="pnl-grid">
+
+        <!-- Today Closed (realized, from agent4 summary today→today) -->
         <div class="pnl-box">
           <div class="pnl-box-label">Today Closed</div>
-          <div class="pnl-box-val muted">₹ 0</div>
-          <div class="pnl-box-sub">No closed trades today</div>
+          <div class="pnl-box-val" [class.muted]="todayClosedPnl == null"
+               [style.color]="todayClosedPnl != null ? pnlColor(todayClosedPnl) : null">
+            {{ todayClosedPnl != null ? formatInr(todayClosedPnl) : '—' }}
+          </div>
+          <div class="pnl-box-sub">
+            {{ todaySummary == null ? 'Loading…' : (todayTradeCount > 0 ? (todayTradeCount + ' trade' + (todayTradeCount !== 1 ? 's' : '') + ' closed') : 'No closed trades today') }}
+          </div>
         </div>
+
+        <!-- Open P&L (unrealized MTM across active trades, from agent3 poll) -->
         <div class="pnl-box">
           <div class="pnl-box-label">Open P&amp;L</div>
-          <div class="pnl-box-val" [style.color]="openPnl >= 0 ? '#16A34A' : '#DC2626'">
+          <div class="pnl-box-val" [style.color]="pnlColor(openPnl)">
             {{ formatInr(openPnl) }}
           </div>
           <div class="pnl-box-sub">{{ trades.length }} active trade{{ trades.length !== 1 ? 's' : '' }}</div>
         </div>
+
+        <!-- Week to Date (realized from agent4 Mon→today, plus open P&L) -->
         <div class="pnl-box">
           <div class="pnl-box-label">Week to Date</div>
-          <div class="pnl-box-val muted">—</div>
-          <div class="pnl-box-sub">Historical data pending</div>
+          <div class="pnl-box-val" [class.muted]="wtdPnl == null"
+               [style.color]="wtdPnl != null ? pnlColor(wtdPnl) : null">
+            {{ wtdPnl != null ? formatInr(wtdPnl) : '—' }}
+          </div>
+          <div class="pnl-box-sub">
+            {{ wtdSummary == null ? 'Loading…' : (wtdClosedCount + ' closed + open') }}
+          </div>
         </div>
+
+        <!-- Month to Date (realized from agent4 1st→today, plus open P&L) -->
         <div class="pnl-box">
           <div class="pnl-box-label">Month to Date</div>
-          <div class="pnl-box-val muted">—</div>
-          <div class="pnl-box-sub">Historical data pending</div>
+          <div class="pnl-box-val" [class.muted]="mtdPnl == null"
+               [style.color]="mtdPnl != null ? pnlColor(mtdPnl) : null">
+            {{ mtdPnl != null ? formatInr(mtdPnl) : '—' }}
+          </div>
+          <div class="pnl-box-sub">
+            {{ mtdSummary == null ? 'Loading…' : (mtdClosedCount + ' closed + open') }}
+          </div>
         </div>
+
       </div>
 
+      <!-- Capital Deployed (Upstox account-wide margin utilisation from agent5) -->
       <div class="capital-bar-wrap">
         <div class="capital-header">
-          <span class="capital-label">Capital Deployed (estimated)</span>
-          <span class="capital-val">Live data drives this</span>
+          <span class="capital-label">Capital Deployed (Upstox margin)</span>
+          <span class="capital-val" *ngIf="marginData">{{ utilizationPct.toFixed(1) }}%</span>
+          <span class="capital-val muted" *ngIf="!marginData && !marginError">—</span>
+          <span class="capital-val muted" *ngIf="marginError">Unavailable</span>
         </div>
         <div class="capital-track">
-          <div class="capital-fill" style="width:0%"></div>
+          <div class="capital-fill" [style.width]="utilizationPct + '%'"
+               [style.background]="utilizationBarColor"></div>
         </div>
-        <div class="capital-pct">Connect to portfolio API for live margin usage</div>
+        <div class="capital-pct">
+          <ng-container *ngIf="marginData">
+            {{ formatInrAbs(marginData.usedMargin) }} used of {{ formatInrAbs(marginData.totalMargin) }}
+          </ng-container>
+          <ng-container *ngIf="!marginData && !marginError">Fetching from Upstox…</ng-container>
+          <ng-container *ngIf="marginError">Upstox unreachable — retry on next load</ng-container>
+        </div>
       </div>
     </div>
   </div>

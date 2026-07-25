@@ -202,6 +202,31 @@ import { TradeAuditDrawerComponent } from './trade-audit-drawer.component';
       </div>
     </div>
 
+    <!-- Corrupted / needs-manual-cleanup section -->
+    <div class="corrupt-section" *ngIf="corruptedTrades.length > 0">
+      <div class="corrupt-header">
+        <span class="corrupt-icon">⚠</span>
+        <span class="corrupt-title">Corrupted / needs manual cleanup</span>
+        <span class="corrupt-count">{{ corruptedTrades.length }}</span>
+      </div>
+      <div class="corrupt-note">
+        These trades are in a broken state (e.g. a partially-executed exit) and are excluded from all
+        performance metrics above. They require manual reconciliation.
+      </div>
+      <div class="corrupt-list">
+        <div class="corrupt-row"
+             *ngFor="let t of corruptedTrades"
+             (click)="openDrawer(t)">
+          <span class="corrupt-code">{{ t.tradeCode }}</span>
+          <span class="corrupt-strategy">{{ abbreviate(t.strategy) }}</span>
+          <span class="corrupt-expiry mono">{{ t.expiryDate }}</span>
+          <span class="corrupt-entry mono">{{ fmtDate(t.entryDate) }}</span>
+          <span class="corrupt-lots mono">{{ t.lots }} lots</span>
+          <span class="corrupt-reason">{{ t.closeReason ?? 'No close reason recorded' }}</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Drawer overlay -->
     <ng-container *ngIf="selectedTrade">
       <app-trade-audit-drawer
@@ -378,6 +403,45 @@ import { TradeAuditDrawerComponent } from './trade-audit-drawer.component';
       width: 100%; text-align: center;
     }
     .btn-load-more:hover { background: #EFF6FF; border-color: #BFDBFE; }
+    /* Corrupted section */
+    .corrupt-section {
+      flex-shrink: 0;
+      background: #FFFBEB;
+      border-top: 1px solid #FDE68A;
+      padding: 12px 20px 14px;
+      max-height: 30%;
+      overflow-y: auto;
+    }
+    .corrupt-header { display: flex; align-items: center; gap: 8px; }
+    .corrupt-icon { font-size: 14px; color: #D97706; }
+    .corrupt-title {
+      font-size: 12px; font-weight: 700; color: #B45309;
+      text-transform: uppercase; letter-spacing: 0.3px;
+    }
+    .corrupt-count {
+      background: #F59E0B; color: #fff; font-size: 10px; font-weight: 700;
+      min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .corrupt-note { font-size: 11px; color: #92400E; margin: 4px 0 10px; max-width: 720px; }
+    .corrupt-list { display: flex; flex-direction: column; gap: 6px; }
+    .corrupt-row {
+      display: flex; align-items: center; gap: 12px;
+      background: #fff; border: 1px solid #FDE68A; border-left: 3px solid #F59E0B;
+      border-radius: 6px; padding: 8px 12px; cursor: pointer;
+      transition: background 0.1s;
+    }
+    .corrupt-row:hover { background: #FEF9EC; }
+    .corrupt-code { color: #B45309; font-weight: 700; font-size: 11px; white-space: nowrap; }
+    .corrupt-strategy {
+      background: #FEF3C7; color: #92400E;
+      font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 600; white-space: nowrap;
+    }
+    .corrupt-expiry, .corrupt-entry, .corrupt-lots { font-size: 11px; color: #78716C; white-space: nowrap; }
+    .corrupt-reason {
+      font-size: 11px; color: #92400E; margin-left: auto;
+      max-width: 280px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    }
   `],
 })
 export class AuditComponent implements OnInit {
@@ -385,6 +449,7 @@ export class AuditComponent implements OnInit {
   summaryError: string | null = null;
 
   trades: TradeListItem[] = [];
+  corruptedTrades: TradeListItem[] = [];
   totalCount: number | null = null;
   hasMore = false;
   tradesLoading = false;
@@ -438,6 +503,7 @@ export class AuditComponent implements OnInit {
     if (reset) {
       this.page = 0;
       this.trades = [];
+      this.corruptedTrades = [];
       this.totalCount = null;
       this.hasMore = false;
     }
@@ -446,6 +512,8 @@ export class AuditComponent implements OnInit {
       .subscribe({
         next: (r: TradeListResponse) => {
           this.trades = [...this.trades, ...r.trades];
+          // corruptedTrades is an un-paginated list; overwrite (don't append) to avoid duplicates on load-more
+          this.corruptedTrades = r.corruptedTrades ?? [];
           this.totalCount = r.totalCount;
           this.hasMore = r.hasMore;
           this.page++;

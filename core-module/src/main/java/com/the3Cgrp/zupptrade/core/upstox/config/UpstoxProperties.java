@@ -21,6 +21,16 @@ public class UpstoxProperties {
      */
     private String orderBaseUrl = "https://api-hft.upstox.com";
 
+    /**
+     * Base URL for order READS (order details by order_id, order history by tag).
+     * Order reads are NOT served on the HFT placement host (api-hft) — they live on the standard
+     * API host in production and on the sandbox host in sandbox:
+     *   Production : https://api.upstox.com
+     *   Sandbox    : https://api-sandbox.upstox.com   (set in application-sandbox.yml)
+     * Uses the same token as the order client (order-access-token if set, else access-token).
+     */
+    private String orderReadBaseUrl = "https://api.upstox.com";
+
     private String apiKey;
     private String apiSecret;
     private String accessToken;
@@ -53,6 +63,9 @@ public class UpstoxProperties {
 
     public String getOrderBaseUrl() { return orderBaseUrl; }
     public void setOrderBaseUrl(String v) { this.orderBaseUrl = v; }
+
+    public String getOrderReadBaseUrl() { return orderReadBaseUrl; }
+    public void setOrderReadBaseUrl(String v) { this.orderReadBaseUrl = v; }
 
     public String getApiKey() { return apiKey; }
     public void setApiKey(String v) { this.apiKey = v; }

@@ -320,18 +320,28 @@ class AnalyticsControllerIT {
             ON CONFLICT (user_id) DO NOTHING
             """, profileId);
 
-        // 2. Agent 1 signal
+        // 2. Agent 1 signal — spot set so the price-based accuracy metric is measurable.
         jdbc.update("""
             INSERT INTO zupptrade_dev.agent1_signals
               (id, timestamp, expiry_date, bias, strength, composite_score,
                confidence, confidence_label, vix_level, vix_regime, vix_direction,
-               score_breakdown, data_gaps, commentary_divergence, status, created_at)
+               spot, score_breakdown, data_gaps, commentary_divergence, status, created_at)
             VALUES (?, NOW(), '2026-06-17', 'BULLISH', 'MILD', 0.3100,
                     0.68, 'MEDIUM', 18.50, 'HIGH', 'FALLING',
+                    23412.60,
                     '{"tier1a":0.40,"tier1b":0.30,"tier2":0.45,"tier3":0.20,"tier4":0.10}'::jsonb,
                     '[]'::jsonb, false, 'EXPIRED', NOW())
             ON CONFLICT DO NOTHING
             """, signalId);
+
+        // 2b. Expiry-day Nifty close so the signal resolves to a verdict.
+        //     23412.60 → 23550.00 = +137.4 pts; BULLISH MILD (>= +100) → ACCURATE.
+        //     ON CONFLICT DO NOTHING: never overwrite a real Agent-1-recorded close.
+        jdbc.update("""
+            INSERT INTO zupptrade_dev.nifty_daily_close (trade_date, close, source)
+            VALUES ('2026-06-17', 23550.00, 'IT_TEST')
+            ON CONFLICT (trade_date) DO NOTHING
+            """);
 
         // 3. Closed trade.
         //    JSONB key names must match Jackson-serialised record field names:
@@ -375,5 +385,8 @@ class AnalyticsControllerIT {
         jdbc.update("DELETE FROM zupptrade_dev.trades WHERE id = ?",         tradeId);
         jdbc.update("DELETE FROM zupptrade_dev.agent1_signals WHERE id = ?", signalId);
         jdbc.update("DELETE FROM zupptrade_dev.user_profiles WHERE id = ?",  profileId);
+        // Only remove our own seeded close — never a real Agent-1-recorded one.
+        jdbc.update("DELETE FROM zupptrade_dev.nifty_daily_close "
+                + "WHERE trade_date = '2026-06-17' AND source = 'IT_TEST'");
     }
 }

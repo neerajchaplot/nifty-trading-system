@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -59,8 +60,33 @@ public class ActiveTradesService {
                 latest.map(MonitoringEvaluationEntity::getMarkToMarketPnl).orElse(null),
                 latest.map(MonitoringEvaluationEntity::getShortLegLtp).orElse(null),
                 latest.map(MonitoringEvaluationEntity::getLongLegLtp).orElse(null),
-                latest.map(MonitoringEvaluationEntity::getEvaluatedAt).orElse(null)
+                latest.map(MonitoringEvaluationEntity::getEvaluatedAt).orElse(null),
+                latest.map(e -> extractLiveThresholds(e.getEvaluationDetail())).orElse(null)
         );
+    }
+
+    /**
+     * Pulls the live-recomputed ladder (level + target-PoP keys) out of the evaluation_detail JSON.
+     * Returns null when absent (debit/legacy trades or an early-return cycle that didn't recompute).
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> extractLiveThresholds(String evaluationDetailJson) {
+        if (evaluationDetailJson == null || evaluationDetailJson.isBlank()) {
+            return null;
+        }
+        try {
+            Map<String, Object> detail = jsonUtil.fromJson(evaluationDetailJson, Map.class);
+            Map<String, Object> live = new java.util.LinkedHashMap<>();
+            detail.forEach((k, v) -> {
+                if (k != null && (k.startsWith("live") || k.endsWith("TargetPop"))) {
+                    live.put(k, v);
+                }
+            });
+            return live.isEmpty() ? null : live;
+        } catch (Exception e) {
+            log.warn("Failed to parse evaluation_detail for live thresholds: {}", e.getMessage());
+            return null;
+        }
     }
 
     private MonitorConfigDto parseMonitorConfig(TradeMonitorData data) {

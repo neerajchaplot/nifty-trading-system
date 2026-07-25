@@ -49,13 +49,9 @@ type PageState = 'ready' | 'loading' | 'tradecard' | 'active' | 'skip';
               <div style="font-size:12px; color:var(--zt-muted);">Score {{ signal.compositeScore | number:'1.3-3' }} &nbsp;·&nbsp; VIX {{ signal.vixLevel | number:'1.1-1' }}</div>
             </ion-card-content>
           </ion-card>
-          <ion-button expand="block" (click)="generate(signal)" [disabled]="signal.bias === 'NEUTRAL' && signal.strength === 'WEAK'">
+          <ion-button expand="block" (click)="generate(signal)">
             Generate Recommendation
           </ion-button>
-          <div *ngIf="signal.bias === 'NEUTRAL' && signal.strength === 'WEAK'"
-               style="font-size:12px; color:var(--zt-muted); text-align:center; margin-top:8px;">
-            Signal too weak for trade — no action recommended
-          </div>
         </ng-container>
 
         <div *ngIf="!(signal$ | async)" class="empty-state">
@@ -84,6 +80,16 @@ type PageState = 'ready' | 'loading' | 'tradecard' | 'active' | 'skip';
 
       <!-- TRADECARD state -->
       <ng-container *ngIf="pageState === 'tradecard' && tradeCard">
+
+        <!-- Testing mode / skip decision banners -->
+        <div *ngIf="tradeCard.testingModeActive"
+             style="background:#FEF3C7; border:1px solid #F59E0B; border-radius:8px; padding:8px 12px; margin-bottom:8px; font-size:12px; color:#92400E;">
+          ⚠️ TESTING MODE — hard gates bypassed. For testing purposes only.
+        </div>
+        <div *ngIf="tradeCard.skipDecision"
+             style="background:#FEE2E2; border:1px solid #F87171; border-radius:8px; padding:8px 12px; margin-bottom:8px; font-size:12px; color:#991B1B;">
+          Skip Decision Overridden — original signal: {{ tradeCard.skipReason }}. Fallback strategy applied.
+        </div>
 
         <!-- Strategy header -->
         <ion-card>
@@ -250,7 +256,9 @@ export class TradePage implements OnInit {
     this.error = null;
     this.agent2.recommend({ agent1SignalId: signal.id, userProfileId: profileId }).subscribe({
       next: card => {
-        if (card.strategy === 'SKIP') {
+        // Strategy is never SKIP now (backend picks a fallback); guard kept for backwards compatibility.
+        // In testing mode always show trade card — skip decision is displayed as a banner.
+        if (!card.testingModeActive && card.strategy === 'SKIP') {
           this.skipReason = card.rationale ?? 'Conditions not suitable for trading.';
           this.pageState = 'skip';
         } else {

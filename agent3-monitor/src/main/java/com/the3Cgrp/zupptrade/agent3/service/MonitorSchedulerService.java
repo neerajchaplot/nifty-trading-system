@@ -106,7 +106,8 @@ public class MonitorSchedulerService {
         this.objectMapper             = objectMapper;
     }
 
-    @Scheduled(cron = "${agent3.monitoring.scheduler-cron}")
+    // zone is IST: the container runs UTC but the cron window (9-15) and isMarketHours() are IST.
+    @Scheduled(cron = "${agent3.monitoring.scheduler-cron}", zone = "${agent3.monitoring.scheduler-zone:Asia/Kolkata}")
     @SchedulerLock(name = "agent3_monitoring_cycle",
                    lockAtMostFor = "PT4M30S",   // safety net: released if process dies mid-cycle
                    lockAtLeastFor = "PT1M")      // prevents immediate re-run if cycle completes fast

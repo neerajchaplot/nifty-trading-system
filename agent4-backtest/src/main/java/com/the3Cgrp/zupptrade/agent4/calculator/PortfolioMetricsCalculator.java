@@ -39,16 +39,24 @@ public final class PortfolioMetricsCalculator {
     }
 
     /**
-     * RoC capture ratio: avgActual / avgTheoretical × 100.
-     * Returns ZERO when theoretical is zero.
+     * RoC capture ratio: the share of theoretically achievable profit actually realised.
+     *   capture% = Σ(actual_pnl) ÷ Σ(max_profit_total) × 100
+     *
+     * Aggregate (sum ÷ sum), NOT an average of per-trade ratios — a single tiny-premium
+     * trade cannot skew it (e.g. a ₹1-premium leg blowing out to -199% RoC). Numerator and
+     * denominator share one base (rupees of profit), so the ratio is meaningful: ~100% when
+     * trades run to full max profit, and negative on a net loss.
+     *
+     * Returns ZERO when total max profit is null or zero.
      */
-    public static BigDecimal rocCaptureRatio(BigDecimal avgActual, BigDecimal avgTheoretical) {
-        if (avgTheoretical == null || avgTheoretical.compareTo(BigDecimal.ZERO) == 0) {
+    public static BigDecimal rocCaptureRatio(BigDecimal totalPnl, BigDecimal totalMaxProfit) {
+        if (totalPnl == null || totalMaxProfit == null
+                || totalMaxProfit.compareTo(BigDecimal.ZERO) == 0) {
             return BigDecimal.ZERO;
         }
-        return avgActual
+        return totalPnl
                 .multiply(BigDecimal.valueOf(100))
-                .divide(avgTheoretical, 2, RoundingMode.HALF_UP);
+                .divide(totalMaxProfit, 2, RoundingMode.HALF_UP);
     }
 
     /**
@@ -73,7 +81,11 @@ public final class PortfolioMetricsCalculator {
         // group: { total, wins }
         Map<String, long[]> accumulator = new LinkedHashMap<>();
         for (Map<String, Object> row : rows) {
-            String group    = String.valueOf(row.getOrDefault(groupColumn, "UNKNOWN"));
+            // A present-but-null column (e.g. entry_vix_regime not captured at entry) must
+            // bucket as "UNKNOWN", not the literal string "null" — getOrDefault only
+            // substitutes when the key is absent, not when its value is null.
+            Object rawGroup = row.get(groupColumn);
+            String group    = rawGroup == null ? "UNKNOWN" : rawGroup.toString();
             long tradeCount = toLong(row.get("trade_count"));
             long winCount   = toLong(row.get("win_count"));
             accumulator.computeIfAbsent(group, k -> new long[]{0L, 0L});

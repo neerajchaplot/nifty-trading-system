@@ -63,6 +63,10 @@ agent5:
 
 agent3:
   monitoring:
+    # Timezone the cron expressions are interpreted in — MUST be IST, because the container
+    # runs UTC and isMarketHours() checks IST. Without this the cron fires in UTC and only
+    # overlaps the IST market-hours gate for the final hour of the trading day.
+    scheduler-zone: "Asia/Kolkata"
     # Scheduler — every 5 min during NSE market hours (9-15 block, filtered in code to 9:15-15:30 IST)
     scheduler-cron: "0 */5 9-15 * * MON-FRI"
     # Morning sweep — 8:30 AM before market opens, settles P&L for expired-but-still-ACTIVE trades

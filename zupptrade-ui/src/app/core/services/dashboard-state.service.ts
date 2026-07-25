@@ -1,5 +1,5 @@
 import { Injectable, OnDestroy } from '@angular/core';
-import { BehaviorSubject, EMPTY, Subscription, interval } from 'rxjs';
+import { BehaviorSubject, EMPTY, Subscription, interval, of } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
 import { Agent1Signal } from '../models/agent1-signal.model';
 import { ActiveTrade } from '../models/trade.model';
@@ -18,7 +18,7 @@ import { environment } from '../../../environments/environment';
 export class DashboardStateService implements OnDestroy {
   private readonly _signal$ = new BehaviorSubject<Agent1Signal | null>(null);
   private readonly _activeTrades$ = new BehaviorSubject<ActiveTrade[]>([]);
-  private readonly _expiryDate$ = new BehaviorSubject<string>(nextTuesdayIso());
+  private readonly _expiryDate$ = new BehaviorSubject<string>(currentExpiryTuesdayIso());
 
   readonly signal$ = this._signal$.asObservable();
   readonly activeTrades$ = this._activeTrades$.asObservable();
@@ -51,14 +51,22 @@ export class DashboardStateService implements OnDestroy {
   }
 
   private startSignalPolling(): void {
+    // Resolve expiry from backend first; locally-computed date is already set as fallback
+    this.agent1.nextExpiry().pipe(
+      catchError(() => of(null))
+    ).subscribe(resp => {
+      if (resp?.nextExpiry) {
+        this._expiryDate$.next(resp.nextExpiry);
+      }
+      this.refreshSignal();
+    });
+
     const sub = interval(environment.marketPollIntervalMs).pipe(
       switchMap(() =>
         this.agent1.latest(this._expiryDate$.value).pipe(catchError(() => EMPTY))
       )
     ).subscribe(sig => this._signal$.next(sig));
 
-    // Fetch immediately on startup
-    this.refreshSignal();
     this.subs.add(sub);
   }
 
@@ -80,10 +88,10 @@ export class DashboardStateService implements OnDestroy {
   }
 }
 
-function nextTuesdayIso(): string {
+function currentExpiryTuesdayIso(): string {
   const now = new Date();
   const day = now.getDay(); // 0 = Sun, 2 = Tue
-  const daysUntilTuesday = (2 - day + 7) % 7 || 7;
+  const daysUntilTuesday = (2 - day + 7) % 7; // 0 when today IS Tuesday (expiry day)
   const tuesday = new Date(now);
   tuesday.setDate(now.getDate() + daysUntilTuesday);
   return tuesday.toISOString().slice(0, 10);

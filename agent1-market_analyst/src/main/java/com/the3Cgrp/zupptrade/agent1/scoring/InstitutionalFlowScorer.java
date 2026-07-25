@@ -50,7 +50,9 @@ public class InstitutionalFlowScorer implements TierScorer {
 
         Map<String, Integer> signals = new LinkedHashMap<>();
         signals.put("fii_net_futures",  vFiiNet);
-        signals.put("fii_long_ratio",   vLongRat);
+        // fii_long_ratio is intentionally EXCLUDED from the score (3-signal tier).
+        // It frequently contradicts same-day net flow (outstanding position vs today's flow),
+        // so it is retained for audit (logged above, stored in raw_inputs) but does not vote.
         signals.put("fii_net_options",  vFiiOpt);
         signals.put("dii_net_cash",     vDii);
 

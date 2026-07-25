@@ -22,11 +22,17 @@ public class SignalQualityRepository {
         this.jdbc = jdbc;
     }
 
-    /** All signal rows in range — Java groups and aggregates. */
+    /**
+     * All signal rows in range — Java groups, computes the price-based accuracy verdict,
+     * and aggregates. Exposes signal_spot / expiry_date / expiry_close so
+     * {@code Agent1AccuracyCalculator} can grade each signal; there is no accuracy_verdict
+     * column (verdict moved out of SQL into config-driven Java).
+     */
     public List<Map<String, Object>> findSignals(LocalDate from, LocalDate to) {
         String sql = "SELECT signal_id, scored_at, bias, strength, composite_score, "
-                + "confidence_label, vix_regime, commentary_divergence, "
-                + "data_gaps_json, trade_id, strategy, trade_outcome, accuracy_verdict "
+                + "confidence_label, vix_regime, commentary_divergence, data_gaps_json, "
+                + "signal_spot, expiry_date, expiry_close, "
+                + "trade_id, strategy, trade_outcome "
                 + "FROM " + VIEW
                 + " WHERE (CAST(? AS DATE) IS NULL OR scored_at >= CAST(? AS DATE)) "
                 + "   AND (CAST(? AS DATE) IS NULL OR scored_at <= CAST(? AS DATE) + INTERVAL '1 day') "

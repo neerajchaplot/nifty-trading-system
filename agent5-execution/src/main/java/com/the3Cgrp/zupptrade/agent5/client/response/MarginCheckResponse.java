@@ -8,7 +8,7 @@ import java.math.BigDecimal;
 /**
  * Response from POST /v2/charges/margin.
  * This endpoint returns only the margin REQUIRED for a set of orders.
- * Available account funds must be fetched separately via GET /v2/user/fund-and-margin
+ * Available account funds must be fetched separately via GET /v2/user/get-funds-and-margin
  * (see FundsAndMarginResponse).
  */
 @JsonIgnoreProperties(ignoreUnknown = true)

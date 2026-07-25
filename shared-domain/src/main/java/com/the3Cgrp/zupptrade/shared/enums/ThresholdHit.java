@@ -20,6 +20,11 @@ public enum ThresholdHit {
     DEBIT_T3_LOSS_PNL,
     DEBIT_THETA_EXIT,
 
+    // Debit PoP monitoring (June 2026): directional PoP disaster stop + PoP−PoPP give-back lock
+    DEBIT_POP_DISASTER,
+    DEBIT_GIVEBACK_LOCK,
+    DEBIT_EXPIRY_EXIT,
+
     // VIX-based thresholds
     VIX_SPIKE_POP_RECALCULATED,
     VIX_EXTREME_PAUSE,

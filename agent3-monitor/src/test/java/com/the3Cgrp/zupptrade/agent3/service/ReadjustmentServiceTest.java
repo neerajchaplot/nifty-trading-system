@@ -585,7 +585,8 @@ class ReadjustmentServiceTest {
                 new BigDecimal("82.00"), new BigDecimal("84.00"), new BigDecimal("2.00"),
                 new BigDecimal("1.07"), new BigDecimal("130.00"), new BigDecimal("-0.02"),
                 null, null, "Iron condor readjust re-entry — neutral bias",
-                null, null, TradeStatus.PENDING_CONFIRM
+                null, null, TradeStatus.PENDING_CONFIRM,
+                false, false, null
         );
     }
 
@@ -598,7 +599,8 @@ class ReadjustmentServiceTest {
                 card.maxProfitTotal(), card.theoreticalMaxLossTotal(), card.realExpectedLossTotal(),
                 card.pop(), card.popp(), card.popGap(), card.roc(), card.rocAnnualised(), card.netDelta(),
                 card.gateResults(), card.thresholds(), card.rationale(),
-                card.generatedAt(), card.validUntil(), TradeStatus.CONFIRMED
+                card.generatedAt(), card.validUntil(), TradeStatus.CONFIRMED,
+                false, false, null
         );
     }
 
@@ -635,7 +637,8 @@ class ReadjustmentServiceTest {
                 new BigDecimal("68.00"), new BigDecimal("75.00"), new BigDecimal("7.00"),
                 new BigDecimal("0.89"), new BigDecimal("65.00"), new BigDecimal("-0.04"),
                 null, null, "Readjust re-entry: lower strike spread",
-                null, null, TradeStatus.PENDING_CONFIRM
+                null, null, TradeStatus.PENDING_CONFIRM,
+                false, false, null
         );
     }
 
@@ -648,7 +651,8 @@ class ReadjustmentServiceTest {
                 card.maxProfitTotal(), card.theoreticalMaxLossTotal(), card.realExpectedLossTotal(),
                 card.pop(), card.popp(), card.popGap(), card.roc(), card.rocAnnualised(), card.netDelta(),
                 card.gateResults(), card.thresholds(), card.rationale(),
-                card.generatedAt(), card.validUntil(), TradeStatus.CONFIRMED
+                card.generatedAt(), card.validUntil(), TradeStatus.CONFIRMED,
+                false, false, null
         );
     }
 }

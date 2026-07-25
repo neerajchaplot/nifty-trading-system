@@ -1,115 +1,124 @@
 package com.the3Cgrp.zupptrade.agent3.engine;
 
-import com.the3Cgrp.zupptrade.agent3.config.MonitoringProperties;
-import com.the3Cgrp.zupptrade.agent3.model.EvaluationResult;
-import com.the3Cgrp.zupptrade.agent3.model.LiveMarketSnapshot;
-import com.the3Cgrp.zupptrade.agent3.model.MonitorEvaluationContext;
-import com.the3Cgrp.zupptrade.agent3.service.PnlCalculationService;
-import com.the3Cgrp.zupptrade.shared.dto.MonitorConfigDto;
-import com.the3Cgrp.zupptrade.shared.dto.MonitorThresholdsDto;
-import com.the3Cgrp.zupptrade.shared.dto.TradeLegDto;
-import com.the3Cgrp.zupptrade.shared.enums.*;
-import org.junit.jupiter.api.BeforeEach;
+import com.the3Cgrp.zupptrade.agent3.engine.DebitSpreadMonitorStrategy.DebitAction;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * Unit tests for the pure debit decision {@link DebitSpreadMonitorStrategy#decideDebit}.
+ *
+ * Direction-agnostic (bull call and bear put both feed it directional PoP/PoPP):
+ *   Rule 1 (disaster stop):  livePoP ≤ entryPoP × (1 − 0.20)                       → EXIT_DISASTER
+ *   Rule 2 (give-back lock): (livePoP − livePoPP) − (entryPoP − entryPoPP) ≥ 0.10  → EXIT_GIVEBACK
+ *   else                                                                          → HOLD
+ *
+ * PoP values are fractions (0–1). Entry PoP 45.1%, PoPP 33.3% (gap 11.8pp) mirrors the worked example.
+ */
 class DebitSpreadMonitorStrategyTest {
 
-    private DebitSpreadMonitorStrategy strategy;
+    private static final BigDecimal DROP = new BigDecimal("0.20");   // 20% of entry PoP
+    private static final BigDecimal GAP  = new BigDecimal("0.10");   // 10 percentage points
 
-    @BeforeEach
-    void setUp() {
-        MonitoringProperties props = new MonitoringProperties();
-        strategy = new DebitSpreadMonitorStrategy(new PnlCalculationService(), props);
+    private static DebitAction decide(String entryPop, String entryPopp, String livePop, String livePopp) {
+        return DebitSpreadMonitorStrategy.decideDebit(
+                new BigDecimal(entryPop), new BigDecimal(entryPopp),
+                new BigDecimal(livePop), new BigDecimal(livePopp), DROP, GAP);
     }
 
-    // Scenario: Theta exit — DTE ≤ 2 with no profit → EXIT
+    // ── Rule 1 — disaster stop ────────────────────────────────────────────────────
+
     @Test
-    void evaluate_dteLe2_noProfitYet_returnsTheta_Exit() {
-        MonitorEvaluationContext ctx = buildContext(24000.0, 17.0, 18.0, 28.0, 1);
-        // currentNetPremium = 28 - 18 = 10. Premium paid = 25. Loss = -9750.
-        EvaluationResult result = strategy.evaluate(ctx);
-        assertThat(result.action()).isEqualTo(MonitorAction.EXIT);
-        assertThat(result.thresholdHit()).isEqualTo(ThresholdHit.DEBIT_THETA_EXIT);
+    @DisplayName("Rule 1: PoP falls to 20% below entry → EXIT_DISASTER")
+    void disasterStop_fires() {
+        // entry 45.1% → floor = 45.1% × 0.80 = 36.08%. livePoP 33.9% ≤ floor → exit.
+        assertThat(decide("0.451", "0.333", "0.339", "0.250")).isEqualTo(DebitAction.EXIT_DISASTER);
     }
 
-    // Scenario: T1 profit level reached → WATCH
     @Test
-    void evaluate_t1ProfitLevelReached_returnsWatch() {
-        // Bull call spread, t1WatchNiftyLevel=24100, spot=24120 → hit!
-        MonitorEvaluationContext ctx = buildContext(24120.0, 17.0, 15.0, 55.0, 4);
-        EvaluationResult result = strategy.evaluate(ctx);
-        assertThat(result.action()).isEqualTo(MonitorAction.WATCH);
-        assertThat(result.thresholdHit()).isEqualTo(ThresholdHit.DEBIT_T1_PROFIT_NIFTY);
+    @DisplayName("Rule 1: PoP just above the 20% floor → not disaster")
+    void disasterStop_justAboveFloor_holds() {
+        // floor = 36.08%; livePoP 36.5% > floor, gap not widened → HOLD
+        assertThat(decide("0.451", "0.333", "0.365", "0.300")).isEqualTo(DebitAction.HOLD);
     }
 
-    // Scenario: T2 profit level reached → EXIT for profit
     @Test
-    void evaluate_t2ProfitLevelReached_returnsExit() {
-        // t2ReadjustNiftyLevel=24200, spot=24250 → hit!
-        MonitorEvaluationContext ctx = buildContext(24250.0, 17.0, 12.0, 70.0, 4);
-        EvaluationResult result = strategy.evaluate(ctx);
-        assertThat(result.action()).isEqualTo(MonitorAction.EXIT);
-        assertThat(result.thresholdHit()).isEqualTo(ThresholdHit.DEBIT_T2_PROFIT_NIFTY);
+    @DisplayName("Rule 1: exactly at the floor → EXIT_DISASTER (≤)")
+    void disasterStop_atFloor_exits() {
+        assertThat(decide("0.500", "0.380", "0.400", "0.300")).isEqualTo(DebitAction.EXIT_DISASTER); // floor=0.40
     }
 
-    // Scenario: T3 loss — 50% of premium lost → EXIT
+    // ── Rule 2 — give-back lock ───────────────────────────────────────────────────
+
     @Test
-    void evaluate_t3LossBreached_returnsExit() {
-        // Paid net premium = 25. t2LossThreshold = 8125 (50% of 25 × 650).
-        // currentNetPremium = long(8) - short(20) = -12 → that is debit = 12, but we paid 25
-        // P&L = (12 - 25) × 650 = -8450 → breaches 8125
-        MonitorEvaluationContext ctx = buildContext(23800.0, 17.0, 20.0, 8.0, 4);
-        EvaluationResult result = strategy.evaluate(ctx);
-        assertThat(result.action()).isEqualTo(MonitorAction.EXIT);
-        assertThat(result.thresholdHit()).isEqualTo(ThresholdHit.DEBIT_T3_LOSS_PNL);
+    @DisplayName("Rule 2: gap widens +10pp above entry gap → EXIT_GIVEBACK (retrace-from-peak)")
+    void givebackLock_fires() {
+        // entry gap 11.8pp. Retrace: PoP 76%, PoPP 51% → gap 25pp = +13.2pp ≥ +10 → exit.
+        assertThat(decide("0.451", "0.333", "0.760", "0.510")).isEqualTo(DebitAction.EXIT_GIVEBACK);
     }
 
-    // Scenario: VIX extreme → PAUSE
     @Test
-    void evaluate_vixExtreme_returnsPause() {
-        MonitorEvaluationContext ctx = buildContext(24000.0, 25.0, 18.0, 40.0, 4);
-        EvaluationResult result = strategy.evaluate(ctx);
-        assertThat(result.action()).isEqualTo(MonitorAction.PAUSE);
+    @DisplayName("Rule 2: gap widened only +8pp → HOLD (the exact PoP71/PoPP51 point, just under)")
+    void givebackLock_justUnder_holds() {
+        // entry gap 11.8pp; live gap 71−51 = 20pp = +8.2pp < +10 → HOLD (matches the worked example)
+        assertThat(decide("0.451", "0.333", "0.710", "0.510")).isEqualTo(DebitAction.HOLD);
     }
 
-    // Scenario: Normal — waiting for directional move → HOLD
     @Test
-    void evaluate_normalConditions_returnsHold() {
-        // No profit target hit, no loss breach, DTE=4
-        MonitorEvaluationContext ctx = buildContext(24050.0, 17.0, 16.0, 36.0, 4);
-        // currentNetPremium = 36 - 16 = 20. Paid = 25. P&L = (20-25)×650 = -3250 < 8125 threshold
-        EvaluationResult result = strategy.evaluate(ctx);
-        assertThat(result.action()).isEqualTo(MonitorAction.HOLD);
+    @DisplayName("Disaster takes priority over give-back when both could trigger")
+    void disasterBeforeGiveback() {
+        // PoP 30% (<36% floor) AND gap wide — disaster wins.
+        assertThat(decide("0.451", "0.333", "0.300", "0.050")).isEqualTo(DebitAction.EXIT_DISASTER);
     }
 
-    private MonitorEvaluationContext buildContext(double spot, double vix,
-                                                   double shortLtp, double longLtp, int dte) {
-        // Bull Call Spread: longLeg = lower strike CE (BUY), shortLeg = upper strike CE (SELL)
-        TradeLegDto shortLeg = new TradeLegDto(OptionType.CE, 24000, new BigDecimal("20.00"),
-                LegAction.SELL, new BigDecimal("0.35"), new BigDecimal("0.65"), null);
-        TradeLegDto longLeg = new TradeLegDto(OptionType.CE, 23800, new BigDecimal("45.00"),
-                LegAction.BUY, new BigDecimal("0.55"), new BigDecimal("0.45"), null);
-        MonitorThresholdsDto thr = MonitorThresholdsDto.twoLeg(
-                new BigDecimal("24100"),  // T1 profit target Nifty level
-                new BigDecimal("24200"),  // T2 profit target Nifty level
-                null,
-                new BigDecimal("8125.00"),  // 50% of premium paid: 25 × 10 × 65 × 0.5
-                null);
-        MonitorConfigDto config = MonitorConfigDto.twoLeg(
-                UUID.randomUUID(), Strategy.BULL_CALL_SPREAD, SpreadDirection.DEBIT,
-                shortLeg, longLeg, new BigDecimal("25.00"), 10, 65,
-                new BigDecimal("13000"), new BigDecimal("16250"), false, null,
-                thr, LocalDate.now().plusDays(dte), dte);
+    // ── Rule 3 — hold (ride to max / converging) ──────────────────────────────────
 
-        LiveMarketSnapshot liveData = new LiveMarketSnapshot(
-                new BigDecimal(spot), new BigDecimal(vix),
-                new BigDecimal(shortLtp), new BigDecimal(longLtp), null);
-        return new MonitorEvaluationContext(config, liveData, dte, null, null);
+    @Test
+    @DisplayName("Rule 3: PoP high, gap narrowing (converging to max profit) → HOLD")
+    void hold_converging() {
+        // deep ITM: PoP 89%, PoPP 71% → gap 18pp = +6.2pp < +10, PoP well above floor → HOLD
+        assertThat(decide("0.451", "0.333", "0.890", "0.710")).isEqualTo(DebitAction.HOLD);
+    }
+
+    @Test
+    @DisplayName("Rule 3: mild climb still inside thresholds → HOLD")
+    void hold_mildClimb() {
+        assertThat(decide("0.451", "0.333", "0.547", "0.411")).isEqualTo(DebitAction.HOLD); // gap 13.6pp = +1.8
+    }
+
+    // ── Bear put mirror — same rule, direction handled upstream by the PoP definition ──
+
+    @Test
+    @DisplayName("Bear put: identical rule (directional PoP already encodes 'profit as spot falls')")
+    void bearPut_sameLogic() {
+        // entry PoP 48%, PoPP 34% (gap 14pp). Disaster floor = 38.4%. livePoP 37% → EXIT_DISASTER.
+        assertThat(decide("0.480", "0.340", "0.370", "0.280")).isEqualTo(DebitAction.EXIT_DISASTER);
+        // Give-back on retrace: gap 78−52 = 26pp vs entry 14pp = +12pp → EXIT_GIVEBACK.
+        assertThat(decide("0.480", "0.340", "0.780", "0.520")).isEqualTo(DebitAction.EXIT_GIVEBACK);
+        // Healthy climb: gap +3pp, PoP above floor → HOLD.
+        assertThat(decide("0.480", "0.340", "0.600", "0.430")).isEqualTo(DebitAction.HOLD);
+    }
+
+    // ── Degenerate inputs ─────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Missing PoP → HOLD (caller falls back to WATCH)")
+    void nullInputs_hold() {
+        assertThat(DebitSpreadMonitorStrategy.decideDebit(null, null, null, null, DROP, GAP))
+                .isEqualTo(DebitAction.HOLD);
+    }
+
+    @Test
+    @DisplayName("Missing PoPP → give-back skipped, disaster still evaluated")
+    void nullPopp_disasterStillWorks() {
+        assertThat(DebitSpreadMonitorStrategy.decideDebit(
+                new BigDecimal("0.451"), null, new BigDecimal("0.300"), null, DROP, GAP))
+                .isEqualTo(DebitAction.EXIT_DISASTER);
+        assertThat(DebitSpreadMonitorStrategy.decideDebit(
+                new BigDecimal("0.451"), null, new BigDecimal("0.440"), null, DROP, GAP))
+                .isEqualTo(DebitAction.HOLD);
     }
 }

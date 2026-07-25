@@ -5,6 +5,7 @@ import com.the3Cgrp.zupptrade.agent3.model.EvaluationResult;
 import com.the3Cgrp.zupptrade.agent3.model.MonitorEvaluationContext;
 import com.the3Cgrp.zupptrade.agent3.service.LivePopService;
 import com.the3Cgrp.zupptrade.agent3.service.PnlCalculationService;
+import com.the3Cgrp.zupptrade.shared.calc.CreditLadderCalculator;
 import com.the3Cgrp.zupptrade.shared.dto.MonitorConfigDto;
 import com.the3Cgrp.zupptrade.shared.dto.MonitorThresholdsDto;
 import com.the3Cgrp.zupptrade.shared.enums.MonitorAction;
@@ -132,6 +133,28 @@ public class CreditSpreadMonitorStrategy implements MonitorStrategy {
         BigDecimal livePop = livePopService.calculateLivePop(config, spot, shortLegIv, currentDte);
         detail.put("livePop", livePop);
 
+        // Per-trade credit ladder: target PoPs = fixed fractions of the entry seller PoP (70/64/57 at
+        // an 80% entry), replacing the global 80/75/65. Falls back to the global props for legacy trades
+        // that carry no entryPop. Nifty levels are recomputed here every cycle from live IV + DTE and
+        // stored in detail for the UI (DTE=0 path above is untouched).
+        BigDecimal entryPop = (config.thresholds() != null) ? config.thresholds().entryPop() : null;
+        CreditLadderCalculator.TargetPops targets = (entryPop != null && entryPop.signum() > 0)
+                ? CreditLadderCalculator.targetPops(entryPop) : null;
+        double t1Pop = targets != null ? targets.t1().doubleValue() : props.getPopHoldMinimum().doubleValue();
+        double t2Pop = targets != null ? targets.t2().doubleValue() : props.getPopWatchMinimum().doubleValue();
+        double t3Pop = targets != null ? targets.t3().doubleValue() : props.getPopReadjustMinimum().doubleValue();
+        if (targets != null && shortLegIv != null && shortLegIv.signum() > 0) {
+            CreditLadderCalculator.Ladder ladder = CreditLadderCalculator.levels(
+                    config.shortLeg().strike(), config.shortLeg().optionType(),
+                    targets, shortLegIv, currentDte, props.getRiskFreeRate());
+            detail.put("liveT1NiftyLevel", ladder.t1Nifty());
+            detail.put("liveT2NiftyLevel", ladder.t2Nifty());
+            detail.put("liveT3NiftyLevel", ladder.t3Nifty());
+            detail.put("t1TargetPop", targets.t1());
+            detail.put("t2TargetPop", targets.t2());
+            detail.put("t3TargetPop", targets.t3());
+        }
+
         boolean vixSpike = livePopService.isVixSpike(vix, context.previousVix());
         String vixNote = vixSpike
                 ? String.format(" [VIX spike detected: %.2f → %.2f, PoP recalculated with live IV]",
@@ -155,20 +178,20 @@ public class CreditSpreadMonitorStrategy implements MonitorStrategy {
 
         double popDouble = livePop.doubleValue();
 
-        if (popDouble < props.getPopReadjustMinimum().doubleValue()) {
+        if (popDouble < t3Pop) {
             return result(MonitorAction.EXIT, ThresholdHit.POP_EXIT,
-                    String.format("PoP=%.1f%% below EXIT threshold (%.0f%%). Spot=%.2f, short strike=%d. MTM P&L=%.2f.%s",
-                            popDouble * 100, props.getPopReadjustMinimum().doubleValue() * 100,
+                    String.format("PoP=%.1f%% below T3 EXIT target (%.1f%%). Spot=%.2f, short strike=%d. MTM P&L=%.2f.%s",
+                            popDouble * 100, t3Pop * 100,
                             spot, config.shortLeg().strike(), mtmPnl, vixNote),
                     currentNetPremium, mtmPnl, livePop, detail);
         }
 
-        if (popDouble < props.getPopWatchMinimum().doubleValue()) {
+        if (popDouble < t2Pop) {
             String t2NiftyNote = (thr.t2ReadjustNiftyLevel() != null)
                     ? String.format(" T2 level=%.0f.", thr.t2ReadjustNiftyLevel().doubleValue()) : "";
             return result(MonitorAction.READJUST, ThresholdHit.POP_READJUST,
-                    String.format("PoP=%.1f%% in READJUST zone (65–74%%). Spot=%.2f.%s MTM P&L=%.2f.%s",
-                            popDouble * 100, spot, t2NiftyNote, mtmPnl, vixNote),
+                    String.format("PoP=%.1f%% below T2 READJUST target (%.1f%%). Spot=%.2f.%s MTM P&L=%.2f.%s",
+                            popDouble * 100, t2Pop * 100, spot, t2NiftyNote, mtmPnl, vixNote),
                     currentNetPremium, mtmPnl, livePop, detail);
         }
 
@@ -182,12 +205,12 @@ public class CreditSpreadMonitorStrategy implements MonitorStrategy {
                     currentNetPremium, mtmPnl, livePop, detail);
         }
 
-        if (popDouble < props.getPopHoldMinimum().doubleValue()) {
+        if (popDouble < t1Pop) {
             String t1NiftyNote = (thr.t1WatchNiftyLevel() != null)
                     ? String.format(" Nifty approaching T1 level=%.0f.", thr.t1WatchNiftyLevel().doubleValue()) : "";
             return result(MonitorAction.WATCH, ThresholdHit.POP_WATCH,
-                    String.format("PoP=%.1f%% in WATCH zone (75–79%%).%s MTM P&L=%.2f.%s",
-                            popDouble * 100, t1NiftyNote, mtmPnl, vixNote),
+                    String.format("PoP=%.1f%% below T1 WATCH target (%.1f%%).%s MTM P&L=%.2f.%s",
+                            popDouble * 100, t1Pop * 100, t1NiftyNote, mtmPnl, vixNote),
                     currentNetPremium, mtmPnl, livePop, detail);
         }
 

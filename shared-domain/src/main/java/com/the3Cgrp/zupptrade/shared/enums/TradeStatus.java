@@ -8,6 +8,10 @@ public enum TradeStatus {
     EXIT_IN_PROGRESS,     // Agent 3 triggered EXIT; Agent 5 exit order placed but not yet confirmed
     EXIT_FAILED,          // Agent 5 exit failed — position still open; Agent 3 will retry next cycle
     CLOSED,               // exited by Agent 3/5, expired, or externally closed on Upstox
+    RECONCILE_REQUIRED,   // Agent 5 could not confirm a trade is flat after an ambiguous placement
+                          // failure (5xx/timeout). A position MAY be open on the exchange beyond our
+                          // control. No scheduler acts on this automatically — surfaced via
+                          // critical_alerts for manual user action.
     CORRUPTED_MANUALLY    // one or more legs closed manually on Upstox while others remain open;
                           // monitoring stopped; excluded from all aggregations; appears as separate
                           // line item in Agent 4 audit. Manual intervention required on Upstox.

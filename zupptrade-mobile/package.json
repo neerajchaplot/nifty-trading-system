@@ -5,6 +5,7 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve --proxy-config proxy.conf.json --port 4201",
+    "start:lan": "ng serve --host 0.0.0.0 --proxy-config proxy.conf.json --port 4201",
     "build": "ng build",
     "test": "ng test"
   },

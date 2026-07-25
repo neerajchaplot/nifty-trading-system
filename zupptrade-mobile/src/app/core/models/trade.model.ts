@@ -30,6 +30,11 @@ export interface MonitorThresholds {
   t1WatchNiftyUp: number | null;
   t2ReadjustNiftyUp: number | null;
   t3ExitNiftyUp: number | null;
+  // Entry PoPs — credit: entryPop/entryPopDown/entryPopUp; debit: entryPop (breakeven) + entryPopp (short strike)
+  entryPop?: number | null;
+  entryPopDown?: number | null;
+  entryPopUp?: number | null;
+  entryPopp?: number | null;
 }
 
 export interface TradeCard {
@@ -60,6 +65,9 @@ export interface TradeCard {
   generatedAt: string;
   validUntil: string;
   status: TradeStatus;
+  testingModeActive: boolean;    // true when trading.hard-gate-enabled=false on backend
+  skipDecision: boolean;         // true when Layer 1 would have returned SKIP/NO_TRADE; fallback strategy used
+  skipReason: string | null;     // e.g. "SKIP", "NO_TRADE", "VIX_EXTREME"
 }
 
 export interface MonitorConfig {
@@ -97,6 +105,11 @@ export interface ActiveTrade {
   shortLegLtp: number | null;
   longLegLtp: number | null;
   lastEvaluatedAt: string | null;
+  // Live-recomputed levels from the latest evaluation.
+  //   Credit 2-leg: liveT1NiftyLevel/liveT2NiftyLevel/liveT3NiftyLevel (+ target PoPs)
+  //   Credit IC:    liveT1NiftyDown.. / liveT1NiftyUp..
+  //   Debit:        liveBreakevenLevel, liveProfitBookLevel, liveLossCutLevel, livePop, livePopp, liveGap
+  liveThresholds?: { [key: string]: number } | null;
 }
 
 export interface RecommendRequest {

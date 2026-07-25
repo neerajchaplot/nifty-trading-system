@@ -23,6 +23,8 @@ upstox:
     base-url: https://api.upstox.com
     # Low-latency order gateway (production). Not a secret — lives here, not in env vars.
     order-base-url: https://api-hft.upstox.com
+    # Order READS (status by order_id, history by tag) are NOT served on api-hft — use the standard host.
+    order-read-base-url: https://api.upstox.com
     # API credentials — from environment variables only
     api-key: ${UPSTOX_API_KEY:}
     api-secret: ${UPSTOX_API_SECRET:}

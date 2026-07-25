@@ -14,4 +14,6 @@ export type TradeStatus =
 export type OptionType = 'CE' | 'PE';
 export type LegAction = 'BUY' | 'SELL';
 export type MonitorAction = 'HOLD' | 'WATCH' | 'READJUST' | 'EXIT';
-export type ThresholdHit = 'T1' | 'T2' | 'T3' | 'NONE';
+export type ThresholdHit =
+  | 'T1' | 'T2' | 'T3' | 'NONE'
+  | 'DEBIT_POP_DISASTER' | 'DEBIT_GIVEBACK_LOCK';

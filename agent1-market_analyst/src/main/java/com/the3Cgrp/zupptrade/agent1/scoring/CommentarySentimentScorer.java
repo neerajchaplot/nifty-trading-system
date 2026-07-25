@@ -37,20 +37,45 @@ public class CommentarySentimentScorer implements TierScorer {
 
     @Override
     public TierScore calculate(MarketInputs inputs) {
-        int vMktx = voteMarketaux(inputs.getMarketauxSentiment());
-        int vLlm  = voteCommentary(inputs.getCommentaryBias());
+        BigDecimal sentiment = inputs.getMarketauxSentiment();
+        String commentaryBias = inputs.getCommentaryBias();   // null = no user commentary provided
+        int vMktx = voteMarketaux(sentiment);
 
         log.info("agent1.tier4 marketaux_sentiment: score={} (>{}=bull, <{}=bear)  → {}",
-                inputs.getMarketauxSentiment(),
-                props.getScoring().getMarketauxBullish(), props.getScoring().getMarketauxBearish(),
+                sentiment, props.getScoring().getMarketauxBullish(), props.getScoring().getMarketauxBearish(),
                 vLabel(vMktx));
-        log.info("agent1.tier4 llm_commentary:      bias={}  → {}", inputs.getCommentaryBias(), vLabel(vLlm));
+
+        // No user commentary → do NOT dilute Marketaux with a 0 LLM vote.
+        // Take the Marketaux sentiment at face value as the tier average (already in [-1, 1]).
+        // The bucketed vote is still recorded in signals for audit/display.
+        if (commentaryBias == null) {
+            BigDecimal average = sentiment != null
+                    ? clampToUnit(sentiment).setScale(4, RoundingMode.HALF_UP)
+                    : BigDecimal.ZERO.setScale(4, RoundingMode.HALF_UP);
+            BigDecimal contribution = average.multiply(getWeight()).setScale(4, RoundingMode.HALF_UP);
+            log.info("agent1.tier4 llm_commentary:      bias=null (not provided) → Marketaux at face value, tier_avg={}", average);
+
+            Map<String, Integer> signals = new LinkedHashMap<>();
+            signals.put("marketaux_sentiment", vMktx);   // informational bucket vote
+            return new TierScore(getTierName(), getWeight(), signals, average, contribution);
+        }
+
+        // Commentary provided → original two-signal ±1 average.
+        int vLlm = voteCommentary(commentaryBias);
+        log.info("agent1.tier4 llm_commentary:      bias={}  → {}", commentaryBias, vLabel(vLlm));
 
         Map<String, Integer> signals = new LinkedHashMap<>();
         signals.put("marketaux_sentiment", vMktx);
         signals.put("llm_commentary",      vLlm);
 
         return buildTierScore(signals);
+    }
+
+    /** Clamp a value into [-1, 1]; Marketaux scores are already in range but guard against bad data. */
+    private static BigDecimal clampToUnit(BigDecimal v) {
+        if (v.compareTo(BigDecimal.ONE) > 0) return BigDecimal.ONE;
+        if (v.compareTo(BigDecimal.ONE.negate()) < 0) return BigDecimal.ONE.negate();
+        return v;
     }
 
     private static String vLabel(int v) {

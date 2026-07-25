@@ -13,6 +13,9 @@ upstox:
     base-url: https://api.upstox.com
     # Orders route to sandbox — not a secret, lives here
     order-base-url: https://api-sandbox.upstox.com
+    # Order reads for sandbox orders live on the sandbox host (NOT production api.upstox.com,
+    # which would have none of our sandbox orders).
+    order-read-base-url: https://api-sandbox.upstox.com
     # Sandbox token for the order RestClient (UPSTOX_SANDBOX_TOKEN set as system env var)
     order-access-token: ${UPSTOX_SANDBOX_TOKEN:}
 
@@ -25,18 +28,17 @@ agent5:
     # Cancel on timeout in sandbox rather than converting to MARKET —
     # sandbox fills don't reflect real liquidity
     cancel-on-timeout-instead-of-market: true
-    # Bypass margin sufficiency check in sandbox — Upstox /v2/charges/margin does not return
-    # available_margin; account funds are checked via /v2/user/fund-and-margin in production.
-    # Set true here so the execution flow can be tested end-to-end without a funded account.
+    # Skip only the AVAILABLE-FUNDS sufficiency gate. The funds check
+    # (GET /v2/user/get-funds-and-margin) runs against PRODUCTION api.upstox.com and reads your
+    # REAL account balance — with zero capital it would reject every order before placement.
+    # Keep TRUE until the account is funded. checkMargin still runs (read-only calculator).
     bypass-margin-check: true
-    # Upstox sandbox does not carry weekly NIFTY option contracts in its instrument master.
-    # When true: skip multi/place entirely and inject synthetic fills at limitPrice so the
-    # downstream flow (slippage check, fill persistence, ACTIVE status) can be exercised.
-    simulate-fills: true
-    # When true: skip exit order placement and mark the trade CLOSED directly.
-    # Mirrors simulate-fills for the exit path — sandbox cannot place exit orders on
-    # weekly NIFTY instruments either.
-    simulate-exit: true
+    # Sandbox runs the REAL v3 order flow (place/modify/cancel on api-sandbox.upstox.com). It DOES
+    # carry weekly NIFTY contracts and fills marketable orders, so no simulation is needed.
+    # (Earlier belief that sandbox lacked weekly NIFTY was wrong — the failures were v2-vs-v3 +
+    #  a distinct Sandbox-App token, both now resolved.)
+    simulate-fills: false
+    simulate-exit: false
 
 logging:
   level:

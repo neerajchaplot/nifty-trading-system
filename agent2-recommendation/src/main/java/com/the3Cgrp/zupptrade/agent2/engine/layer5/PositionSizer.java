@@ -86,8 +86,11 @@ public class PositionSizer {
 
         BigDecimal roc = maxProfitTotal.divide(capital, 6, RoundingMode.HALF_UP)
                 .multiply(HUNDRED).setScale(4, RoundingMode.HALF_UP);
+        // Annualise over the holding period. On expiry day (dte=0) annualisation is undefined —
+        // guard against divide-by-zero by treating it as a 1-day hold (the figure is informational only).
+        int annualisationDte = Math.max(ctx.getDte(), 1);
         BigDecimal rocAnnualised = roc.multiply(ANNUALISATION_DAYS)
-                .divide(BigDecimal.valueOf(ctx.getDte()), 4, RoundingMode.HALF_UP);
+                .divide(BigDecimal.valueOf(annualisationDte), 4, RoundingMode.HALF_UP);
 
         // Include leg2 delta for net delta calculation (Iron Condor)
         BigDecimal leg2Delta = hasLeg2

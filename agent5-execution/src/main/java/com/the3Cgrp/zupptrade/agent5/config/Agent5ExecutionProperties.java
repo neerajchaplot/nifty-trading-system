@@ -57,6 +57,22 @@ public class Agent5ExecutionProperties {
     private boolean simulateFills = false;
 
     /**
+     * Delay (ms) before querying the order book by tag during ambiguous-placement-failure
+     * reconciliation. A booked-but-unacknowledged order may not surface in the order book
+     * immediately after a 5xx/timeout; this short settle window lets it appear before we decide.
+     */
+    private long reconcileDelayMs = 1000;
+
+    /**
+     * Maximum quantity (units) allowed in a single order. Upstox rejects a single order that
+     * exceeds the instrument's exchange freeze quantity (NIFTY options ≈ 1755 units). We do NOT
+     * auto-slice — a leg above this limit is REJECTED before placement, so the user splits it into
+     * two orders (the UI enforces the same cap). Default matches the current NIFTY freeze quantity;
+     * ideally sourced per-instrument from the option-contract master in future.
+     */
+    private int maxOrderQuantity = 1755;
+
+    /**
      * When true: skip Upstox exit order placement and mark the trade CLOSED directly.
      * Use ONLY in sandbox profile — mirrors simulate-fills for the exit path.
      * NEVER set true in production — no exit orders will be placed.
@@ -86,4 +102,10 @@ public class Agent5ExecutionProperties {
 
     public boolean isSimulateExit() { return simulateExit; }
     public void setSimulateExit(boolean v) { this.simulateExit = v; }
+
+    public long getReconcileDelayMs() { return reconcileDelayMs; }
+    public void setReconcileDelayMs(long v) { this.reconcileDelayMs = v; }
+
+    public int getMaxOrderQuantity() { return maxOrderQuantity; }
+    public void setMaxOrderQuantity(int v) { this.maxOrderQuantity = v; }
 }

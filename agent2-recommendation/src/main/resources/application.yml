@@ -51,6 +51,7 @@ trading:
   max-loss-debit-pct: 0.5        # 0.5% of capital — stricter than credit (1.5%) because debit PoP is lower
   max-debit-breakeven-distance-pts: 100 # max pts from spot to debit spread breakeven (~0.6 SD of a 2-DTE expected move)
   min-debit-rr: 1.4                     # G1D floor: max-profit ÷ net-debit per unit (near-ATM bull-call spreads sit ~1.4:1)
+  hard-gate-enabled: true               # false = testing mode: SKIP/NO_TRADE runs full pipeline, all hard gates bypassed
   upstox:
     base-url: ${UPSTOX_BASE_URL:https://api.upstox.com}
     access-token: ${UPSTOX_ACCESS_TOKEN:}        # fallback if DB token loading is unavailable

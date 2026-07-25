@@ -14,6 +14,7 @@ import {
   OverrideThresholds,
   TradeCard,
 } from '../../core/models/trade.model';
+import { OptionType } from '../../core/models/enums';
 import { Agent1Service } from '../../core/services/agent1.service';
 import { Agent2Service } from '../../core/services/agent2.service';
 import { Agent5Service } from '../../core/services/agent5.service';
@@ -73,6 +74,7 @@ export class RecommendationComponent implements OnInit, OnChanges, OnDestroy {
 
   // ── Manual override builder ────────────────────────────────────────────────
   builderMode = false;
+  obOptionType: OptionType | null = null;  // primary pair type (CE for call spreads, PE otherwise)
   obPeShortStrike: number | null = null;
   obPeLongStrike: number | null = null;
   obCeShortStrike: number | null = null;   // null for 2-leg spreads
@@ -110,8 +112,9 @@ export class RecommendationComponent implements OnInit, OnChanges, OnDestroy {
     return this.overrideRecommendation?.pop ?? null;
   }
 
-  // Hard block: PoP must be ≥ 50% before any confirm
+  // Hard block: PoP must be ≥ 50% before any confirm — bypassed in testing mode
   get isPopBlocked(): boolean {
+    if (this.tradeCard?.testingModeActive) return false;
     const pop = this.state === 'rejected' ? this.overridePop : this.tradeCard?.pop ?? null;
     return pop !== null && pop < HARD_POP_FLOOR;
   }
@@ -233,7 +236,8 @@ export class RecommendationComponent implements OnInit, OnChanges, OnDestroy {
     ).subscribe(card => {
       if (!card) return;
       this.tradeCard = card;
-      this.state = card.status === 'REJECTED' ? 'rejected' : 'tradecard';
+      // Testing mode: always show trade card regardless of status (gates were bypassed)
+      this.state = (!card.testingModeActive && card.status === 'REJECTED') ? 'rejected' : 'tradecard';
     });
   }
 
@@ -332,7 +336,10 @@ export class RecommendationComponent implements OnInit, OnChanges, OnDestroy {
     if (!this.tradeCard) return;
     this.builderMode = true;
     this.overrideMetrics = null;
-    // Pre-fill with the algorithm's rejected strikes as a starting point
+    // Pre-fill with the algorithm's rejected strikes as a starting point.
+    // The primary pair takes the trade's actual option type (CE for a bear/bull call spread),
+    // so the backend prices and places calls — not puts.
+    this.obOptionType    = this.tradeCard.shortLeg.optionType;
     this.obPeShortStrike = this.tradeCard.shortLeg.strike;
     this.obPeLongStrike  = this.tradeCard.longLeg.strike;
     this.obCeShortStrike = this.tradeCard.shortLeg2?.strike ?? null;
@@ -356,6 +363,7 @@ export class RecommendationComponent implements OnInit, OnChanges, OnDestroy {
     this.overrideMetricsLoading = true;
     this.agent2.calculateOverride({
       tradeId:       this.tradeCard.tradeId,
+      optionType:    this.obOptionType!,
       peShortStrike: this.obPeShortStrike,
       peLongStrike:  this.obPeLongStrike,
       ceShortStrike: this.obCeShortStrike,
@@ -375,6 +383,8 @@ export class RecommendationComponent implements OnInit, OnChanges, OnDestroy {
 
   get canConfirmOverrideBuilder(): boolean {
     if (!this.overrideMetrics) return false;
+    // Testing mode: backend already returns popBlocked/lossBlocked=false; double-check testingModeActive
+    if (this.overrideMetrics.testingModeActive) return true;
     return !this.overrideMetrics.popBlocked && !this.overrideMetrics.lossBlocked;
   }
 
@@ -382,6 +392,7 @@ export class RecommendationComponent implements OnInit, OnChanges, OnDestroy {
     if (!this.tradeCard || !this.overrideMetrics || !this.canConfirmOverrideBuilder) return;
 
     const overrideParams: OverrideParams = {
+      optionType:              this.obOptionType!,
       peShortStrike:           this.obPeShortStrike!,
       peLongStrike:            this.obPeLongStrike!,
       ceShortStrike:           this.obCeShortStrike,
@@ -513,6 +524,7 @@ export class RecommendationComponent implements OnInit, OnChanges, OnDestroy {
     this.overrideRecommendation = null;
     this.overrideLoading        = false;
     this.builderMode            = false;
+    this.obOptionType           = null;
     this.obPeShortStrike        = null;
     this.obPeLongStrike         = null;
     this.obCeShortStrike        = null;

@@ -109,8 +109,9 @@ public class TradingProperties {
     }
 
     public static class Confidence {
-        private BigDecimal lowBelow    = new BigDecimal("0.41");
-        private BigDecimal highAbove   = new BigDecimal("0.70");
+        // LOW  < lowBelow (≤ 0.24 realizable) | MEDIUM [lowBelow, highAbove] | HIGH > highAbove
+        private BigDecimal lowBelow    = new BigDecimal("0.25");
+        private BigDecimal highAbove   = new BigDecimal("0.65");
         private BigDecimal divergencePenalty = new BigDecimal("0.80");
 
         public BigDecimal getLowBelow() { return lowBelow; }

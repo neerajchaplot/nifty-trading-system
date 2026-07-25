@@ -78,7 +78,7 @@ public class ExecutionController {
 
     /**
      * Pre-execution margin check — called by the UI before Agent 2 /confirm in override flow.
-     * Reads trade legs from DB, calls Upstox /v2/charges/margin + /v2/user/fund-and-margin,
+     * Reads trade legs from DB, calls Upstox /v2/charges/margin + /v2/user/get-funds-and-margin,
      * and returns required vs available margin.
      *
      * POST (not GET) because it triggers two external Upstox API calls.
@@ -96,6 +96,22 @@ public class ExecutionController {
         } catch (IllegalArgumentException e) {
             log.warn("api.margin.check.not_found", kv("error", e.getMessage()));
             return ResponseEntity.notFound().build();
+        }
+    }
+
+    /**
+     * Account-level margin utilisation — powers the UI "Capital Deployed" bar.
+     * Portfolio-wide (all open positions), not tied to a single trade.
+     * Calls Upstox /v2/user/get-funds-and-margin. Returns 502 if Upstox is unreachable.
+     */
+    @GetMapping("/margin/utilization")
+    public ResponseEntity<MarginCheckService.MarginUtilizationDto> marginUtilization() {
+        log.info("api.margin.utilization");
+        try {
+            return ResponseEntity.ok(marginCheckService.utilization());
+        } catch (MarginCheckService.MarginCheckException e) {
+            log.warn("api.margin.utilization.failed", kv("error", e.getMessage()));
+            return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
         }
     }
 

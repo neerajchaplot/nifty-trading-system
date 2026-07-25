@@ -63,6 +63,43 @@ class BlackScholesCalculatorTest {
         assertThat(em).isLessThan(BigDecimal.valueOf(320));
     }
 
+    // ── Option-type-aware PoP (bear call spread override fix) ────────────────
+    // The Override Builder for a BEAR_CALL_SPREAD used to price the short CALL strike
+    // as a PUT, producing a low PoP that tripped the ≥50% floor and blocked placement.
+    // The same 24600 short strike must read LOW as a put but HIGH as a call.
+
+    @Test
+    void calculatePop_shortCall_otmAboveSpot_returnsHighPop() {
+        // Bear call: spot 24069, short 24600 CE (OTM). Call expires worthless if spot stays below 24600 → high PoP.
+        BigDecimal cePop = calculator.calculatePop(
+                new BigDecimal("24069.15"), new BigDecimal("24600"),
+                new BigDecimal("0.1375"), 6, new BigDecimal("0.065"), OptionType.CE);
+        assertThat(cePop).isGreaterThan(new BigDecimal("0.70")); // passes the 50% override floor
+    }
+
+    @Test
+    void calculatePop_samePutStrike_readsLow_whileCallReadsHigh() {
+        BigDecimal spot = new BigDecimal("24069.15");
+        BigDecimal strike = new BigDecimal("24600");
+        BigDecimal iv = new BigDecimal("0.1375");
+        BigDecimal pePop = calculator.calculatePop(spot, strike, iv, 6, new BigDecimal("0.065"), OptionType.PE);
+        BigDecimal cePop = calculator.calculatePop(spot, strike, iv, 6, new BigDecimal("0.065"), OptionType.CE);
+
+        assertThat(pePop).isLessThan(new BigDecimal("0.30"));    // as a put → blocked (< 50%)
+        assertThat(cePop).isGreaterThan(new BigDecimal("0.70")); // as a call → allowed
+        // N(d2) + N(-d2) = 1 — call and put PoP on the same strike are complementary
+        assertThat(pePop.add(cePop)).isCloseTo(BigDecimal.ONE, org.assertj.core.data.Offset.offset(new BigDecimal("0.005")));
+    }
+
+    @Test
+    void calculatePop_legacyFiveArg_equalsPutOverload() {
+        BigDecimal legacy = calculator.calculatePop(
+                new BigDecimal("24000"), new BigDecimal("23500"), new BigDecimal("0.15"), 5, new BigDecimal("0.065"));
+        BigDecimal explicitPut = calculator.calculatePop(
+                new BigDecimal("24000"), new BigDecimal("23500"), new BigDecimal("0.15"), 5, new BigDecimal("0.065"), OptionType.PE);
+        assertThat(legacy).isEqualByComparingTo(explicitPut);
+    }
+
     @Test
     void calculatePop_zeroDte_returnsOneOrZero() {
         BigDecimal pop = calculator.calculatePop(

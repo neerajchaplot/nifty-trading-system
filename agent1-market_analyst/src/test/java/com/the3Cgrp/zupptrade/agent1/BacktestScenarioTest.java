@@ -436,19 +436,21 @@ class BacktestScenarioTest {
     }
 
     /**
-     * S05 — NEUTRAL WEAK | VIX HIGH | LOW confidence.
+     * S05 — NEUTRAL WEAK | VIX HIGH | MEDIUM confidence.
      *
      * Tiers pull in opposite directions and cancel to near zero.
-     * Only T1B (avg=0) and T4 (avg=0) agree with NEUTRAL → base=2/5=0.40.
-     * VIX HIGH ×0.85 → 0.40×0.85 = 0.34 → LOW.
+     * Futures-premium (T1A) and FII long-ratio (T2) are excluded from scoring → T1A is a
+     * 6-signal tier and T2 a 3-signal tier. No user commentary → T4 = raw Marketaux sentiment.
+     * T1B, T2 and T4 sit at/near neutral (|avg| ≤ 0.10) → base = 3/5 = 0.60.
+     * VIX HIGH ×0.85 → 0.60 × 0.85 = 0.51 → MEDIUM (was LOW when the FII long-ratio dragged T2 to −0.25).
      *
-     * T1A  [spot>ema20(+1) spot>ema50(+1) spot<ema200(−1) higherHighs+null(0) premium=25(+1) pcr=0.95(0) maxPain(0)]  = 2/7 = 0.286 → +0.086
-     * T1B  [ema20<ema50(−1) ema50<ema200(−1) rsi=55(0) macd=10>5(+1) candle(+1)]                                     = 0/5 = 0.000 →  0.000
-     * T2   [fiiNet=−400(0) fiiRatio=0.35(−1) fiiOpt=300(0) dii=200(0)]                                               = −1/4 = −0.250 → −0.075
-     * T3   [vixChange=+2.4%(0) callOI>putOI(−1) giftNifty=20(0)]                                                     = −1/3 = −0.333 → −0.033
-     * T4   [marketaux=0.10(0) commentary=null(0)]                                                                     = 0/2 = 0.000 →  0.000
-     * composite ≈ −0.022 → NEUTRAL WEAK
-     * confidence = 2/5 × 0.85 × 1.00 = 0.34 → LOW
+     * T1A  [spot>ema20(+1) spot>ema50(+1) spot<ema200(−1) HH[null](0) pcr=0.95(0) maxPain(0)]  = +1/6 = 0.1667 → +0.0500
+     * T1B  [ema20<ema50(−1) ema50<ema200(−1) rsi=55(0) macd=10>5(+1) candle(+1)]               = 0/5 = 0.0000 →  0.0000
+     * T2   [fiiNet=−400(0) fiiOpt=300(0) dii=200(0)]                                           = 0/3 = 0.0000 →  0.0000
+     * T3   [vixChange=+2.4%(0) callOI>putOI(−1) giftNifty=20(0)]                               = −1/3 = −0.3333 → −0.0333
+     * T4   [marketaux=0.10 raw (no commentary)]                                               = 0.1000 → +0.0100
+     * composite ≈ 0.0267 → NEUTRAL WEAK
+     * confidence = 3/5 × 0.85 = 0.51 → MEDIUM
      */
     @Test
     void s05_neutralWeak_vixHigh_tiersCancel_producesLowConfidence() {
@@ -488,14 +490,16 @@ class BacktestScenarioTest {
 
         List<TierScore> tierScores = runScorers(inputs, "S05 — NEUTRAL WEAK VIX HIGH tiers cancel");
         Agent1SignalEntity entity = composer.compose(tierScores, inputs, LocalDateTime.now());
-        logResult("S05 → expected NEUTRAL WEAK LOW", tierScores, entity);
+        logResult("S05 → expected NEUTRAL WEAK MEDIUM", tierScores, entity);
 
         assertThat(entity.getBias()).isEqualTo(Bias.NEUTRAL);
         assertThat(entity.getStrength()).isEqualTo(Strength.WEAK);
         assertThat(entity.getCompositeScore())
                 .isGreaterThanOrEqualTo(new BigDecimal("-0.1000"))
                 .isLessThanOrEqualTo(new BigDecimal("0.1000"));
-        assertThat(entity.getConfidence()).isEqualTo(Confidence.LOW);
+        // Dropping the FII long-ratio vote flips T2 from −0.25 to 0, adding an agreeing
+        // NEUTRAL tier → base 3/5=0.60 × VIX-HIGH 0.85 = 0.51 → MEDIUM (was LOW under old T2).
+        assertThat(entity.getConfidence()).isEqualTo(Confidence.MEDIUM);
         assertThat(entity.getVixRegime()).isEqualTo(VixRegime.HIGH);
     }
 
@@ -565,19 +569,20 @@ class BacktestScenarioTest {
     }
 
     /**
-     * S07 — NEUTRAL WEAK | VIX LOW | MEDIUM confidence.
+     * S07 — NEUTRAL WEAK | VIX LOW | HIGH confidence.
      *
-     * VIX LOW applies ×1.10 boost. T1B, T2, T4 all at avg=0 → base=3/5=0.60.
-     * 0.60×1.10 = 0.66 → MEDIUM.
-     * Agent 2 SKIPS when VIX Low + IV Cheap (strategy matrix SKIP path).
+     * VIX LOW applies ×1.10 boost. T1B, T2, T4 all sit at/near neutral → base = 3/5 = 0.60.
+     * 0.60 × 1.10 = 0.66 > 0.65 → HIGH under the new bands.
+     * (T1A 6-signal / T2 3-signal after excluding futures-premium & FII long-ratio;
+     *  no user commentary → T4 = raw Marketaux sentiment.)
      *
-     * T1A  [spot>ema20(+1) spot>ema50(+1) spot<ema200(−1) higherHighs=null(0) premium=10(0) pcr=0.95(0) maxPain(0)]  = 1/7 = 0.143 (|avg|>0.10)
-     * T1B  [ema20>ema50(+1) ema50<ema200(−1) rsi=50(0) macd=5=5(0) candle(0)]                                        = 0/5 = 0.000 (agrees NEUTRAL)
-     * T2   [fiiNet=100(0) fiiRatio=0.50(0) fiiOpt=50(0) dii=200(0)]                                                  = 0/4 = 0.000 (agrees NEUTRAL)
-     * T3   [vixChange=−4.3%(+1) oi(0) giftNifty=20(0)]                                                               = 1/3 = 0.333 (|avg|>0.10)
-     * T4   [marketaux=0.05(0) commentary=null(0)]                                                                     = 0/2 = 0.000 (agrees NEUTRAL)
-     * composite ≈ +0.076 → NEUTRAL WEAK (just below 0.10 boundary)
-     * confidence = 3/5 × 1.10 × 1.00 = 0.66 → MEDIUM
+     * T1A  [spot>ema20(+1) spot>ema50(+1) spot<ema200(−1) HH[null](0) pcr=0.95(0) maxPain(0)]  = +1/6 = 0.1667 (|avg|>0.10)
+     * T1B  [ema20>ema50(+1) ema50<ema200(−1) rsi=50(0) macd=5=5(0) candle(0)]                  = 0/5 = 0.0000 (agrees NEUTRAL)
+     * T2   [fiiNet=100(0) fiiOpt=50(0) dii=200(0)]                                             = 0/3 = 0.0000 (agrees NEUTRAL)
+     * T3   [vixChange=−4.3%(+1) oi(0) giftNifty=20(0)]                                         = +1/3 = 0.3333 (|avg|>0.10)
+     * T4   [marketaux=0.05 raw (no commentary)]                                               = 0.0500 (agrees NEUTRAL, |avg|≤0.10)
+     * composite ≈ 0.0883 → NEUTRAL WEAK
+     * confidence = 3/5 × 1.10 = 0.66 → HIGH
      */
     @Test
     void s07_neutralWeak_vixLow_boostModifier_producesMediumConfidence() {
@@ -616,14 +621,15 @@ class BacktestScenarioTest {
 
         List<TierScore> tierScores = runScorers(inputs, "S07 — NEUTRAL WEAK VIX LOW ×1.10 boost");
         Agent1SignalEntity entity = composer.compose(tierScores, inputs, LocalDateTime.now());
-        logResult("S07 → expected NEUTRAL WEAK MEDIUM (VIX LOW ×1.10)", tierScores, entity);
+        logResult("S07 → expected NEUTRAL WEAK HIGH (VIX LOW ×1.10)", tierScores, entity);
 
         assertThat(entity.getBias()).isEqualTo(Bias.NEUTRAL);
         assertThat(entity.getStrength()).isEqualTo(Strength.WEAK);
         assertThat(entity.getCompositeScore())
                 .isGreaterThanOrEqualTo(new BigDecimal("-0.1000"))
                 .isLessThanOrEqualTo(new BigDecimal("0.1000"));
-        assertThat(entity.getConfidence()).isEqualTo(Confidence.MEDIUM);
+        // base 3/5=0.60 × VIX-LOW 1.10 = 0.66 > 0.65 → HIGH under the new bands.
+        assertThat(entity.getConfidence()).isEqualTo(Confidence.HIGH);
         assertThat(entity.getVixRegime()).isEqualTo(VixRegime.LOW);
     }
 
@@ -687,18 +693,21 @@ class BacktestScenarioTest {
     }
 
     /**
-     * S09 — BEARISH MILD | VIX HIGH | MEDIUM confidence.
+     * S09 — BEARISH MILD | VIX HIGH | HIGH confidence.
      *
-     * T1A, T1B, T2 all bearish → 3/5 agree with BEARISH.
-     * VIX HIGH ×0.85 → 0.60×0.85 = 0.51 → MEDIUM.
+     * T1A, T1B, T2 and T4 all bearish → 4/5 agree with BEARISH.
+     * VIX HIGH ×0.85 → 0.80 × 0.85 = 0.68 > 0.65 → HIGH.
+     * (No user commentary → T4 = raw Marketaux −0.20, which now counts as bearish agreement;
+     *  under the old bucketed T4 this was a 0 vote and confidence was MEDIUM. T2 is a 3-signal
+     *  tier and T1A a 6-signal tier after excluding FII long-ratio & futures-premium.)
      *
-     * T1A  [spot<ema20(−1) spot<ema50(−1) spot>ema200(+1) HH+LL(−1) premium=−25(−1) pcr=0.72(−1) maxPain(0)]  = −4/7 = −0.571 → −0.171
-     * T1B  [ema20>ema50(+1) ema50>ema200(+1) rsi=38(−1) macd=−20<−5(−1) bearishCandle(−1)]                    = −1/5 = −0.200 → −0.040
-     * T2   [fiiNet=−600(−1) fiiRatio=0.38(−1) fiiOpt=−600(−1) dii=300(0)]                                     = −3/4 = −0.750 → −0.225
-     * T3   [vixChange=+1.5%(0) oi(0) giftNifty=−20(0)]                                                         = 0/3 = 0.000 →  0.000
-     * T4   [marketaux=−0.20(0) commentary=null(0)]                                                              = 0/2 = 0.000 →  0.000
-     * composite ≈ −0.436 → BEARISH MILD
-     * confidence = 3/5 × 0.85 × 1.00 = 0.51 → MEDIUM
+     * T1A  [spot<ema20(−1) spot<ema50(−1) spot>ema200(+1) HH+LL(−1) pcr=0.72(−1) maxPain(0)]  = −3/6 = −0.5000 → −0.1500
+     * T1B  [ema20>ema50(+1) ema50>ema200(+1) rsi=38(−1) macd=−20<−5(−1) bearishCandle(−1)]    = −1/5 = −0.2000 → −0.0400
+     * T2   [fiiNet=−600(−1) fiiOpt=−600(−1) dii=300(0)]                                       = −2/3 = −0.6667 → −0.2000
+     * T3   [vixChange=+1.5%(0) oi(0) giftNifty=−20(0)]                                        = 0/3 = 0.0000 →  0.0000
+     * T4   [marketaux=−0.20 raw (no commentary)]                                             = −0.2000 → −0.0200
+     * composite ≈ −0.4100 → BEARISH MILD
+     * confidence = 4/5 × 0.85 = 0.68 → HIGH
      */
     @Test
     void s09_bearishMild_vixHigh_threeTiersBearish_producesMediumConfidence() {
@@ -738,34 +747,37 @@ class BacktestScenarioTest {
 
         List<TierScore> tierScores = runScorers(inputs, "S09 — BEARISH MILD VIX HIGH");
         Agent1SignalEntity entity = composer.compose(tierScores, inputs, LocalDateTime.now());
-        logResult("S09 → expected BEARISH MILD MEDIUM", tierScores, entity);
+        logResult("S09 → expected BEARISH MILD HIGH", tierScores, entity);
 
         assertThat(entity.getBias()).isEqualTo(Bias.BEARISH);
         assertThat(entity.getStrength()).isEqualTo(Strength.MILD);
         assertThat(entity.getCompositeScore())
                 .isGreaterThan(new BigDecimal("-0.50"))
                 .isLessThan(new BigDecimal("-0.25"));
-        assertThat(entity.getConfidence()).isEqualTo(Confidence.MEDIUM);
+        // Marketaux −0.20 (no user commentary) is now T4's raw average → counts as bearish
+        // agreement → base 4/5=0.80 × VIX-HIGH 0.85 = 0.68 > 0.65 → HIGH (was MEDIUM when
+        // Marketaux −0.20 bucketed to a neutral 0 vote).
+        assertThat(entity.getConfidence()).isEqualTo(Confidence.HIGH);
         assertThat(entity.getVixRegime()).isEqualTo(VixRegime.HIGH);
         assertThat(entity.getCommentaryDivergence()).isFalse();
     }
 
     /**
-     * S11 — BULLISH MILD | T2 all null (data gaps) | LOW confidence.
+     * S11 — BULLISH MILD | T2 all null (data gaps) | MEDIUM confidence.
      *
      * Simulates the "FII/DII data unavailable" scenario.
      * All fiiNetFutures / fiiLongRatio / fiiNetOptions / diiNet passed as null.
      * T2 scorer receives all nulls → every signal scores 0 → T2 average=0, contribution=0.
-     * Only T1A and T1B contribute positively → composite still in BULLISH MILD range.
-     * But only 2 tiers agree with BULLISH → base=2/5=0.40 → LOW.
+     * With no user commentary, T4 = raw Marketaux 0.10 → a bullish-agreeing tier, so T1A, T1B
+     * and T4 agree → base = 3/5 = 0.60 → MEDIUM (was LOW when the old bucketed T4 averaged to 0).
      *
-     * T1A  [spot>ema20(+1) spot>ema50(+1) spot>ema200(+1) HH+HL(+1) premium=25(+1) pcr=1.30(+1) maxPain(0)]  = 6/7 = 0.857 → +0.257
-     * T1B  [ema20>ema50(+1) ema50>ema200(+1) rsi=62(+1) macd(+1) candle(+1)]                                  = 5/5 = 1.000 → +0.200
-     * T2   [all null → 0,0,0,0]                                                                                 = 0/4 = 0.000 →  0.000  ← data gap
-     * T3   [vixChange=−1.2%(0) oi(0) giftNifty=30(0)]                                                          = 0/3 = 0.000 →  0.000
-     * T4   [marketaux=0.10(0) commentary=null(0)]                                                               = 0/2 = 0.000 →  0.000
-     * composite ≈ 0.457 → BULLISH MILD
-     * confidence = 2/5 × 1.00 × 1.00 = 0.40 → LOW (just below 0.41 threshold)
+     * T1A  [spot>ema20(+1) spot>ema50(+1) spot>ema200(+1) HH+HL(+1) pcr=1.30(+1) maxPain(0)]  = +5/6 = 0.8333 → +0.2500
+     * T1B  [ema20>ema50(+1) ema50>ema200(+1) rsi=62(+1) macd(+1) candle(+1)]                  = 5/5 = 1.0000 → +0.2000
+     * T2   [all null → 0,0,0]                                                                 = 0/3 = 0.0000 →  0.0000  ← data gap
+     * T3   [vixChange=−1.2%(0) oi(0) giftNifty=30(0)]                                         = 0/3 = 0.0000 →  0.0000
+     * T4   [marketaux=0.10 raw (no commentary)]                                              = 0.1000 → +0.0100
+     * composite ≈ 0.4600 → BULLISH MILD
+     * confidence = 3/5 × 1.00 = 0.60 → MEDIUM
      */
     @Test
     void s11_bullishMild_tier2AllNull_missingData_producesLowConfidence() {
@@ -803,7 +815,7 @@ class BacktestScenarioTest {
 
         List<TierScore> tierScores = runScorers(inputs, "S11 — BULLISH MILD T2 all null (data gaps)");
         Agent1SignalEntity entity = composer.compose(tierScores, inputs, LocalDateTime.now());
-        logResult("S11 → expected BULLISH MILD LOW (T2=0 data gap)", tierScores, entity);
+        logResult("S11 → expected BULLISH MILD MEDIUM (T2=0 data gap)", tierScores, entity);
 
         // Verify T2 correctly returned zero when all inputs null
         TierScore tier2 = findTier(tierScores, "TIER_2");
@@ -819,29 +831,29 @@ class BacktestScenarioTest {
         assertThat(entity.getCompositeScore())
                 .isGreaterThan(new BigDecimal("0.25"))
                 .isLessThan(new BigDecimal("0.50"));
-        assertThat(entity.getConfidence()).isEqualTo(Confidence.LOW);
+        // Marketaux 0.10 (no user commentary) is now T4's raw average → counts as bullish
+        // agreement → base 3/5=0.60 × NORMAL 1.00 = 0.60 → MEDIUM (was LOW when T4 averaged to 0).
+        assertThat(entity.getConfidence()).isEqualTo(Confidence.MEDIUM);
         assertThat(entity.getVixRegime()).isEqualTo(VixRegime.NORMAL);
     }
 
     /**
-     * S12 — BULLISH MILD | Commentary divergence ×0.80 penalty | LOW confidence.
+     * S12 — BULLISH MILD | Commentary divergence ×0.80 penalty | MEDIUM confidence.
      *
      * T1A and T1B are bullish → overall signal BULLISH MILD.
-     * T4: commentary="BEARISH" and marketaux=−0.35 → T4 average=−1.0 (bearish).
+     * User commentary IS provided ("BEARISH"), so T4 keeps its two-signal ±1 average:
+     * commentary=BEARISH(−1) and marketaux=−0.35(−1) → T4 average = −1.0 (bearish).
      * SignalComposer.isTier4Diverging(): T4 avg < 0 while overall=BULLISH → divergence=true.
-     * Penalty: confidence ×0.80.
-     * base=2/5=0.40 (T1A+T1B only agree BULLISH; T2/T3 neutral; T4 opposes)
-     * After penalty: 0.40×0.80 = 0.32 → LOW.
+     * base=2/5=0.40 (T1A+T1B agree; T2/T3 neutral; T4 opposes) → ×0.80 penalty = 0.32.
+     * 0.32 ≥ 0.25 → MEDIUM under the new bands (was LOW under the old 0.41 floor).
      *
-     * T1A  [spot>ema20(+1) spot>ema50(+1) spot>ema200(+1) HH+HL(+1) premium=25(+1) pcr=1.30(+1) maxPain(0)]  = 6/7 = 0.857 → +0.257
-     * T1B  [ema20>ema50(+1) ema50>ema200(+1) rsi=54(0) macd(+1) candle(0)]                                    = 3/5 = 0.600 → +0.120
-     * T2   [fiiNet=200(0) fiiRatio=0.48(0) fiiOpt=100(0) dii=300(0)]                                          = 0/4 = 0.000 →  0.000
-     * T3   [vixChange=−1.8%(0) oi(0) giftNifty=25(0)]                                                         = 0/3 = 0.000 →  0.000
-     * T4   [marketaux=−0.35(−1) commentary=BEARISH(−1)]   ← DIVERGING from BULLISH overall                    = −2/2 = −1.000 → −0.100
-     * composite ≈ 0.277 → BULLISH MILD
-     * base confidence = 2/5 = 0.40  (T1A + T1B agree; T4 opposes so doesn't count)
-     * pre-penalty: 0.40 × 1.00 × 1.00 = 0.40
-     * divergence penalty ×0.80 → 0.40 × 0.80 = 0.32 → LOW
+     * T1A  [spot>ema20(+1) spot>ema50(+1) spot>ema200(+1) HH+HL(+1) pcr=1.30(+1) maxPain(0)]  = +5/6 = 0.8333 → +0.2500
+     * T1B  [ema20>ema50(+1) ema50>ema200(+1) rsi=54(0) macd(+1) candle(0)]                    = 3/5 = 0.6000 → +0.1200
+     * T2   [fiiNet=200(0) fiiOpt=100(0) dii=300(0)]                                           = 0/3 = 0.0000 →  0.0000
+     * T3   [vixChange=−1.8%(0) oi(0) giftNifty=25(0)]                                         = 0/3 = 0.0000 →  0.0000
+     * T4   [marketaux=−0.35(−1) commentary=BEARISH(−1)]  ← DIVERGING, 2-signal (commentary present)  = −2/2 = −1.0000 → −0.1000
+     * composite ≈ 0.2700 → BULLISH MILD
+     * confidence = 2/5 × 1.00 × 0.80 (divergence) = 0.32 → MEDIUM
      */
     @Test
     void s12_bullishMild_commentaryDiverges_penaltyApplied_producesLowConfidence() {
@@ -880,7 +892,7 @@ class BacktestScenarioTest {
 
         List<TierScore> tierScores = runScorers(inputs, "S12 — BULLISH MILD with commentary divergence");
         Agent1SignalEntity entity = composer.compose(tierScores, inputs, LocalDateTime.now());
-        logResult("S12 → expected BULLISH MILD LOW (divergence ×0.80 penalty)", tierScores, entity);
+        logResult("S12 → expected BULLISH MILD MEDIUM (divergence ×0.80 penalty)", tierScores, entity);
 
         // T4 must be bearish (for divergence to fire)
         TierScore tier4 = findTier(tierScores, "TIER_4");
@@ -896,7 +908,8 @@ class BacktestScenarioTest {
         assertThat(entity.getCompositeScore())
                 .isGreaterThan(new BigDecimal("0.25"))
                 .isLessThan(new BigDecimal("0.50"));
-        assertThat(entity.getConfidence()).isEqualTo(Confidence.LOW);
+        // base 2/5=0.40 × divergence 0.80 = 0.32, now ≥ 0.25 → MEDIUM under the new bands (was LOW).
+        assertThat(entity.getConfidence()).isEqualTo(Confidence.MEDIUM);
         assertThat(entity.getVixRegime()).isEqualTo(VixRegime.NORMAL);
     }
 

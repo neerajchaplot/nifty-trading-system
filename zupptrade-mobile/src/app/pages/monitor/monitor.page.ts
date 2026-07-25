@@ -60,6 +60,9 @@ import { ActiveTrade } from '../../core/models/trade.model';
             <div *ngIf="trade.lastThresholdHit === 'T3'" class="alert-t3">⚠ T3 EXIT — Close all positions now!</div>
             <div *ngIf="trade.lastThresholdHit === 'T2'" class="alert-t2">⚡ T2 READJUST — Consider rolling the spread</div>
             <div *ngIf="trade.lastThresholdHit === 'T1'" class="alert-t1">👀 T1 WATCH — Monitor closely</div>
+            <div *ngIf="trade.lastThresholdHit === 'DEBIT_POP_DISASTER'" class="alert-t3">⚠ LOSS-CUT — PoP dropped, closing to protect capital</div>
+            <div *ngIf="trade.lastThresholdHit === 'DEBIT_GIVEBACK_LOCK'" class="alert-t2">🔒 GIVE-BACK LOCK — booking profit before it slips</div>
+            <div *ngIf="trade.lastThresholdHit === 'DEBIT_EXPIRY_EXIT'" class="alert-t2">📅 EXPIRY — closing debit spread</div>
 
             <!-- Live metrics -->
             <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-top:10px;">
@@ -95,6 +98,29 @@ import { ActiveTrade } from '../../core/models/trade.model';
                     <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--zt-muted); margin-top:2px;">
                       <span class="level-t3">T3 {{ trade.monitorConfig.thresholds.t3ExitNiftyLevel | number:'1.0-0' }}</span>
                       <span>Spot {{ trade.spotPrice | number:'1.0-0' }}</span>
+                    </div>
+                  </div>
+
+                  <!-- Debit (Bull Call / Bear Put): no readjustment — profit-book / loss-cut + PoP -->
+                  <div *ngIf="trade.monitorConfig.spreadDirection === 'DEBIT'">
+                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+                      <span style="color:var(--zt-muted);">Breakeven</span>
+                      <span style="font-weight:700;">{{ debitBreakeven(trade) | number:'1.0-0' }}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+                      <span class="text-green">Profit-Book</span>
+                      <span class="text-green" style="font-weight:700;">{{ debitProfitBook(trade) | number:'1.0-0' }}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+                      <span class="text-red">Loss-Cut</span>
+                      <span class="text-red" style="font-weight:700;">{{ debitLossCut(trade) | number:'1.0-0' }}</span>
+                    </div>
+                    <div *ngIf="debitPopPct(trade) != null" style="display:flex; justify-content:space-between; font-size:11px;">
+                      <span style="color:var(--zt-muted);">PoP / PoPP</span>
+                      <span style="font-weight:700;">
+                        {{ debitPopPct(trade) | number:'1.0-0' }}% / {{ debitPoppPct(trade) | number:'1.0-0' }}%
+                        <small style="color:var(--zt-muted);">(gap {{ debitGapPct(trade) | number:'1.0-0' }}pp)</small>
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -168,4 +194,20 @@ export class MonitorPage implements OnInit {
     if (pct >= 50) return '#D97706';
     return '#16A34A';
   }
+
+  // ── Debit spreads (Bull Call / Bear Put) — no readjustment; live levels from liveThresholds ──
+  private live(trade: ActiveTrade, key: string): number | null {
+    const v = trade.liveThresholds?.[key];
+    return typeof v === 'number' ? v : null;
+  }
+  private livePct(trade: ActiveTrade, key: string): number | null {
+    const v = this.live(trade, key);
+    return v == null ? null : v * 100;   // PoP/PoPP/gap stored as fractions (0–1)
+  }
+  debitBreakeven(trade: ActiveTrade): number | null { return this.live(trade, 'liveBreakevenLevel'); }
+  debitProfitBook(trade: ActiveTrade): number | null { return this.live(trade, 'liveProfitBookLevel'); }
+  debitLossCut(trade: ActiveTrade): number | null { return this.live(trade, 'liveLossCutLevel'); }
+  debitPopPct(trade: ActiveTrade): number | null { return this.livePct(trade, 'livePop'); }
+  debitPoppPct(trade: ActiveTrade): number | null { return this.livePct(trade, 'livePopp'); }
+  debitGapPct(trade: ActiveTrade): number | null { return this.livePct(trade, 'liveGap'); }
 }

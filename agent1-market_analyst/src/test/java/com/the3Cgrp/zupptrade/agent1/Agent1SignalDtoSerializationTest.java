@@ -1,8 +1,7 @@
 package com.the3Cgrp.zupptrade.agent1;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.the3Cgrp.zupptrade.shared.dto.Agent1SignalDto;
 import com.the3Cgrp.zupptrade.shared.enums.Bias;
 import com.the3Cgrp.zupptrade.shared.enums.Confidence;
@@ -31,11 +30,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class Agent1SignalDtoSerializationTest {
 
-    // findAndRegisterModules() discovers the JavaTime module on the runtime classpath
-    // (present transitively via Spring Boot) without a compile-time dependency on jsr310.
-    private final ObjectMapper mapper = new ObjectMapper()
-            .findAndRegisterModules()
-            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS); // matches Spring Boot default
+    // Spring Boot 4 uses Jackson 3 (tools.jackson), whose ObjectMapper natively serialises
+    // java.time types as ISO-8601 strings by default — no module registration needed.
+    // Mirrors the app's JacksonConfig (new ObjectMapper()).
+    private final ObjectMapper mapper = new ObjectMapper();
 
     private final TimeZone originalTz = TimeZone.getDefault();
 
@@ -46,7 +44,9 @@ class Agent1SignalDtoSerializationTest {
 
     private Agent1SignalDto sampleSignal() {
         return new Agent1SignalDto(
-                UUID.randomUUID(),
+                // Fixed id so the two serialisations in timestampIsTimezoneIndependent differ only
+                // by timezone-dependent content (which must be none) — never by a random id.
+                UUID.fromString("00000000-0000-0000-0000-000000000001"),
                 OffsetDateTime.of(2026, 7, 12, 7, 5, 0, 0, ZoneOffset.UTC),
                 LocalDate.of(2026, 7, 14),
                 Bias.BULLISH, Strength.WEAK,

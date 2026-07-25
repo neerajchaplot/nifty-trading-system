@@ -30,8 +30,7 @@ export interface TradeListItem {
   signalBias: string;
   signalStrength: string;
   signalScore: number;
-  signalConfidence: number;
-  signalConfidenceLabel: string;
+  signalConfidence: string;   // confidence label, e.g. "HIGH" (backend sends the label here; signalScore is the numeric one)
   entryDate: string;
   exitDate: string | null;
   holdingDays: number | null;
@@ -54,6 +53,7 @@ export interface TradeListResponse {
   hasMore: boolean;
   periodFrom: string | null;
   periodTo: string | null;
+  corruptedTrades: TradeListItem[];   // trades with DB status CORRUPTED_MANUALLY — excluded from all aggregations & pagination
 }
 
 // ── Audit chapters ─────────────────────────────────────────────────────────────
@@ -176,7 +176,7 @@ export interface SignalQuality {
   overallAccuracyPct: number;
   accuracyByConfidence: Record<string, number>;
   accuracyByBias: Record<string, number>;
-  commentaryDivergenceImpact: string | null;
+  commentaryDivergenceImpact: Record<string, number>;  // { diverged, aligned } → win-rate %
   mostFrequentDataGap: string | null;
-  skipReasons: Record<string, number>;
+  skipReasons: string[];                          // opaque display strings, e.g. "BIAS:NEUTRAL/WEAK VIX:HIGH"
 }

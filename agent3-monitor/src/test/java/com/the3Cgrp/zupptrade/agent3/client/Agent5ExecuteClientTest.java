@@ -147,7 +147,8 @@ class Agent5ExecuteClientTest {
                 new BigDecimal("82.00"), new BigDecimal("88.00"), new BigDecimal("6.00"),
                 new BigDecimal("1.07"), new BigDecimal("130.00"), new BigDecimal("-0.04"),
                 null, null, "Bull put spread — bearish setup, credit 17.30",
-                null, null, TradeStatus.CONFIRMED
+                null, null, TradeStatus.CONFIRMED,
+                false, false, null
         );
     }
 
@@ -175,7 +176,8 @@ class Agent5ExecuteClientTest {
                 new BigDecimal("82.00"), new BigDecimal("84.00"), new BigDecimal("2.00"),
                 new BigDecimal("1.07"), new BigDecimal("130.00"), new BigDecimal("-0.02"),
                 null, null, "Iron condor — neutral bias, VIX normal",
-                null, null, TradeStatus.CONFIRMED
+                null, null, TradeStatus.CONFIRMED,
+                false, false, null
         );
     }
 

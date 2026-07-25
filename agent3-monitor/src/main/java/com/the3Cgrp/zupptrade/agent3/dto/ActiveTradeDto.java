@@ -9,6 +9,7 @@ import com.the3Cgrp.zupptrade.shared.enums.TradeStatus;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -32,5 +33,10 @@ public record ActiveTradeDto(
         BigDecimal markToMarketPnl,
         BigDecimal shortLegLtp,
         BigDecimal longLegLtp,
-        Instant lastEvaluatedAt
+        Instant lastEvaluatedAt,
+        // Live-recomputed credit ladder from the latest evaluation (from evaluation_detail):
+        //   2-leg: liveT1NiftyLevel/liveT2NiftyLevel/liveT3NiftyLevel + t1/t2/t3TargetPop
+        //   IC:    liveT1/2/3NiftyDown + liveT1/2/3NiftyUp
+        // Null/absent for debit or legacy trades. Recomputed every cycle from live IV + DTE.
+        Map<String, Object> liveThresholds
 ) {}

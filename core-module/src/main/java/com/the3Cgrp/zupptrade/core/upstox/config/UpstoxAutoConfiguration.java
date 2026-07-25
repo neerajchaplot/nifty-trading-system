@@ -120,6 +120,44 @@ public class UpstoxAutoConfiguration {
                 .build();
     }
 
+    /**
+     * Dedicated RestClient for Upstox order READS (order details by order_id, order history by tag).
+     *
+     * Order reads are NOT served on the HFT placement host (api-hft.upstox.com) — they live on the
+     * standard API host in production and on the sandbox host in sandbox. So this client uses its own
+     * base URL (upstox.api.order-read-base-url):
+     *   Production : https://api.upstox.com
+     *   Sandbox    : https://api-sandbox.upstox.com
+     * Token logic matches the order client (order-access-token if set → sandbox; else access-token →
+     * production), so reads always use the token valid for whichever host the orders live on.
+     *
+     * Inject this bean for GET order status / order history — NOT upstoxOrderRestClient (placement).
+     */
+    @Bean("upstoxOrderReadRestClient")
+    public RestClient upstoxOrderReadRestClient(UpstoxProperties props, UpstoxTokenHolder tokenHolder) {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofSeconds(props.getConnectTimeoutSeconds()));
+        factory.setReadTimeout(Duration.ofSeconds(props.getReadTimeoutSeconds()));
+
+        return RestClient.builder()
+                .requestFactory(factory)
+                .baseUrl(props.getOrderReadBaseUrl())
+                .requestInterceptor((request, body, execution) -> {
+                    // Same token as the order client: sandbox token if set, else production token.
+                    String orderToken = props.getOrderAccessToken();
+                    String token = (orderToken != null && !orderToken.isBlank())
+                            ? orderToken
+                            : tokenHolder.getToken();
+                    if (token != null && !token.isBlank()) {
+                        request.getHeaders().setBearerAuth(token);
+                    }
+                    request.getHeaders().set("Accept", "application/json");
+                    request.getHeaders().set("Api-Version", "2.0");
+                    return execution.execute(request, body);
+                })
+                .build();
+    }
+
     @Bean
     public UpstoxProfileClient upstoxProfileClient(RestClient upstoxRestClient) {
         return new UpstoxProfileClient(upstoxRestClient);

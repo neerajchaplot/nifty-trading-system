@@ -41,6 +41,7 @@ nifty-trading-system/
 | V7__create_trade_pnl.sql | trade_pnl table |
 | V8__create_monitoring_evaluations.sql | monitoring_evaluations table (Agent 3 cycle results) |
 | V9__create_notifications_shedlock.sql | notifications + shedlock tables |
+| V112__create_critical_alerts.sql | critical_alerts table (LIVE/ACKNOWLEDGED; user-actionable alerts w/ JSON trade snapshot) |
 | V100__create_api_tokens.sql | api_tokens table (written by upstox-auth) |
 | V101__seed_reference_data.sql | Seeds NIFTY_LOT_SIZE = 65 into reference_data |
 
@@ -60,6 +61,8 @@ These are non-obvious deviations — don't re-derive them from the spec.
 | No SpreadDirection | **`SpreadDirection` enum added** (CREDIT / DEBIT) |
 | TradeStatus has 6 values | **Two extra: `EXIT_IN_PROGRESS`, `EXIT_FAILED`** (duplicate exit guard) |
 | RecommendRequestDto(userId, signalId) | **Has third field: `relaxedGate1PopPct`** (null = standard 80%; non-null overrides G1 for readjustment re-entry) |
+| Agent 5 places both legs simultaneously via multi/place (§10) | **Agent 5 places legs SEQUENTIALLY, protective (BUY) leg first** (July 2026). One-at-a-time place→poll→next; on any leg failure the sequence stops and filled legs are reversed (`rollback`). Eliminates the naked-leg orphan risk of batch placement. Exit still uses a single batch reverse-MARKET multi/place. |
+| Every external API call has retry (max 3) (§2 rule 3) | **Order PLACEMENT is never retried** (retry=0). It is not idempotent — a 5xx/timeout may mean the order landed, so a retry could duplicate it. On placement failure Agent 5 reconciles by tag and drives to flat instead. Idempotent calls (status, tag query, margin, funds, cancel) keep retry=3. |
 | Module list: 7 modules | **Extra modules: `core-module`, `ledger-module`, `upstox-auth`, `ui-design`** |
 | ShedLock config in spec | **ShedLock table exists (V9) but NOT wired to agent3 MonitorSchedulerService yet** |
 
@@ -119,13 +122,20 @@ When `RecommendRequestDto.relaxedGate1PopPct` is non-null, GateValidator uses th
 
 ### agent5-execution (port 8085)
 - `UpstoxOrderClient` — POST /v2/order/multi/place, GET status, PUT modify, DELETE cancel
-- `TradeExecutionService` — entry (multi-leg simultaneous) + exit (reverse MARKET order)
+- `TradeExecutionService` — entry (**sequential, protective-leg-first, with rollback compensation**) + exit (reverse MARKET order)
+  - **Entry placement is sequential, not batch (July 2026):** legs are placed one at a time (place → poll to fill → next) via `protectiveFirstOrder()` — BUY/protective legs first, SELL/premium legs last. On any leg failure the sequence STOPS and already-filled legs are reversed via `rollback()`. Because we never have un-polled orders resting on the exchange, there are no orphaned/naked-leg risks. Protective-first also means a mid-sequence failure only ever leaves a defined-risk long, and each short is placed with its hedge already held (SPAN spread margin, not naked-short margin). `rollback()` fires `alertService.critical("rollback_failed", …)` if a reverse order itself fails.
+  - **Partial-fill compensation:** `pollToCompletion` returns a `PollResult` capturing partial fills on reject/cancel/timeout paths; a partial is reversed at its **actual filled qty**, never the ordered qty.
+  - **Ambiguous-placement-failure reconciliation (issue #2, July 2026):** `placeMultiOrder` retry count is **0** (`UpstoxOrderClient.withRetry(op, 1, …)`) — order placement is never retried (a 5xx/timeout could mean the order landed; retry would duplicate it). On a placement throw, `reconcileAndFlatten()` runs: wait `reconcileDelayMs` (default 1000ms) → `getOrderDetailsByTag()` (new, retryable GET) → union book orders (exact tag, excludes our `_RB`/`_X`) with in-memory known fills (dedup by correlation_id) → per order: cancel-if-open → re-read → reverse confirmed fill (convergent drive-to-flat). Confirmed flat → `REJECTED`; otherwise `RECONCILE_REQUIRED` (new `TradeStatus`, no scheduler acts on it). **Every** reconciliation (success or failure, incl. empty/"nothing found" and query-failed) writes a `critical_alerts` row with a transparent trade-state JSON snapshot for manual user action.
+  - `CriticalAlertService` (core-module, auto-configured next to `AlertService`) writes the `critical_alerts` table (V112); `TradeStatus.RECONCILE_REQUIRED` added.
 - `ExecutionController` — POST /api/v1/agent5/execute, POST /api/v1/agent5/exit/{tradeId}; **enhanced health** returns `{status, timestamp, dbConnected, upstoxTokenLoaded}`; **new** `GET /api/v1/agent5/upstox/status` returns live Upstox connectivity response (tokenStatus, productionApiReachable, userId, sandboxTokenConfigured, orderGateway)
 - `UpstoxConnectionCheckService` — calls `GET /v2/user/profile`; returns `UpstoxStatusResponse` with LOADED/ABSENT/EXPIRED/UNREACHABLE; never throws; exposes `isTokenLoaded()` for health endpoint
-- `TradeExecutionRequestMapper` — static utility: converts Agent2 `TradeCardDto` → Agent5 `ExecuteTradeRequest`; quantity = lots × lotSize per leg; shortLeg first (SELL), longLeg second (BUY); called by the UI (or Agent2 directly) after `/confirm`
-- Order tag format: `ZUPP_{tradeId_first8}` (shared across legs), `ZUPP_{id8}_L{n}` per leg
+- **Upstox v3 order API (July 2026):** place/modify/cancel use `/v3/order/place`, `/v3/order/modify`, `/v3/order/cancel`. Order **reads stay v2** (no v3 read exists): single status via `/v2/order/details?order_id=`; **by-tag via `/v2/order/history?tag=`** (by-tag lookup is on Order History, NOT Order Details). Reads use a **dedicated `upstoxOrderReadRestClient`** (core-module, base = `upstox.api.order-read-base-url`) — order reads are NOT served on the HFT placement host `api-hft`, so reads route to `api.upstox.com` (prod) / `api-sandbox.upstox.com` (sandbox), with the same token as the order client. v2 order endpoints are NOT served on the sandbox host, and v3 is the current standard. Sandbox host confirmed `api-sandbox.upstox.com` (the docs' `sandbox.upstox.com` does not resolve).
+- **Tag replaces correlation_id (v3 has none):** each leg carries a UNIQUE tag via `OrderTagBuilder.entryTag/exitTag/rollbackTag` (`ZUPP_{id8}_L{n}`, `_X_L{n}`, `_RB_L{n}`; ≤40 chars). One order placed per leg (`placeOrder`); v3 returns `data.order_ids[]` — we expect exactly one (no slicing).
+- **No slicing:** a leg with quantity > `agent5.execution.max-order-quantity` (default 1755, the NIFTY freeze qty) is REJECTED before placement — the user/UI splits into two orders.
+- **Ambiguous vs deterministic placement failure:** `UpstoxOrderException.isAmbiguous()` — 5xx/timeout ⇒ ambiguous ⇒ reconcile-by-tag; 4xx ⇒ deterministic ⇒ clean reject + rollback.
 - Product `"D"` (NRML) for all spread legs — never `"I"` (intraday)
-- Unit tests: **40 green** (8 OrderTagBuilder + 8 execute + 11 exit + 4 mapper + 9 connection-check)
+- Retry policy: idempotent reads (status, tag, margin, funds, cancel) retry 3× with a fixed **2s backoff** (`upstox.api.retry-delay-ms`, default 2000); **429 is retried** (not thrown); order **placement never retries** (retry=0). See `UpstoxOrderClient.withRetry`.
+- `TradeExecutionRequestMapper` was **deleted** (July 2026) — dead code (no caller; orchestrator unbuilt) and only handled 2 legs. When the orchestrator lands it should build the N-leg `ExecuteTradeRequest` directly (the live `execute()` path is already N-leg; `Agent5ExecuteClient` in agent3 handles 4-leg Iron Condor).
 - Sandbox IT (`TradeExecutionSandboxIT` T1–T5) written and ready — needs live tokens to run
 
 ### zupptrade-ui (Angular 18, port 4200)
@@ -155,8 +165,8 @@ When `RecommendRequestDto.relaxedGate1PopPct` is non-null, GateValidator uses th
 - ✅ **upstox-auth checked**: `TokenRefreshScheduler` runs at startup (ApplicationRunner) + scheduled at 08:30 AM IST weekdays — complete
 - ✅ **Session 2 additions (40 tests total, all green):**
   - `UpstoxConnectionCheckService` + `UpstoxStatusResponse` (LOADED/ABSENT/EXPIRED/UNREACHABLE; 9 unit tests)
-  - `TradeExecutionRequestMapper` — Agent2 TradeCardDto → Agent5 ExecuteTradeRequest (4 unit tests)
   - `ExecutionController` enhanced: `/health` includes `dbConnected` + `upstoxTokenLoaded`; new `GET /upstox/status` live check
+  - _(`TradeExecutionRequestMapper` from this session was later deleted as dead code — see agent5 section)_
 - ⏳ **Sandbox test** (`TradeExecutionSandboxIT` T1–T5) written and ready; requires live env vars: `UPSTOX_ACCESS_TOKEN`, `UPSTOX_SANDBOX_TOKEN` + NeonDB. Run: `mvn test -pl agent5-execution "-Dexcluded.test.groups=" -Dgroups=sandbox -Dspring.profiles.active=sandbox,local`
 
 ### Session C — Scheduling & wiring (each agent owns its own schedule; no orchestrator)
@@ -173,6 +183,7 @@ When `RecommendRequestDto.relaxedGate1PopPct` is non-null, GateValidator uses th
 - **#6** — core-module cleanup: move Upstox market data client classes to agent1 where they belong; keep AlertService + UpstoxPositionClient (used by agent3) in core-module
 - **#12** — Agent1SignalEntity: exists separately in agent1 and agent2; create one shared entity in shared-domain or agent1; agent2 reads via DTO (already the case via agent1_signals table)
 - ~~**#13**~~ — DONE: `db-migrations` module created; V1–V9 + V100 consolidated; agent2 + agent3 both depend on it; agent2 local SQL files deleted; agent3 flyway enabled
+- **#19** — Strategy matrix symmetry (agent2 Layer 1, `StrategySelector.selectBullish`): WEAK **bearish** reroutes to `selectNeutral` (can yield Iron Condor when IV rich), but WEAK **bullish** just `skip()`s. Introduced in commit 9b4b672 (Iron Condor) — the weak→neutral reroute was mirrored to bearish only; likely an oversight (the "harvest IV richness" rationale is direction-agnostic, and the spec's "Any + Weak" language implies uniform handling). Fix: reroute WEAK bullish to `selectNeutral(WEAK, vixRegime, ivRegime)` + unit test. No effect on cheap-IV/low-VIX (still SKIP); only changes rich-IV NORMAL/HIGH-VIX weak-bullish → Iron Condor, matching bearish. Low risk, agent2-only.
 
 ### Session F — Backtest ✅ COMPLETE
 - **agent4-backtest** — DONE. Read-only analytics. 5 REST endpoints (/summary, /trades, /trades/{id}/audit, /signal-quality, /health). 37 unit tests + integration tests. Angular "Audit" tab wired. docker-compose service: `agent4`.
@@ -195,4 +206,12 @@ Update the "What's Built" section and cross off tasks from Pending when a sessio
 
 ---
 
-*Last updated: 2026-06-25 — agent4-backtest fully implemented (analytics/audit, 5 REST endpoints, 37 unit tests, integration tests, Angular Audit tab, docker-compose wired). New Dockerfiles: agent1, agent5, upstox-auth. agent2/agent3 Dockerfiles updated to eclipse-temurin:21-jre-jammy. docker-compose.yml created. V102 migration adds data_gaps column. V103 adds spread_direction column. V104 adds DB views v_agent4_trade_list and v_agent4_signal_quality.*
+*Last updated: 2026-07-25 (4) — Agent5 order READS moved to a dedicated `upstoxOrderReadRestClient` (core-module) on `upstox.api.order-read-base-url` (prod api.upstox.com / sandbox api-sandbox) — fixes reads being wrongly pointed at the HFT placement host `api-hft` which doesn't serve them. New config `order-read-base-url` in application.yml + application-sandbox.yml. UpstoxOrderClient now takes 3 RestClients. Also: sandbox by-tag lookup fixed to `/v2/order/history?tag=` (was `/v2/order/details`). Sandbox profile: simulate-fills/exit=false, bypass-margin-check=true (zero capital). All agent5 unit tests green.*
+
+*Last updated: 2026-07-25 (3) — Agent5 order client MIGRATED to Upstox v3 (place/modify/cancel → /v3/order/*; reads stay /v2/order/details). correlation_id replaced by a unique per-leg `tag` (v3 has no correlation_id). No auto-slicing — legs > freeze qty (agent5.execution.max-order-quantity, default 1755) rejected up front. Sandbox host confirmed api-sandbox.upstox.com; sandbox needs a distinct Sandbox-App token + v3 endpoints (v2 order calls 401 on sandbox). Deleted MultiOrderRequest/MultiOrderResponse; added PlaceOrderV3Request/Response. Rewrote UpstoxOrderClient, TradeExecutionService, OrderTagBuilder, and all agent5 tests (unit + sandbox IT + probe). New diagnostic: SandboxCapabilityProbeIT.*
+
+*Last updated: 2026-07-25 (2) — Agent5 issue #2: order placement retry set to 0 (never retry a non-idempotent placement) + ambiguous-failure `reconcileAndFlatten` (query order book by tag → convergent drive-to-flat → REJECTED if flat else RECONCILE_REQUIRED). New: `critical_alerts` table (V112), `CriticalAlertService` (core-module), `TradeStatus.RECONCILE_REQUIRED`, `UpstoxOrderClient.getOrderDetailsByTag` + `TaggedOrdersResponse`, `agent5.execution.reconcile-delay-ms`. New tests: reconcile happy/empty/query-fail/exclude-_RB/reverse-fail (TradeExecutionServiceTest), UpstoxOrderClientTest (retry policy + tag parse), CriticalAlertServiceTest. Partial-fill compensation also added (reverse actual filled qty, not ordered).*
+
+*Last updated: 2026-07-25 — Agent5 entry placement reworked from batch multi/place to SEQUENTIAL protective-leg-first (long→short) with rollback compensation — fixes naked-leg orphan risk on poll-time partial rejection; rollback now fires alertService.critical("rollback_failed") on failure. agent5 unit tests 60 green (TradeExecutionServiceTest 19→23: protective ordering, short-rejected-after-long rollback, long-rejected clean stop, timeout rollback, Iron Condor mid-sequence rollback, rollback-failure alert).*
+
+*Prior (2026-06-25): agent4-backtest fully implemented (analytics/audit, 5 REST endpoints, 37 unit tests, integration tests, Angular Audit tab, docker-compose wired). New Dockerfiles: agent1, agent5, upstox-auth. agent2/agent3 Dockerfiles updated to eclipse-temurin:21-jre-jammy. docker-compose.yml created. V102 migration adds data_gaps column. V103 adds spread_direction column. V104 adds DB views v_agent4_trade_list and v_agent4_signal_quality.*

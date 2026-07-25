@@ -45,20 +45,27 @@ public class UpstoxHistoricalDataClient {
     }
 
     /**
-     * Fetches the most recent session's closing price for any instrument.
-     * Works after market hours — historical candles are always available regardless of session state.
-     * Returns null if the instrument has no trading history in the last 10 calendar days.
+     * Fetches the previous completed session's closing price for any instrument.
+     * Today's in-progress daily candle is EXCLUDED: during market hours Upstox returns a forming
+     * candle dated today whose "close" is the live value, which made VIX-prev equal live-VIX and
+     * silently killed the Tier-3 vix_daily_change signal on every intraday run. Skipping today
+     * yields the true prior close in every session state (pre-open, live, or post-close).
+     * Returns null if the instrument has no completed session in the last 10 calendar days.
      */
     public BigDecimal fetchLastClose(String instrumentKey) {
-        List<UpstoxCandle> candles = fetchDailyCandles(instrumentKey,
-                LocalDate.now().minusDays(10), LocalDate.now());
-        if (candles.isEmpty()) {
+        LocalDate today = LocalDate.now();
+        List<UpstoxCandle> candles = fetchDailyCandles(instrumentKey, today.minusDays(10), today);
+        // Candles are newest-first; drop today's forming candle, keep the latest completed session.
+        UpstoxCandle prev = candles.stream()
+                .filter(c -> c.date().isBefore(today))
+                .max(java.util.Comparator.comparing(UpstoxCandle::date))
+                .orElse(null);
+        if (prev == null) {
             log.debug("upstox.historical.last_close.unavailable instrument={}", instrumentKey);
             return null;
         }
-        BigDecimal close = candles.get(0).close();
-        log.debug("upstox.historical.last_close instrument={} close={} date={}", instrumentKey, close, candles.get(0).date());
-        return close;
+        log.debug("upstox.historical.last_close instrument={} close={} date={}", instrumentKey, prev.close(), prev.date());
+        return prev.close();
     }
 
     public List<UpstoxCandle> fetchDailyCandles(String instrumentKey, LocalDate from, LocalDate to) {

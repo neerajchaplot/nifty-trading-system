@@ -136,22 +136,22 @@ class SignalComposerTest {
     // --- toConfidenceLabel ---
 
     @Test
-    void scoreAbove070_returnsHigh() {
-        assertThat(composer.toConfidenceLabel(bd("0.71"))).isEqualTo(Confidence.HIGH);
+    void scoreAbove065_returnsHigh() {
+        assertThat(composer.toConfidenceLabel(bd("0.66"))).isEqualTo(Confidence.HIGH);
         assertThat(composer.toConfidenceLabel(bd("1.00"))).isEqualTo(Confidence.HIGH);
     }
 
     @Test
-    void scoreBetween041And070_returnsMedium() {
-        assertThat(composer.toConfidenceLabel(bd("0.41"))).isEqualTo(Confidence.MEDIUM);
-        assertThat(composer.toConfidenceLabel(bd("0.55"))).isEqualTo(Confidence.MEDIUM);
-        assertThat(composer.toConfidenceLabel(bd("0.70"))).isEqualTo(Confidence.MEDIUM);
+    void scoreBetween025And065_returnsMedium() {
+        assertThat(composer.toConfidenceLabel(bd("0.25"))).isEqualTo(Confidence.MEDIUM);
+        assertThat(composer.toConfidenceLabel(bd("0.45"))).isEqualTo(Confidence.MEDIUM);
+        assertThat(composer.toConfidenceLabel(bd("0.65"))).isEqualTo(Confidence.MEDIUM);
     }
 
     @Test
-    void scoreBelow041_returnsLow() {
-        assertThat(composer.toConfidenceLabel(bd("0.40"))).isEqualTo(Confidence.LOW);
-        assertThat(composer.toConfidenceLabel(bd("0.20"))).isEqualTo(Confidence.LOW);
+    void scoreBelow025_returnsLow() {
+        assertThat(composer.toConfidenceLabel(bd("0.24"))).isEqualTo(Confidence.LOW);
+        assertThat(composer.toConfidenceLabel(bd("0.10"))).isEqualTo(Confidence.LOW);
         assertThat(composer.toConfidenceLabel(bd("0.00"))).isEqualTo(Confidence.LOW);
     }
 

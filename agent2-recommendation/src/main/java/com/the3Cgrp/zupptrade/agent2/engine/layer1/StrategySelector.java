@@ -36,6 +36,30 @@ public class StrategySelector {
         ctx.setIvRegime(ivRegime);
 
         StrategySelection selection = select(bias, strength, vixRegime, ivRegime, confidence);
+
+        // HARD NO_TRADE (VIX EXTREME, or LOW-confidence directional credit): mark skipDecision and
+        // run a fallback strategy only so the card shows numbers. The service layer converts
+        // skipDecision → REJECTED in production, PENDING_CONFIRM in testing mode (hardGateEnabled=false).
+        if (selection.strategy() == Strategy.NO_TRADE || selection.strategy() == Strategy.SKIP) {
+            ctx.setSkipDecision(true);
+            ctx.setSkipReason(selection.strategy().name());
+            selection = selectFallback(bias, strength);
+            log.info("layer1.skip.overridden",
+                    kv("originalDecision", ctx.getSkipReason()),
+                    kv("fallbackStrategy", selection.strategy()),
+                    kv("hardGateEnabled", ctx.isHardGateEnabled()));
+        } else if (selection.softSkip()) {
+            // SOFT skip: the matrix produced a low-conviction / thin-premium strategy (e.g. an Iron
+            // Condor into low VIX / non-rich IV). We do NOT force REJECTED — the trade card is built
+            // and the RoC/PoP/loss gates + the user make the final call. Only surface a warning.
+            ctx.setSoftSkip(true);
+            ctx.setSoftSkipReason(selection.softReason());
+            log.info("layer1.soft.skip",
+                    kv("strategy", selection.strategy()),
+                    kv("reason", selection.softReason()),
+                    kv("note", "gates_and_user_decide"));
+        }
+
         ctx.setStrategy(selection.strategy());
         ctx.setSpreadDirection(selection.spreadDirection());
 
@@ -81,52 +105,60 @@ public class StrategySelector {
         };
     }
 
+    // ── IV drives BUY vs SELL, bias drives WHICH SIDE ────────────────────────────
+    // Governing rule (vol-desk logic):
+    //   IV RICH  → SELL premium (credit spread) — you are paid well to sell.
+    //   IV CHEAP → BUY premium (debit spread)   — options are cheap to own.
+    //   IV FAIR  → default to the credit spread (short-DTE theta edge) and let the RoC gate
+    //              decide — do NOT hard-skip.
+    // A directional lean that is only WEAK is treated as neutral (Iron Condor logic).
+    // Nothing here hard-skips: VIX EXTREME (handled in select()) is the only hard stand-aside.
+
     private StrategySelection selectBullish(Strength strength, VixRegime vixRegime, IvRegime ivRegime) {
+        if (strength == Strength.WEAK) {
+            // Weak bullish is functionally neutral — mirror the bearish-weak path (Iron Condor logic).
+            return selectNeutral(Strength.WEAK, vixRegime, ivRegime);
+        }
         if (strength == Strength.EXTREME) {
-            // Extreme bullish — go directional regardless of VIX/IV
+            // Extreme bullish — go directional (debit) regardless of VIX/IV.
             return new StrategySelection(Strategy.BULL_CALL_SPREAD, SpreadDirection.DEBIT);
         }
-        if (strength == Strength.MILD && vixRegime == VixRegime.LOW) {
-            // Low VIX = cheap premiums — debit is better R:R than selling thin credit
+        // MILD bullish, VIX LOW/NORMAL/HIGH (EXTREME already excluded upstream).
+        if (vixRegime == VixRegime.LOW || ivRegime == IvRegime.CHEAP) {
+            // Cheap premium (low VIX or IV below realised) — buying the move is the better R:R.
             return new StrategySelection(Strategy.BULL_CALL_SPREAD, SpreadDirection.DEBIT);
         }
-        if (strength == Strength.MILD
-                && (vixRegime == VixRegime.HIGH || vixRegime == VixRegime.NORMAL)
-                && ivRegime == IvRegime.RICH) {
-            return new StrategySelection(Strategy.BULL_PUT_SPREAD, SpreadDirection.CREDIT);
-        }
-        return skip();
+        // IV RICH → clean credit; IV FAIR → credit, RoC gate arbitrates.
+        return new StrategySelection(Strategy.BULL_PUT_SPREAD, SpreadDirection.CREDIT);
     }
 
     private StrategySelection selectBearish(Strength strength, VixRegime vixRegime, IvRegime ivRegime) {
-        if ((strength == Strength.EXTREME || strength == Strength.MILD)
-                && vixRegime == VixRegime.LOW) {
-            // Low VIX = cheap puts — debit bear put spread is better than selling thin call credit
-            return new StrategySelection(Strategy.BEAR_PUT_SPREAD, SpreadDirection.DEBIT);
-        }
-        if ((strength == Strength.EXTREME || strength == Strength.MILD)
-                && (vixRegime == VixRegime.HIGH || vixRegime == VixRegime.NORMAL)
-                && ivRegime == IvRegime.RICH) {
-            return new StrategySelection(Strategy.BEAR_CALL_SPREAD, SpreadDirection.CREDIT);
-        }
-        // WEAK bearish is functionally neutral — reuse neutral logic (IronCondor/WideIronCondor)
-        // rather than skipping. Directional conviction is absent but IV richness can still be harvested.
         if (strength == Strength.WEAK) {
+            // Weak bearish is functionally neutral — Iron Condor logic (symmetric with bullish-weak).
             return selectNeutral(Strength.WEAK, vixRegime, ivRegime);
         }
-        return skip();
+        // EXTREME or MILD bearish, VIX LOW/NORMAL/HIGH.
+        if (vixRegime == VixRegime.LOW || ivRegime == IvRegime.CHEAP) {
+            // Cheap puts — buy the move (debit bear put) rather than sell thin call credit.
+            return new StrategySelection(Strategy.BEAR_PUT_SPREAD, SpreadDirection.DEBIT);
+        }
+        // IV RICH → clean credit; IV FAIR → credit, RoC gate arbitrates.
+        return new StrategySelection(Strategy.BEAR_CALL_SPREAD, SpreadDirection.CREDIT);
     }
 
     private StrategySelection selectNeutral(Strength strength, VixRegime vixRegime, IvRegime ivRegime) {
-        if (strength == Strength.WEAK && ivRegime == IvRegime.RICH) {
-            if (vixRegime == VixRegime.HIGH) {
-                return new StrategySelection(Strategy.WIDE_IRON_CONDOR, SpreadDirection.CREDIT);
-            }
-            if (vixRegime == VixRegime.NORMAL) {
-                return new StrategySelection(Strategy.IRON_CONDOR, SpreadDirection.CREDIT);
-            }
+        // Ideal condor: RICH IV + NORMAL/HIGH VIX — real premium to harvest, non-directional.
+        if (ivRegime == IvRegime.RICH && vixRegime == VixRegime.HIGH) {
+            return new StrategySelection(Strategy.WIDE_IRON_CONDOR, SpreadDirection.CREDIT);
         }
-        return skip();
+        if (ivRegime == IvRegime.RICH && vixRegime == VixRegime.NORMAL) {
+            return new StrategySelection(Strategy.IRON_CONDOR, SpreadDirection.CREDIT);
+        }
+        // Thin-premium condor (LOW VIX or IV not rich): still produce a card so the user has the
+        // option, but flag it soft — the RoC gate will typically reject when the credit is too thin.
+        Strategy ic = vixRegime == VixRegime.HIGH ? Strategy.WIDE_IRON_CONDOR : Strategy.IRON_CONDOR;
+        return StrategySelection.soft(ic, SpreadDirection.CREDIT,
+                "NEUTRAL_THIN_PREMIUM(vix=" + vixRegime + ",iv=" + ivRegime + ")");
     }
 
     private IvRegime resolveIvRegime(RecommendationContext ctx) {
@@ -190,11 +222,25 @@ public class StrategySelector {
         return null;
     }
 
-    private StrategySelection noTrade() {
-        return new StrategySelection(Strategy.NO_TRADE, null);
+    /**
+     * Fallback strategy when the decision matrix would return SKIP or NO_TRADE.
+     * Provides the most natural credit strategy for the given bias so the full pipeline
+     * can run and produce real legs. Used in both modes; production marks the result REJECTED,
+     * testing mode marks it PENDING_CONFIRM.
+     */
+    private StrategySelection selectFallback(Bias bias, Strength strength) {
+        return switch (bias) {
+            case BULLISH -> strength == Strength.EXTREME
+                    ? new StrategySelection(Strategy.BULL_CALL_SPREAD, SpreadDirection.DEBIT)
+                    : new StrategySelection(Strategy.BULL_PUT_SPREAD, SpreadDirection.CREDIT);
+            case BEARISH -> strength == Strength.EXTREME
+                    ? new StrategySelection(Strategy.BEAR_PUT_SPREAD, SpreadDirection.DEBIT)
+                    : new StrategySelection(Strategy.BEAR_CALL_SPREAD, SpreadDirection.CREDIT);
+            case NEUTRAL -> new StrategySelection(Strategy.IRON_CONDOR, SpreadDirection.CREDIT);
+        };
     }
 
-    private StrategySelection skip() {
-        return new StrategySelection(Strategy.SKIP, null);
+    private StrategySelection noTrade() {
+        return new StrategySelection(Strategy.NO_TRADE, null);
     }
 }

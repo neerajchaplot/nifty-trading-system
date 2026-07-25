@@ -50,7 +50,9 @@ class MarginCheckServiceTest {
 
     @BeforeEach
     void setUp() {
-        when(props.getProduct()).thenReturn("D");
+        // lenient: the utilisation tests never touch props (no DB/legs path),
+        // so a strict stub here would trip UnnecessaryStubbingException.
+        lenient().when(props.getProduct()).thenReturn("D");
         service = new MarginCheckService(orderClient, props, jdbc);
     }
 
@@ -164,6 +166,63 @@ class MarginCheckServiceTest {
                 .isEqualByComparingTo(required.subtract(available));
     }
 
+    // ── Account-level margin utilisation (UI "Capital Deployed") ──────────────
+
+    @Test
+    void utilization_computesTotalAndPercentage() {
+        givenFunds(new BigDecimal("350000"), new BigDecimal("150000"));
+
+        MarginCheckService.MarginUtilizationDto result = service.utilization();
+
+        assertThat(result.usedMargin()).isEqualByComparingTo("150000");
+        assertThat(result.availableMargin()).isEqualByComparingTo("350000");
+        assertThat(result.totalMargin()).isEqualByComparingTo("500000");   // used + available
+        assertThat(result.utilizationPct()).isEqualByComparingTo("30.00"); // 150000/500000
+    }
+
+    @Test
+    void utilization_zeroBalance_returnsZeroPctWithoutDivideByZero() {
+        givenFunds(BigDecimal.ZERO, BigDecimal.ZERO);
+
+        MarginCheckService.MarginUtilizationDto result = service.utilization();
+
+        assertThat(result.totalMargin()).isEqualByComparingTo("0");
+        assertThat(result.utilizationPct()).isEqualByComparingTo("0");
+    }
+
+    @Test
+    void utilization_fullyDeployed_returns100Pct() {
+        givenFunds(BigDecimal.ZERO, new BigDecimal("500000"));
+
+        MarginCheckService.MarginUtilizationDto result = service.utilization();
+
+        assertThat(result.utilizationPct()).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void utilization_nullUsedMarginInResponse_treatedAsZero() {
+        when(orderClient.getAvailableFunds())
+                .thenReturn(new FundsAndMarginResponse("success",
+                        new FundsAndMarginResponse.FundsData(
+                                new FundsAndMarginResponse.SegmentFunds(new BigDecimal("200000"), null), null)));
+
+        MarginCheckService.MarginUtilizationDto result = service.utilization();
+
+        assertThat(result.usedMargin()).isEqualByComparingTo("0");
+        assertThat(result.totalMargin()).isEqualByComparingTo("200000");
+        assertThat(result.utilizationPct()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void utilization_upstoxFundsApiThrows_throwsMarginCheckException() {
+        when(orderClient.getAvailableFunds())
+                .thenThrow(new UpstoxOrderException("401 Unauthorized"));
+
+        assertThatThrownBy(() -> service.utilization())
+                .isInstanceOf(MarginCheckException.class)
+                .hasMessageContaining("funds check failed");
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /**
@@ -204,8 +263,13 @@ class MarginCheckServiceTest {
     }
 
     private void givenAvailableFunds(BigDecimal available) {
+        givenFunds(available, BigDecimal.ZERO);
+    }
+
+    private void givenFunds(BigDecimal available, BigDecimal used) {
         when(orderClient.getAvailableFunds())
                 .thenReturn(new FundsAndMarginResponse("success",
-                        new FundsAndMarginResponse.FundsData(available)));
+                        new FundsAndMarginResponse.FundsData(
+                                new FundsAndMarginResponse.SegmentFunds(available, used), null)));
     }
 }

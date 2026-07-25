@@ -76,7 +76,8 @@ public class ExpiryPnlService {
         this.props            = props;
     }
 
-    @Scheduled(cron = "${agent3.monitoring.expiry-pnl-cron}")
+    // zone is IST: the 8:30 AM pre-market sweep must fire in IST, not the container's UTC.
+    @Scheduled(cron = "${agent3.monitoring.expiry-pnl-cron}", zone = "${agent3.monitoring.scheduler-zone:Asia/Kolkata}")
     @SchedulerLock(name = "agent3_expiry_pnl_sweep",
                    lockAtMostFor = "PT10M",
                    lockAtLeastFor = "PT1M")

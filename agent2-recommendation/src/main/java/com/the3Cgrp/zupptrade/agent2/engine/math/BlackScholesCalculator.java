@@ -17,7 +17,18 @@ public class BlackScholesCalculator {
     private static final MathContext MC = MathContext.DECIMAL64;
     private static final int SCALE = 6;
 
+    /** PoP for a short PUT — probability the put expires worthless = N(d2). */
     public BigDecimal calculatePop(BigDecimal spot, BigDecimal strike, BigDecimal iv, int dte, BigDecimal riskFreeRate) {
+        return calculatePop(spot, strike, iv, dte, riskFreeRate, OptionType.PE);
+    }
+
+    /**
+     * PoP for a short option of the given type — probability it expires worthless.
+     *   Short PUT:  N(d2)   (spot ends above strike)
+     *   Short CALL: N(-d2)  (spot ends below strike)
+     */
+    public BigDecimal calculatePop(BigDecimal spot, BigDecimal strike, BigDecimal iv, int dte,
+                                   BigDecimal riskFreeRate, OptionType optionType) {
         double S = spot.doubleValue();
         double K = strike.doubleValue();
         double sigma = iv.doubleValue();
@@ -25,15 +36,19 @@ public class BlackScholesCalculator {
         double r = riskFreeRate.doubleValue();
 
         if (sigma <= 0 || t <= 0) {
-            return spot.compareTo(strike) > 0 ? BigDecimal.ONE : BigDecimal.ZERO;
+            // At expiry: PUT worthless if spot > strike; CALL worthless if spot < strike.
+            boolean worthless = (optionType == OptionType.PE)
+                    ? spot.compareTo(strike) > 0
+                    : spot.compareTo(strike) < 0;
+            return worthless ? BigDecimal.ONE : BigDecimal.ZERO;
         }
 
         double sqrtT = Math.sqrt(t);
         double d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * t) / (sigma * sqrtT);
         double d2 = d1 - sigma * sqrtT;
 
-        // PoP for short put = N(d2) — probability the put expires worthless
-        return BigDecimal.valueOf(normalCdf(d2)).setScale(SCALE, RoundingMode.HALF_UP);
+        double pop = (optionType == OptionType.PE) ? normalCdf(d2) : normalCdf(-d2);
+        return BigDecimal.valueOf(pop).setScale(SCALE, RoundingMode.HALF_UP);
     }
 
     public BigDecimal calculateDelta(BigDecimal spot, BigDecimal strike, BigDecimal iv, int dte,

@@ -7,6 +7,7 @@ import {
   ExecuteTradeResponse,
   MarginCheckRequest,
   MarginCheckResult,
+  MarginUtilization,
 } from '../models/trade.model';
 
 @Injectable({ providedIn: 'root' })
@@ -21,5 +22,9 @@ export class Agent5Service {
 
   checkMargin(request: MarginCheckRequest): Observable<MarginCheckResult> {
     return this.http.post<MarginCheckResult>(`${this.base}/margin/check`, request);
+  }
+
+  marginUtilization(): Observable<MarginUtilization> {
+    return this.http.get<MarginUtilization>(`${this.base}/margin/utilization`);
   }
 }

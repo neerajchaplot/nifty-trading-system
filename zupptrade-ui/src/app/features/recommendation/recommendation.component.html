@@ -90,6 +90,16 @@
 
   <!-- ── STATE: TRADE CARD ─────────────────────────────────────────────── -->
   <ng-container *ngIf="state === 'tradecard' && tradeCard">
+    <!-- Testing mode / skip decision banners -->
+    <div *ngIf="tradeCard.testingModeActive"
+         style="background:#FEF3C7; border:1px solid #F59E0B; border-radius:6px; padding:8px 12px; margin-bottom:10px; font-size:12px; color:#92400E; font-weight:600;">
+      ⚠️ TESTING MODE — hard gates bypassed. For testing and validation purposes only.
+    </div>
+    <div *ngIf="tradeCard.skipDecision"
+         style="background:#FEE2E2; border:1px solid #F87171; border-radius:6px; padding:8px 12px; margin-bottom:10px; font-size:12px; color:#991B1B;">
+      Skip Decision Overridden — original: <strong>{{ tradeCard.skipReason }}</strong>. Fallback strategy applied for testing.
+    </div>
+
     <div class="trade-card-rec">
       <div class="tc-header">
         <span class="tc-strategy">✦ &nbsp;{{ strategyLabel(tradeCard.strategy) }}</span>
@@ -260,7 +270,7 @@
     <div class="rejected-card">
       <div class="rej-header">
         <span class="rej-strategy">✦ &nbsp;{{ strategyLabel(tradeCard.strategy) }}</span>
-        <span class="rej-badge">REJECTED</span>
+        <span class="rej-badge">{{ tradeCard.skipDecision ? 'NOT AUTO-RECOMMENDED' : 'REJECTED' }}</span>
       </div>
       <div class="rej-body">
         <div class="divider-label" *ngIf="tradeCard.shortLeg2">Legs — PUT SPREAD</div>
@@ -299,7 +309,13 @@
           </div>
         </div>
 
-        <div class="rej-reason" *ngIf="tradeCard.rationale">
+        <!-- Skip-decision preview: gates pass, but the signal is too weak to auto-trade -->
+        <div class="rej-reason" *ngIf="tradeCard.skipDecision">
+          <strong>NOT AUTO-RECOMMENDED — weak signal (no directional edge)</strong><br>
+          Structurally valid (all gates pass). Not auto-traded because the signal is weak — use Override to place manually.
+        </div>
+
+        <div class="rej-reason" *ngIf="!tradeCard.skipDecision && tradeCard.rationale">
           <strong>Why rejected: </strong>{{ tradeCard.rationale }}
         </div>
 
@@ -318,12 +334,12 @@
 
           <div class="ob-fields-grid">
             <div class="ob-field">
-              <label class="ob-label">PE Short Strike (SELL)</label>
+              <label class="ob-label">{{ obOptionType }} Short Strike (SELL)</label>
               <input class="ob-input" type="number" step="50"
                      [(ngModel)]="obPeShortStrike" (ngModelChange)="onOverrideFieldChange()">
             </div>
             <div class="ob-field">
-              <label class="ob-label">PE Long Strike (BUY)</label>
+              <label class="ob-label">{{ obOptionType }} Long Strike (BUY)</label>
               <input class="ob-input" type="number" step="50"
                      [(ngModel)]="obPeLongStrike" (ngModelChange)="onOverrideFieldChange()">
             </div>
@@ -356,7 +372,7 @@
             <div class="ob-metric-row">
               <span class="ob-metric-key">Live LTP</span>
               <span class="ob-metric-val">
-                PE: ₹{{ overrideMetrics.peShortLtp | number:'1.2-2' }} / ₹{{ overrideMetrics.peLongLtp | number:'1.2-2' }}
+                {{ obOptionType }}: ₹{{ overrideMetrics.peShortLtp | number:'1.2-2' }} / ₹{{ overrideMetrics.peLongLtp | number:'1.2-2' }}
                 <ng-container *ngIf="overrideMetrics.ceShortLtp != null">
                   &nbsp;· CE: ₹{{ overrideMetrics.ceShortLtp | number:'1.2-2' }} / ₹{{ overrideMetrics.ceLongLtp | number:'1.2-2' }}
                 </ng-container>

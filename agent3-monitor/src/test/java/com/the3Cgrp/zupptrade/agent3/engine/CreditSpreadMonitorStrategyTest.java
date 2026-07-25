@@ -154,6 +154,88 @@ class CreditSpreadMonitorStrategyTest {
         assertThat(result.action()).isEqualTo(MonitorAction.WATCH);
     }
 
+    // ── Regression: CE short (bear call) — levels are STRIKE-anchored, not SPOT-anchored ──────────
+    // The user's concern: a favorable down-move must NOT drag T1/T2/T3 toward the falling market
+    // (which would cut a winner early). Proof in two parts: (1) the recomputed Nifty levels are a
+    // function of the SHORT STRIKE + live IV + DTE — never current spot; (2) the exit decision runs
+    // off live PoP, which RISES on a favorable move, so a winner cannot trip WATCH/READJUST/EXIT.
+
+    // Spot drops 300 pts (deeper into profit) with IV & DTE held constant → levels identical, action HOLD.
+    @Test
+    void evaluate_bearCall_favorableDownMove_levelsUnchanged_andHolds() {
+        BigDecimal iv = new BigDecimal("0.15");
+        int dte = 5;
+
+        // Same strikes/IV/DTE; only spot changes — isolates the spot channel. (IV/DTE are the
+        // legitimate level movers and are covered by the separate DTE-decay test below.)
+        EvaluationResult near = strategy.evaluate(buildBearCallContext(23500.0, 15.0, iv, dte));
+        EvaluationResult far  = strategy.evaluate(buildBearCallContext(23200.0, 15.0, iv, dte)); // 300 pts lower
+
+        // 1. Winner is NOT cut early — both HOLD (live PoP rises as spot falls away from the CE short)
+        assertThat(near.action()).isEqualTo(MonitorAction.HOLD);
+        assertThat(far.action()).isEqualTo(MonitorAction.HOLD);
+
+        // 2. Strike-anchored — the recomputed Nifty levels are byte-for-byte identical despite the
+        //    300-pt spot drop. If levels were spot-anchored, they would have moved ~300 pts lower.
+        assertThat(level(far, "liveT1NiftyLevel")).isEqualByComparingTo(level(near, "liveT1NiftyLevel"));
+        assertThat(level(far, "liveT2NiftyLevel")).isEqualByComparingTo(level(near, "liveT2NiftyLevel"));
+        assertThat(level(far, "liveT3NiftyLevel")).isEqualByComparingTo(level(near, "liveT3NiftyLevel"));
+
+        // 3. Sanity — CE ladder sits BELOW the short strike (24000), ordered T1 < T2 < T3 (T3 closest)
+        BigDecimal t1 = level(near, "liveT1NiftyLevel");
+        BigDecimal t2 = level(near, "liveT2NiftyLevel");
+        BigDecimal t3 = level(near, "liveT3NiftyLevel");
+        assertThat(t3).isLessThan(BigDecimal.valueOf(24000));
+        assertThat(t1).isLessThan(t2);
+        assertThat(t2).isLessThan(t3);
+    }
+
+    // Complement: levels DO respond to the legitimate movers — as DTE decays, the CE ladder tightens
+    // (rises) toward the strike. This guards against anyone "fixing" strike-anchoring by freezing the
+    // levels entirely, which would disable the near-expiry gamma tightening.
+    @Test
+    void evaluate_bearCall_levelsTightenTowardStrike_asDteDecays() {
+        BigDecimal iv = new BigDecimal("0.15");
+        EvaluationResult far  = strategy.evaluate(buildBearCallContext(23500.0, 15.0, iv, 5)); // 5 DTE
+        EvaluationResult near = strategy.evaluate(buildBearCallContext(23500.0, 15.0, iv, 1)); // 1 DTE
+
+        // CE levels sit below the strike and rise toward it (tighten) as expiry approaches.
+        assertThat(level(near, "liveT3NiftyLevel"))
+                .isGreaterThan(level(far, "liveT3NiftyLevel"));
+    }
+
+    private MonitorEvaluationContext buildBearCallContext(double spot, double vix, BigDecimal iv, int dte) {
+        LiveMarketSnapshot liveData = new LiveMarketSnapshot(
+                BigDecimal.valueOf(spot), BigDecimal.valueOf(vix),
+                new BigDecimal("30.00"),   // short CE LTP (decayed → trade in profit)
+                new BigDecimal("15.00"),   // long CE LTP
+                iv);
+        return new MonitorEvaluationContext(buildBearCallConfig(), liveData, dte, null, null);
+    }
+
+    // Bear call: short CE 24000 / long CE 24100. Entry seller PoP 0.82 → ladder targets 0.7175/0.656/0.584.
+    private MonitorConfigDto buildBearCallConfig() {
+        TradeLegDto shortLeg = new TradeLegDto(OptionType.CE, 24000, new BigDecimal("40.00"),
+                LegAction.SELL, new BigDecimal("0.150"), new BigDecimal("0.180"), null);
+        TradeLegDto longLeg = new TradeLegDto(OptionType.CE, 24100, new BigDecimal("18.00"),
+                LegAction.BUY, new BigDecimal("0.110"), new BigDecimal("0.140"), null);
+        MonitorThresholdsDto thr = MonitorThresholdsDto.twoLegCredit(
+                new BigDecimal("23875"), new BigDecimal("23900"), new BigDecimal("23925"),
+                new BigDecimal("67138.00"), new BigDecimal("134277.00"),
+                new BigDecimal("0.82"));   // entry seller PoP — Agent 3 recompute source
+        return MonitorConfigDto.twoLeg(
+                UUID.randomUUID(), Strategy.BEAR_CALL_SPREAD, SpreadDirection.CREDIT,
+                shortLeg, longLeg, new BigDecimal("22.00"), 54, 65,
+                new BigDecimal("77220"), new BigDecimal("273780"), false, null,
+                thr, LocalDate.now().plusDays(5), 5);
+    }
+
+    private static BigDecimal level(EvaluationResult r, String key) {
+        Object v = r.detail().get(key);
+        assertThat(v).as("detail[%s] must be present (ladder computed)", key).isInstanceOf(BigDecimal.class);
+        return (BigDecimal) v;
+    }
+
     private MonitorEvaluationContext buildContext(double spot, double vix,
                                                    double shortLtp, double longLtp,
                                                    double shortIv, int dte) {

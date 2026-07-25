@@ -1,16 +1,16 @@
 package com.the3Cgrp.zupptrade.agent5.client;
 
 import com.the3Cgrp.zupptrade.agent5.client.request.MarginCheckRequest;
-import com.the3Cgrp.zupptrade.agent5.client.request.MultiOrderRequest;
+import com.the3Cgrp.zupptrade.agent5.client.request.PlaceOrderV3Request;
 import com.the3Cgrp.zupptrade.agent5.client.response.FundsAndMarginResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.MarginCheckResponse;
-import com.the3Cgrp.zupptrade.agent5.client.response.MultiOrderResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.OrderStatusResponse;
-import com.the3Cgrp.zupptrade.core.upstox.model.UpstoxApiResponse;
+import com.the3Cgrp.zupptrade.agent5.client.response.PlaceOrderV3Response;
+import com.the3Cgrp.zupptrade.agent5.client.response.TaggedOrdersResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
@@ -20,34 +20,48 @@ import static net.logstash.logback.argument.StructuredArguments.kv;
 /**
  * Thin HTTP client for all Upstox order and margin operations.
  *
- * Uses TWO RestClient beans from core-module's UpstoxAutoConfiguration:
- *   upstoxRestClient      → api.upstox.com         (margin check — production token)
- *   upstoxOrderRestClient → api-hft.upstox.com      (orders — production token)
- *                        or api-sandbox.upstox.com   (orders — sandbox token, sandbox profile)
+ * Order placement / modify / cancel use the Upstox v3 order APIs (v2 order endpoints are not
+ * served on the sandbox host, and v3 is the current standard). Order reads (status, by-tag) stay
+ * on /v2/order/details — there is no v3 read endpoint.
  *
- * Responsibilities: HTTP only — serialisation, retry on 5xx, logging.
- * Business logic (polling, rollback, slippage) lives in TradeExecutionService.
+ * Uses THREE RestClient beans from core-module's UpstoxAutoConfiguration:
+ *   upstoxRestClient          → api.upstox.com       (margin + funds — production token)
+ *   upstoxOrderRestClient     → api-hft.upstox.com   (place/modify/cancel — prod token)
+ *                            or api-sandbox.upstox.com (place/modify/cancel — sandbox token)
+ *   upstoxOrderReadRestClient → api.upstox.com       (order status + history — prod token)
+ *                            or api-sandbox.upstox.com (order status + history — sandbox token)
+ *   Order reads are NOT served on the HFT placement host, hence the separate read client.
+ *
+ * Responsibilities: HTTP only — serialisation, retry on transient errors, logging.
+ * Business logic (polling, rollback, slippage, reconcile) lives in TradeExecutionService.
  */
 @Component
 public class UpstoxOrderClient {
 
     private static final Logger log = LoggerFactory.getLogger(UpstoxOrderClient.class);
 
-    private static final String MULTI_PLACE_URI  = "/v2/order/multi/place";
-    private static final String ORDER_STATUS_URI = "/v2/order/details";
-    private static final String MODIFY_ORDER_URI = "/v2/order/modify";
-    private static final String CANCEL_ORDER_URI = "/v2/order/cancel";
+    private static final String PLACE_ORDER_URI   = "/v3/order/place";
+    private static final String ORDER_STATUS_URI  = "/v2/order/details";   // single order by order_id — no v3 variant
+    private static final String ORDER_HISTORY_URI = "/v2/order/history";   // by-tag lookup lives here, not /details
+    private static final String MODIFY_ORDER_URI  = "/v3/order/modify";
+    private static final String CANCEL_ORDER_URI = "/v3/order/cancel";
     private static final String MARGIN_CHECK_URI = "/v2/charges/margin";
-    private static final String FUNDS_MARGIN_URI  = "/v2/user/fund-and-margin";
+    private static final String FUNDS_MARGIN_URI = "/v2/user/get-funds-and-margin";
 
-    private final RestClient marketRestClient;  // for margin check
-    private final RestClient orderRestClient;   // for order placement / modify / cancel
+    private final RestClient marketRestClient;     // margin + funds (api.upstox.com)
+    private final RestClient orderRestClient;      // order place/modify/cancel (api-hft / api-sandbox)
+    private final RestClient orderReadRestClient;  // order reads: status + history (api.upstox.com / api-sandbox)
+    private final long       retryDelayMs;         // fixed backoff between retries of idempotent calls
 
     public UpstoxOrderClient(
-            @Qualifier("upstoxRestClient")      RestClient marketRestClient,
-            @Qualifier("upstoxOrderRestClient") RestClient orderRestClient) {
-        this.marketRestClient = marketRestClient;
-        this.orderRestClient  = orderRestClient;
+            @Qualifier("upstoxRestClient")          RestClient marketRestClient,
+            @Qualifier("upstoxOrderRestClient")     RestClient orderRestClient,
+            @Qualifier("upstoxOrderReadRestClient") RestClient orderReadRestClient,
+            @Value("${upstox.api.retry-delay-ms:2000}") long retryDelayMs) {
+        this.marketRestClient    = marketRestClient;
+        this.orderRestClient     = orderRestClient;
+        this.orderReadRestClient = orderReadRestClient;
+        this.retryDelayMs        = retryDelayMs;
     }
 
     // ── Margin check (api.upstox.com) ──────────────────────────────────────
@@ -92,38 +106,41 @@ public class UpstoxOrderClient {
         return response;
     }
 
-    // ── Multi-order placement (upstoxOrderRestClient) ───────────────────────
+    // ── Place single order — V3 (upstoxOrderRestClient) ─────────────────────
 
-    public MultiOrderResponse placeMultiOrder(MultiOrderRequest request) {
-        log.info("upstox.multi.place", kv("legCount", request.orders().size()));
+    /**
+     * Places ONE order (one leg). We never slice, so a successful response carries exactly one
+     * order_id. NEVER retried: a 5xx/timeout does not prove the order failed to reach the exchange,
+     * so a retry could duplicate it — the caller reconciles by tag instead (an ambiguous failure
+     * throws UpstoxOrderException with ambiguous=true).
+     */
+    public PlaceOrderV3Response placeOrder(PlaceOrderV3Request request) {
+        log.info("upstox.order.place",
+                kv("instrument", request.instrumentToken()), kv("txn", request.transactionType()),
+                kv("qty", request.quantity()), kv("tag", request.tag()));
 
-        MultiOrderResponse response = withRetry("placeMultiOrder",
+        PlaceOrderV3Response response = withRetry("placeOrder", 1,
                 () -> orderRestClient.post()
-                        .uri(MULTI_PLACE_URI)
+                        .uri(PLACE_ORDER_URI)
                         .body(request)
                         .retrieve()
-                        .body(MultiOrderResponse.class));
+                        .body(PlaceOrderV3Response.class));
 
         if (response == null || !response.isApiSuccess()) {
-            throw new UpstoxOrderException("Multi-order placement returned null or error response");
+            throw new UpstoxOrderException("Order placement returned null or error response");
         }
 
-        log.info("upstox.multi.place.result",
-                kv("total", response.summary() != null ? response.summary().total() : 0),
-                kv("success", response.summary() != null ? response.summary().success() : 0),
-                kv("error", response.summary() != null ? response.summary().error() : 0),
-                kv("payloadError", response.summary() != null ? response.summary().payloadError() : 0));
-
+        log.info("upstox.order.place.result orderIds={}", response.orderIds());
         return response;
     }
 
-    // ── Order status (upstoxOrderRestClient) ────────────────────────────────
+    // ── Order status by order_id — v2 read (upstoxOrderRestClient) ───────────
 
     public OrderStatusResponse getOrderStatus(String orderId) {
         log.debug("upstox.order.status", kv("orderId", orderId));
 
         OrderStatusResponse response = withRetry("getOrderStatus",
-                () -> orderRestClient.get()
+                () -> orderReadRestClient.get()
                         .uri(ORDER_STATUS_URI + "?order_id={id}", orderId)
                         .retrieve()
                         .body(OrderStatusResponse.class));
@@ -134,7 +151,31 @@ public class UpstoxOrderClient {
         return response;
     }
 
-    // ── Modify LIMIT → MARKET (upstoxOrderRestClient) ───────────────────────
+    // ── Order lookup by tag — v2 read (upstoxOrderRestClient) ────────────────
+
+    /**
+     * Fetches orders placed under one (unique per-leg) tag via the Order History API — by-tag
+     * lookup lives on /v2/order/history, NOT /v2/order/details (which keys on order_id only).
+     * Idempotent GET — safe to retry. Used by the ambiguous-placement-failure reconciler to
+     * discover what actually landed. History may return multiple rows per order (state
+     * progression); the reconciler dedups by order_id and re-reads each by order_id.
+     */
+    public TaggedOrdersResponse getOrderDetailsByTag(String tag) {
+        log.info("upstox.order.by_tag", kv("tag", tag));
+
+        TaggedOrdersResponse response = withRetry("getOrderDetailsByTag",
+                () -> orderReadRestClient.get()
+                        .uri(ORDER_HISTORY_URI + "?tag={tag}", tag)
+                        .retrieve()
+                        .body(TaggedOrdersResponse.class));
+
+        if (response == null) {
+            throw new UpstoxOrderException("Order-by-tag returned null for tag=" + tag);
+        }
+        return response;
+    }
+
+    // ── Modify LIMIT → MARKET — V3 (upstoxOrderRestClient) ──────────────────
 
     public void modifyToMarket(String orderId, int quantity) {
         log.info("upstox.order.modify.market", kv("orderId", orderId), kv("quantity", quantity));
@@ -142,12 +183,12 @@ public class UpstoxOrderClient {
         withRetry("modifyToMarket",
                 () -> orderRestClient.put()
                         .uri(MODIFY_ORDER_URI)
-                        .body(new ModifyRequest(orderId, "MARKET", "DAY", 0.0, quantity, 0, 0.0))
+                        .body(new ModifyV3Request(orderId, "MARKET", "DAY", 0.0, quantity, 0, 0.0))
                         .retrieve()
                         .body(String.class));
     }
 
-    // ── Cancel order (upstoxOrderRestClient) ────────────────────────────────
+    // ── Cancel order — V3 (upstoxOrderRestClient) ───────────────────────────
 
     public void cancelOrder(String orderId) {
         log.info("upstox.order.cancel", kv("orderId", orderId));
@@ -159,51 +200,94 @@ public class UpstoxOrderClient {
                         .body(String.class));
     }
 
-    // ── Inline modify request ────────────────────────────────────────────────
+    // ── Inline V3 modify request ─────────────────────────────────────────────
 
-    private record ModifyRequest(
-            @com.fasterxml.jackson.annotation.JsonProperty("order_id")        String orderId,
-            @com.fasterxml.jackson.annotation.JsonProperty("order_type")       String orderType,
-            @com.fasterxml.jackson.annotation.JsonProperty("validity")         String validity,
-            @com.fasterxml.jackson.annotation.JsonProperty("price")            double price,
-            @com.fasterxml.jackson.annotation.JsonProperty("quantity")         int quantity,
+    private record ModifyV3Request(
+            @com.fasterxml.jackson.annotation.JsonProperty("order_id")           String orderId,
+            @com.fasterxml.jackson.annotation.JsonProperty("order_type")         String orderType,
+            @com.fasterxml.jackson.annotation.JsonProperty("validity")           String validity,
+            @com.fasterxml.jackson.annotation.JsonProperty("price")              double price,
+            @com.fasterxml.jackson.annotation.JsonProperty("quantity")           int quantity,
             @com.fasterxml.jackson.annotation.JsonProperty("disclosed_quantity") int disclosedQuantity,
-            @com.fasterxml.jackson.annotation.JsonProperty("trigger_price")    double triggerPrice
+            @com.fasterxml.jackson.annotation.JsonProperty("trigger_price")      double triggerPrice
     ) {}
 
     // ── Retry wrapper ────────────────────────────────────────────────────────
 
     private <T> T withRetry(String operation, java.util.concurrent.Callable<T> call) {
-        int maxRetries = 3;
+        return withRetry(operation, 3, call);
+    }
+
+    /**
+     * Retry wrapper. {@code maxAttempts} is the total number of attempts (1 = no retry).
+     * Use maxAttempts = 1 for non-idempotent operations (order placement) where a retry could
+     * duplicate a side effect; the default 3 is for idempotent reads (status, tag, margin) + cancel.
+     *
+     * Retryable failures: 429 (rate limit), 5xx, network/timeout — separated by a fixed
+     * {@code retryDelayMs} backoff so a transient blip is ridden out rather than escalated.
+     * Non-transient 4xx (400/401/403/404 …) throw immediately with ambiguous=false (deterministic —
+     * nothing was placed). A failure after exhausting retries throws ambiguous=true (the outcome is
+     * unknown — a placement may or may not have reached the exchange).
+     */
+    private <T> T withRetry(String operation, int maxAttempts, java.util.concurrent.Callable<T> call) {
         Exception last = null;
-        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
                 return call.call();
             } catch (RestClientResponseException e) {
-                if (e.getStatusCode().is4xxClientError()) {
+                boolean rateLimited = e.getStatusCode().value() == 429;
+                if (e.getStatusCode().is4xxClientError() && !rateLimited) {
+                    // Non-transient client error — deterministic, nothing placed.
                     log.error("upstox.client.error",
                             kv("operation", operation),
                             kv("status", e.getStatusCode().value()),
                             kv("body", e.getResponseBodyAsString()));
                     throw new UpstoxOrderException(
-                            operation + " failed with " + e.getStatusCode() + ": " + e.getResponseBodyAsString(), e);
+                            operation + " failed with " + e.getStatusCode() + ": " + e.getResponseBodyAsString(),
+                            e, false);
                 }
-                last = e;
-                log.warn("upstox.server.error.retry",
+                last = e;   // 429 or 5xx — retryable
+                log.warn("upstox.retryable.error",
                         kv("operation", operation), kv("attempt", attempt), kv("status", e.getStatusCode().value()));
             } catch (Exception e) {
-                last = e;
+                last = e;   // network / timeout — retryable
                 log.warn("upstox.error.retry",
                         kv("operation", operation), kv("attempt", attempt), kv("error", e.getMessage()));
             }
+            if (attempt < maxAttempts) {
+                sleep(retryDelayMs);
+            }
         }
-        throw new UpstoxOrderException(operation + " failed after " + maxRetries + " attempts", last);
+        // Exhausted retries — outcome unknown (ambiguous).
+        throw new UpstoxOrderException(operation + " failed after " + maxAttempts + " attempts", last, true);
+    }
+
+    private void sleep(long ms) {
+        if (ms <= 0) return;
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     // ── Exception ────────────────────────────────────────────────────────────
 
+    /**
+     * {@code ambiguous} = we cannot be sure whether the request took effect on the exchange
+     * (5xx/timeout/network after retries). false = a deterministic 4xx rejection (nothing placed).
+     * Order placement callers use this to decide reconcile-by-tag (ambiguous) vs clean reject.
+     */
     public static class UpstoxOrderException extends RuntimeException {
-        public UpstoxOrderException(String msg) { super(msg); }
-        public UpstoxOrderException(String msg, Throwable cause) { super(msg, cause); }
+        private final boolean ambiguous;
+
+        public UpstoxOrderException(String msg) { this(msg, null, true); }
+        public UpstoxOrderException(String msg, Throwable cause) { this(msg, cause, true); }
+        public UpstoxOrderException(String msg, Throwable cause, boolean ambiguous) {
+            super(msg, cause);
+            this.ambiguous = ambiguous;
+        }
+
+        public boolean isAmbiguous() { return ambiguous; }
     }
 }

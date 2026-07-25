@@ -1,0 +1,875 @@
+<title>ZuppTrade — System Test Matrix</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --ground: #F7F8F7; --surface: #FFFFFF; --surface-2: #F1F3F2;
+    --ink: #1A1D1C; --ink-soft: #4A524E; --ink-faint: #7C857F;
+    --line: #E2E5E3; --line-soft: #EDEFEE;
+    --accent: #0E7C6B; --accent-soft: #E2F0ED;
+    --ok: #2F855A; --ok-bg: #E6F2EA;
+    --live: #9C6B12; --live-bg: #FBF0DA;
+    --unit: #4356A8; --unit-bg: #E7EAF8;
+    --gap: #C0392B; --gap-bg: #FBE6E3;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, "Liberation Mono", monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #12161A; --surface: #171C21; --surface-2: #1D242A;
+      --ink: #E6EAE8; --ink-soft: #A9B2AE; --ink-faint: #737C78;
+      --line: #262D33; --line-soft: #1F262B;
+      --accent: #34C3AA; --accent-soft: #133029;
+      --ok: #57B27E; --ok-bg: #10241A;
+      --live: #D9AC4C; --live-bg: #2A2110;
+      --unit: #8496E8; --unit-bg: #171d38;
+      --gap: #E8796B; --gap-bg: #2C1512;
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #F7F8F7; --surface: #FFFFFF; --surface-2: #F1F3F2;
+    --ink: #1A1D1C; --ink-soft: #4A524E; --ink-faint: #7C857F;
+    --line: #E2E5E3; --line-soft: #EDEFEE;
+    --accent: #0E7C6B; --accent-soft: #E2F0ED;
+    --ok: #2F855A; --ok-bg: #E6F2EA; --live: #9C6B12; --live-bg: #FBF0DA;
+    --unit: #4356A8; --unit-bg: #E7EAF8; --gap: #C0392B; --gap-bg: #FBE6E3;
+  }
+  :root[data-theme="dark"] {
+    --ground: #12161A; --surface: #171C21; --surface-2: #1D242A;
+    --ink: #E6EAE8; --ink-soft: #A9B2AE; --ink-faint: #737C78;
+    --line: #262D33; --line-soft: #1F262B;
+    --accent: #34C3AA; --accent-soft: #133029;
+    --ok: #57B27E; --ok-bg: #10241A; --live: #D9AC4C; --live-bg: #2A2110;
+    --unit: #8496E8; --unit-bg: #171d38; --gap: #E8796B; --gap-bg: #2C1512;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--sans); line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+  /* ── Masthead ── */
+  header.mast { padding: 56px 0 30px; border-bottom: 1px solid var(--line); }
+  .eyebrow {
+    font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 650; margin: 0 0 14px;
+  }
+  h1 { font-size: clamp(28px, 4vw, 44px); line-height: 1.08; margin: 0 0 14px;
+       letter-spacing: -.02em; text-wrap: balance; font-weight: 680; }
+  .lede { font-size: 17px; color: var(--ink-soft); max-width: 68ch; margin: 0; }
+  .meta { margin-top: 20px; font-size: 13px; color: var(--ink-faint);
+          font-family: var(--mono); display: flex; gap: 20px; flex-wrap: wrap; }
+
+  /* ── Summary cards ── */
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr));
+           gap: 12px; margin: 28px 0 8px; }
+  .card { background: var(--surface); border: 1px solid var(--line);
+          border-radius: 10px; padding: 16px 18px; }
+  .card .n { font-size: 30px; font-weight: 680; font-family: var(--mono);
+             letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .card .k { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; }
+  .card.ok .n { color: var(--ok); } .card.live .n { color: var(--live); }
+  .card.unit .n { color: var(--unit); } .card.gap .n { color: var(--gap); }
+
+  /* ── Sticky nav ── */
+  nav.toc {
+    position: sticky; top: 0; z-index: 20; background: var(--ground);
+    border-bottom: 1px solid var(--line); padding: 10px 0;
+    margin-top: 26px;
+  }
+  nav.toc .wrap { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  nav.toc a {
+    font-size: 13px; color: var(--ink-soft); text-decoration: none;
+    padding: 5px 11px; border-radius: 999px; border: 1px solid transparent;
+    white-space: nowrap;
+  }
+  nav.toc a:hover { color: var(--ink); background: var(--surface-2); }
+  nav.toc a.active { color: var(--accent); border-color: var(--accent);
+                     background: var(--accent-soft); font-weight: 600; }
+
+  /* ── Legend / filter ── */
+  .legend { display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+            margin: 26px 0 4px; }
+  .legend .lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .1em;
+                 color: var(--ink-faint); margin-right: 4px; }
+  .fbtn {
+    font-family: var(--sans); font-size: 12.5px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface); color: var(--ink-soft);
+    padding: 5px 12px; border-radius: 999px; display: inline-flex; gap: 7px; align-items: center;
+  }
+  .fbtn:hover { border-color: var(--accent); color: var(--ink); }
+  .fbtn[aria-pressed="true"] { border-color: var(--accent); color: var(--ink);
+                               background: var(--accent-soft); font-weight: 600; }
+  .fbtn .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .dot.ok { background: var(--ok); } .dot.live { background: var(--live); }
+  .dot.unit { background: var(--unit); } .dot.gap { background: var(--gap); }
+
+  /* ── Sections ── */
+  section.mod { padding: 40px 0 8px; scroll-margin-top: 60px; }
+  .mod-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+              border-bottom: 2px solid var(--accent); padding-bottom: 10px; margin-bottom: 6px; }
+  .mod-head h2 { font-size: 23px; margin: 0; letter-spacing: -.01em; font-weight: 660; }
+  .mod-head .tag { font-family: var(--mono); font-size: 12px; color: var(--accent);
+                   border: 1px solid var(--accent); border-radius: 6px; padding: 2px 8px; }
+  .mod-intro { color: var(--ink-soft); font-size: 15px; max-width: 76ch; margin: 14px 0 6px; }
+  .mod-intro strong { color: var(--ink); font-weight: 620; }
+
+  .grp-title { font-size: 14.5px; font-weight: 640; margin: 26px 0 10px;
+               color: var(--ink); display: flex; align-items: center; gap: 9px; }
+  .grp-title .gid { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+
+  /* ── Tables ── */
+  .twrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px;
+           background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; min-width: 860px; }
+  thead th {
+    text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--ink-faint); font-weight: 650; padding: 11px 14px;
+    border-bottom: 1px solid var(--line); background: var(--surface-2); position: sticky; top: 0;
+  }
+  tbody td { padding: 12px 14px; border-bottom: 1px solid var(--line-soft);
+             vertical-align: top; color: var(--ink-soft); }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--surface-2); }
+  td.id { font-family: var(--mono); font-size: 12px; color: var(--ink); white-space: nowrap; font-weight: 600; }
+  td.what { color: var(--ink); font-weight: 500; }
+  td .rule { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint);
+             display: block; margin-top: 5px; }
+  code { font-family: var(--mono); font-size: .92em; background: var(--surface-2);
+         padding: 1px 5px; border-radius: 4px; color: var(--ink); }
+  .exp { color: var(--ink); }
+
+  /* state chip */
+  .chip { font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: .04em;
+          padding: 3px 8px; border-radius: 5px; white-space: nowrap; text-transform: uppercase; }
+  .chip.ok { color: var(--ok); background: var(--ok-bg); }
+  .chip.live { color: var(--live); background: var(--live-bg); }
+  .chip.unit { color: var(--unit); background: var(--unit-bg); }
+  .chip.gap { color: var(--gap); background: var(--gap-bg); }
+  tr.hidden { display: none; }
+
+  /* ── Concerns map ── */
+  .concerns { background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+              padding: 8px 4px; margin-top: 20px; }
+
+  /* ── Flaws ── */
+  section.flaws { padding: 44px 0 20px; scroll-margin-top: 60px; }
+  .flaw { background: var(--surface); border: 1px solid var(--line);
+          border-left: 4px solid var(--gap); border-radius: 8px;
+          padding: 16px 20px; margin-bottom: 14px; }
+  .flaw.warn { border-left-color: var(--live); }
+  .flaw h4 { margin: 0 0 6px; font-size: 15.5px; color: var(--ink); display: flex; gap: 10px; align-items: baseline; }
+  .flaw h4 .fid { font-family: var(--mono); font-size: 12px; color: var(--gap); }
+  .flaw.warn h4 .fid { color: var(--live); }
+  .flaw p { margin: 6px 0 0; font-size: 14px; color: var(--ink-soft); max-width: 82ch; }
+  .flaw .sev { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+               letter-spacing: .05em; padding: 2px 7px; border-radius: 4px;
+               background: var(--gap-bg); color: var(--gap); font-weight: 700; }
+  .flaw.warn .sev { background: var(--live-bg); color: var(--live); }
+  .flaw .fix { margin-top: 9px; font-size: 13px; color: var(--ink-soft); }
+  .flaw .fix b { color: var(--ink); font-weight: 620; }
+
+  footer { border-top: 1px solid var(--line); margin-top: 40px; padding: 26px 0 60px;
+           color: var(--ink-faint); font-size: 13px; }
+
+  @media (max-width: 640px) {
+    .meta { gap: 10px; } header.mast { padding: 40px 0 24px; }
+  }
+</style>
+
+<header class="mast">
+  <div class="wrap">
+    <p class="eyebrow">ZuppTrade · Nifty Options System · QA Reference</p>
+    <h1>System Test Matrix — what each module must do, and how we prove it</h1>
+    <p class="lede">A single auditable inventory of test scenarios across all six agents. Every row states the
+      rule, the concrete input, the expected outcome, and — honestly — whether we can actually test it today.
+      Built by scanning the engine code and seed data, not from memory, so the expected-outcome column reflects
+      what the code does now, including where that diverges from the spec.</p>
+    <div class="meta">
+      <span>Base pkg · com.the3Cgrp.zupptrade</span>
+      <span>Seeds · 01–05 + curl S1–S6</span>
+      <span>Source of truth · GateValidator, StrategySelector, monitor strategies</span>
+    </div>
+
+    <div class="cards">
+      <div class="card"><div class="n">167</div><div class="k">documented scenarios</div></div>
+      <div class="card ok"><div class="n">51</div><div class="k">offline-testable now</div></div>
+      <div class="card live"><div class="n">22</div><div class="k">need live market / Upstox</div></div>
+      <div class="card unit"><div class="n">56</div><div class="k">unit-test only</div></div>
+      <div class="card gap"><div class="n">38</div><div class="k">coverage gaps</div></div>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap" id="tocInner">
+    <a href="#concerns">Your 11 concerns</a>
+    <a href="#a1">Agent 1 · Signal</a>
+    <a href="#a2">Agent 2 · Recommend</a>
+    <a href="#a3">Agent 3 · Monitor</a>
+    <a href="#a5">Agent 5 · Execute</a>
+    <a href="#ledger">Ledger</a>
+    <a href="#a4">Agent 4 · Audit</a>
+    <a href="#cross">Cross-cutting</a>
+    <a href="#edges">Boundaries &amp; state</a>
+    <a href="#resilience">Concurrency &amp; resilience</a>
+    <a href="#integrity">Data · money · calendar</a>
+    <a href="#portfolio">Portfolio &amp; guards</a>
+    <a href="#flaws">Flaws &amp; gaps</a>
+  </div>
+</nav>
+
+<div class="wrap">
+
+  <div class="legend">
+    <span class="lbl">Filter coverage</span>
+    <button class="fbtn" data-f="all" aria-pressed="true">All</button>
+    <button class="fbtn" data-f="ok" aria-pressed="false"><span class="dot ok"></span>Offline now</button>
+    <button class="fbtn" data-f="live" aria-pressed="false"><span class="dot live"></span>Needs live market</button>
+    <button class="fbtn" data-f="unit" aria-pressed="false"><span class="dot unit"></span>Unit only</button>
+    <button class="fbtn" data-f="gap" aria-pressed="false"><span class="dot gap"></span>Gap</button>
+  </div>
+  <p style="font-size:12.5px;color:var(--ink-faint);margin:8px 2px 0">
+    <b style="color:var(--ok)">Offline</b> = runs today against seeds 01–05 with the <code>niftySpot</code>/spot-override
+    bodies, no market hours. <b style="color:var(--live)">Live</b> = needs a valid Upstox token and/or the 09:15–15:30 scheduler window.
+    <b style="color:var(--unit)">Unit</b> = exercised only by JUnit, never end-to-end. <b style="color:var(--gap)">Gap</b> = no automated test exists yet.
+  </p>
+
+  <!-- ══════════════ CONCERNS MAP ══════════════ -->
+  <section class="mod" id="concerns" style="padding-top:30px">
+    <div class="mod-head"><h2>Your 11 concerns → where they live</h2></div>
+    <p class="mod-intro">Your list mapped to the test groups below, so you can confirm each one is covered — and see
+      the four that currently have no automated path.</p>
+    <div class="twrap concerns">
+      <table>
+        <thead><tr><th>#</th><th>Your concern</th><th>Test group(s)</th><th>Coverage</th></tr></thead>
+        <tbody>
+          <tr><td class="id">1</td><td class="what">Vary each input, check the signal reacts</td><td>A1-G2 (per-signal), A1-G1 (bias map)</td><td><span class="chip unit">unit</span> <span class="chip live">live</span></td></tr>
+          <tr><td class="id">2</td><td class="what">Trade recommendation with pass/fail per gate</td><td>A2-G2, A2-G3</td><td><span class="chip unit">unit</span> <span class="chip live">live</span></td></tr>
+          <tr><td class="id">3</td><td class="what">Lot override produces right output</td><td>A2-G5</td><td><span class="chip ok">offline</span></td></tr>
+          <tr><td class="id">4</td><td class="what">User profile picked up & adjusts recommendation</td><td>A2-G4, A2-G6</td><td><span class="chip unit">unit</span> <span class="chip live">live</span></td></tr>
+          <tr><td class="id">5</td><td class="what">Execution permutations (low balance, partial, timeout)</td><td>A5-G1…G6</td><td><span class="chip ok">offline</span> <span class="chip live">live</span></td></tr>
+          <tr><td class="id">6</td><td class="what">T1/T2/T3 change with underlying params</td><td>A2-G8, A3-G10</td><td><span class="chip unit">unit</span> <span class="chip live">live</span></td></tr>
+          <tr><td class="id">7</td><td class="what">Watch level hit → desired action</td><td>A3-G1…G5</td><td><span class="chip ok">offline</span></td></tr>
+          <tr><td class="id">8</td><td class="what">Monitoring records to DB</td><td>A3-G6</td><td><span class="chip ok">offline</span></td></tr>
+          <tr><td class="id">9</td><td class="what">Externally deleted trade handled by monitor</td><td>A3-G8</td><td><span class="chip gap">gap</span></td></tr>
+          <tr><td class="id">10</td><td class="what">Ledger entries correct</td><td>LG-G1…G5</td><td><span class="chip ok">offline</span> <span class="chip gap">gap</span></td></tr>
+          <tr><td class="id">11</td><td class="what">Audit calculates all trades properly</td><td>A4-G1…G6</td><td><span class="chip ok">offline</span> <span class="chip unit">unit</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ══════════════ AGENT 1 ══════════════ -->
+  <section class="mod" id="a1">
+    <div class="mod-head"><h2>Agent 1 — Market Direction</h2><span class="tag">port 8081</span></div>
+    <p class="mod-intro">Produces <strong>bias + strength + confidence</strong> from a 5-tier weighted score. The scoring
+      math is deterministic and unit-testable; <strong>full signal generation needs live Upstox + Marketaux + the LLM</strong>,
+      so end-to-end there is exactly one deterministic fixture (the 15-May backtest scenario). Reading the 12 seeded
+      signals (S01–S12) is a DB read-back, not a generation test — the distinction matters for concern #1.</p>
+
+    <div class="grp-title"><span class="gid">A1-G1</span> Composite score → bias / strength / confidence mapping</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Input (score, VIX)</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="ok"><td class="id">A1-01</td><td class="what">Bullish Extreme (S01)</td><td>score 0.62, VIX 15.2</td><td class="exp">score &gt; 0.50<span class="rule">bias map §7</span></td><td class="exp">BULLISH / EXTREME / HIGH</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A1-02</td><td class="what">Bullish Mild (S02)</td><td>score 0.38, VIX 20.5</td><td class="exp">0.25–0.50</td><td class="exp">BULLISH / MILD / MEDIUM</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A1-03</td><td class="what">Bullish Weak → treated Neutral (S04)</td><td>score 0.18</td><td class="exp">0.10–0.25 → A2 neutral path</td><td class="exp">BULLISH / WEAK / LOW</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A1-04</td><td class="what">Neutral Weak (S05/S06)</td><td>score 0.05 / 0.03</td><td class="exp">−0.10 … 0.10</td><td class="exp">NEUTRAL / WEAK</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A1-05</td><td class="what">Bearish Mild (S09)</td><td>score −0.35</td><td class="exp">−0.50 … −0.25</td><td class="exp">BEARISH / MILD / MEDIUM</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A1-06</td><td class="what">Bearish Extreme (S10)</td><td>score −0.58</td><td class="exp">&lt; −0.50</td><td class="exp">BEARISH / EXTREME / HIGH</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="live"><td class="id">A1-07</td><td class="what">Canonical generation fixture (backtest 15-May)</td><td>spot 23412.6, 20EMA 23900, PCR 1.17, FII long 0.11, DII 684Cr, VIX 18.61 (prev 19.43), Gift +70, sentiment −0.335</td><td class="exp">full pipeline → §18</td><td class="exp">NEUTRAL / WEAK, score ≈ 0.067, LOW</td><td><span class="chip live">live</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">A1-G2</span> Per-signal contribution — vary one input, confirm the tier moves (concern #1)</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Signal (tier)</th><th>Bullish (+1)</th><th>Bearish (−1)</th><th>Neutral (0)</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="unit"><td class="id">A1-10</td><td class="what">Spot vs 20/50/200 EMA (1A)</td><td>spot &gt; EMA</td><td>spot &lt; EMA</td><td>—</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A1-11</td><td class="what">Higher highs/lows 3d (1A)</td><td>HH + HL</td><td>LH + LL</td><td>mixed</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A1-12</td><td class="what">Futures premium (1A)</td><td>&gt; +20 pts</td><td>&lt; −20 pts</td><td>±20</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A1-13</td><td class="what">PCR (1A)</td><td>&gt; 1.2</td><td>&lt; 0.8</td><td>0.8–1.2</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A1-14</td><td class="what">Max pain vs spot (1A)</td><td>spot &lt; mid−100</td><td>spot &gt; mid+100</td><td>±100</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A1-15</td><td class="what">EMA crossovers 20/50, 50/200 (1B)</td><td>fast &gt; slow</td><td>fast &lt; slow</td><td>—</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A1-16</td><td class="what">RSI-14 (1B)</td><td>&gt; 60</td><td>&lt; 40</td><td>40–60</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A1-17</td><td class="what">MACD / candlestick (1B)</td><td>line &gt; signal / bull pattern</td><td>line &lt; signal / bear pattern</td><td>equal / none</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A1-18</td><td class="what">FII futures net, long ratio, options; DII (2)</td><td>&gt; +500Cr / &gt;60% / call buyer / &gt;+500Cr</td><td>&gt; −500Cr / &lt;40% / put buyer / &gt;−500Cr</td><td>within bands</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A1-19</td><td class="what">VIX 1d change, OI change, Gift Nifty (3)</td><td>&lt;−2% / put OI↑ / &gt;+50</td><td>&gt;+10% / call OI↑ / &lt;−50</td><td>between / ±50</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A1-20</td><td class="what">Marketaux sentiment, LLM bias (4)</td><td>avg &gt; 0.30 / bullish</td><td>avg &lt; −0.30 / bearish</td><td>between / neutral</td><td><span class="chip unit">unit</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">A1-G3</span> Modifiers, gaps &amp; robustness</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="unit"><td class="id">A1-30</td><td class="what">VIX confidence modifier</td><td>VIX &lt;13 / 13–18 / 18–24 / &gt;24</td><td class="exp">×1.10 / ×1.00 / ×0.85 / ×0.60</td><td class="exp">confidence scaled per band</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="ok"><td class="id">A1-31</td><td class="what">Data gaps (S11)</td><td>FII/DII missing</td><td class="exp">missing → score 0, log gap</td><td class="exp">tier2=0, data_gaps listed, LOW conf</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A1-32</td><td class="what">Commentary divergence (S12)</td><td>tiers 1–3 bull, tier 4 bear</td><td class="exp">×0.80 penalty</td><td class="exp">commentary_divergence=true, conf reduced</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="unit"><td class="id">A1-33</td><td class="what">LLM JSON parse failure</td><td>malformed model output</td><td class="exp">never throw → neutral()</td><td class="exp">tier4 score 0, pipeline completes</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="live"><td class="id">A1-34</td><td class="what">Marketaux fetch failure / rate limit</td><td>429 or empty</td><td class="exp">try-catch → gap</td><td class="exp">tier4 sentiment=0, logged</td><td><span class="chip live">live</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ══════════════ AGENT 2 ══════════════ -->
+  <section class="mod" id="a2">
+    <div class="mod-head"><h2>Agent 2 — Trade Recommendation</h2><span class="tag">port 8082</span></div>
+    <p class="mod-intro">Five layers: strategy select → expected move → strike select → gates → sizing. Two coverage
+      facts drive everything below. <strong>(a) <code>/recommend</code> needs a live option chain</strong> — the whole
+      pipeline has no offline integration path, only JUnit. <strong>(b) <code>/confirm</code> reads the stored
+      <code>gate_results</code> JSONB and does not recompute</strong> — so the seeded S2 tests prove the confirm
+      lifecycle, not the gate logic. Where the seeds' expected outcomes disagree with the current engine, that's
+      flagged in <a href="#flaws" style="color:var(--accent)">Flaws</a>.</p>
+
+    <div class="grp-title"><span class="gid">A2-G1</span> Strategy-selection matrix (concern #2, upstream)</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Bias · Strength · VIX · IV</th><th>Spec / seed says</th><th>Code actually returns</th><th>Expected (code)</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="unit"><td class="id">A2-01</td><td class="what">Bullish · Extreme · any · any</td><td>BullCallSpread</td><td>BULL_CALL_SPREAD (debit)</td><td class="exp">match</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-02</td><td class="what">Bullish · Mild · High/Normal · Rich</td><td>BullPutSpread</td><td>BULL_PUT_SPREAD (credit)</td><td class="exp">match</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-03</td><td class="what">Bullish · Mild · Low · any</td><td>—</td><td>BULL_CALL_SPREAD (debit)</td><td class="exp">cheap premium → debit</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-04</td><td class="what">Bearish · Mild/Extreme · High/Normal · Rich</td><td>BearCallSpread</td><td>BEAR_CALL_SPREAD (credit)</td><td class="exp">match</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-05</td><td class="what">Bearish · Extreme · High · Rich</td><td>BearPutSpread (seed T-211)</td><td>BEAR_CALL_SPREAD (credit)*</td><td class="exp">*debit only when VIX Low; else credit</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="gap"><td class="id">A2-06</td><td class="what">Neutral · Weak · High · Rich</td><td>IronCondor (seed T-204)</td><td>WIDE_IRON_CONDOR</td><td class="exp">mismatch — see F3</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">A2-07</td><td class="what">Neutral · Weak · Normal · Rich</td><td>ShortStraddle/Strangle (seed T-210)</td><td>IRON_CONDOR</td><td class="exp">mismatch — strangle unreachable, F3</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-08</td><td class="what">any · Weak · Low · Cheap</td><td>SKIP</td><td>SKIP → fallback → REJECTED (prod)</td><td class="exp">no trade</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="ok"><td class="id">A2-09</td><td class="what">VIX Extreme (S08)</td><td>SKIP, alert</td><td>NO_TRADE → REJECTED, alert</td><td class="exp">no trade regardless of bias</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-10</td><td class="what">Directional credit + Confidence LOW (S11/S12)</td><td>—</td><td>NO_TRADE at Layer 1</td><td class="exp">blocked before gates — see F10</td><td><span class="chip unit">unit</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">A2-G2</span> Credit gates — pass &amp; fail (concern #2)</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Gate</th><th>Rule (code)</th><th>Fail input</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="unit"><td class="id">A2-20</td><td class="what">G1 — seller PoP (HARD)</td><td class="exp">(1 − shortLeg.buyerPoP)×100 ≥ profile.minPop (80%)</td><td>ATM short, PoP 50% (T-205)</td><td class="exp">REJECT, G1 fail</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-21</td><td class="what">G2 — max loss (INDICATIVE)</td><td class="exp">never rejects; sizes lots only</td><td>n/a</td><td class="exp">always passed, informational</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-22</td><td class="what">G3 — PoP−PoPP gap (HARD)</td><td class="exp">|PoP − PoPP| ≤ profile.maxPopPoppGap (15%)</td><td>wide spread, gap 18%</td><td class="exp">REJECT, G3 fail</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-23</td><td class="what">G4 — min RoC (HARD, post-sizing)</td><td class="exp">RoC ≥ minRoc × (DTE/<b>7</b>) — spec says /5, see F4</td><td>width-50 spread, RoC 0.45% (T-206)</td><td class="exp">REJECT, G4 fail</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="ok"><td class="id">A2-24</td><td class="what">All gates pass → PENDING_CONFIRM (T-201)</td><td class="exp">4/4 hard gates pass</td><td>n/a (happy path)</td><td class="exp">trade card, gate_results all PASS</td><td><span class="chip ok">offline</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">A2-G3</span> Debit gates — pass &amp; fail <span class="gid">(code ≠ spec — see F2)</span></div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Gate</th><th>Rule (actual code)</th><th>Fail input</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="unit"><td class="id">A2-30</td><td class="what">G1D — reward:risk (HARD)</td><td class="exp">maxProfit / netDebit ≥ 1.4:1</td><td>R:R 1.1</td><td class="exp">REJECT</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-31</td><td class="what">G2D — breakeven distance (HARD)</td><td class="exp">|spot − breakeven| ≤ 100 pts</td><td>BEP 140 pts away</td><td class="exp">REJECT</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-32</td><td class="what">G3D — confidence (HARD)</td><td class="exp">confidence ≥ MEDIUM</td><td>LOW confidence signal</td><td class="exp">REJECT</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-33</td><td class="what">G4D — total debit (HARD, post-sizing)</td><td class="exp">total debit ≤ 0.5% capital</td><td>oversized debit</td><td class="exp">REJECT</td><td><span class="chip unit">unit</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">A2-G4</span> Position sizing per capital tier (concern #4)</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="unit"><td class="id">A2-40</td><td class="what">Loss-rule lots (5L/10L/50L/1Cr)</td><td>UP-01…04</td><td class="exp">floor(capital×1.5% ÷ (maxLossPerLot×0.5))</td><td class="exp">lots scale with capital</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-41</td><td class="what">Margin-cap binds</td><td>naked strangle, 50L</td><td class="exp">min(loss-rule lots, margin lots)</td><td class="exp">margin caps below loss-rule (T-210: 3 lots)</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-42</td><td class="what">Profile max-loss-pct override</td><td>custom max_loss_pct</td><td class="exp">capital × max_loss_pct</td><td class="exp">lots recompute from profile value</td><td><span class="chip unit">unit</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">A2-G5</span> Lot override on confirm (concern #3)</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="ok"><td class="id">A2-50</td><td class="what">Override reduces size (S2.7)</td><td>confirm T-203, overrideLots=5</td><td class="exp">execution_order uses override</td><td class="exp">lots=5 (not sized 8)</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A2-51</td><td class="what">No override → sized lots</td><td>confirm T-201, override null</td><td class="exp">use summary.lots</td><td class="exp">lots=8</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="gap"><td class="id">A2-52</td><td class="what">Override above margin capacity</td><td>overrideLots huge</td><td class="exp">should re-check margin</td><td class="exp">undefined — no test / guard</td><td><span class="chip gap">gap</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">A2-G6</span> Profile-driven gate thresholds (concern #4)</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="unit"><td class="id">A2-60</td><td class="what">minPop from profile</td><td>profile min_pop=0.85</td><td class="exp">G1 threshold = profile, not config</td><td class="exp">gate uses 85%</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-61</td><td class="what">maxPopPoppGap from profile</td><td>profile gap=10</td><td class="exp">G3 threshold = profile</td><td class="exp">gate uses 10%</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-62</td><td class="what">Relaxed G1 for readjust re-entry</td><td>relaxedGate1PopPct=65/70</td><td class="exp">overrides profile & config</td><td class="exp">G1 threshold = relaxed value</td><td><span class="chip unit">unit</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">A2-G7</span> Expected move &amp; strike selection</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="unit"><td class="id">A2-70</td><td class="what">Expected move (Method 2)</td><td>spot, IV, DTE</td><td class="exp">EM = spot×IV×√(DTE/365); 1.4σ band</td><td class="exp">boundary matches BS</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="live"><td class="id">A2-71</td><td class="what">Method divergence &gt;15%</td><td>ATM straddle vs EM</td><td class="exp">flag, use conservative</td><td class="exp">wider boundary chosen</td><td><span class="chip live">live</span></td></tr>
+        <tr data-c="live"><td class="id">A2-72</td><td class="what">Short strike at 1.4σ, delta ≤ 0.20</td><td>live chain</td><td class="exp">round to 50, verify PoPP gap</td><td class="exp">strike beyond band</td><td><span class="chip live">live</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">A2-G8</span> T1/T2/T3 threshold computation — PoP-based, varies with IV/DTE (concern #6)</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="unit"><td class="id">A2-80</td><td class="what">Credit T1/T2 = inverse-BS spot for PoP 0.80/0.75</td><td>short strike, IV, DTE</td><td class="exp">inversePopSpot(); higher IV → wider band</td><td class="exp">levels move with IV & DTE, not fixed pts</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-81</td><td class="what">Iron Condor bilateral T1/T2 (PE &amp; CE)</td><td>both short strikes + IV</td><td class="exp">PoP-based per side</td><td class="exp">down &amp; up levels each PoP-derived</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">A2-82</td><td class="what">Fallback when IV/chain absent</td><td>monitor-config post-exec</td><td class="exp">spec §9 buffers T1=150 / T2=75 pts</td><td class="exp">deterministic fallback offsets</td><td><span class="chip unit">unit</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">A2-G9</span> Confirm / reject lifecycle &amp; monitor-config</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="ok"><td class="id">A2-90</td><td class="what">Confirm each strategy (S2.1–2.4)</td><td>T-201/202/203/204</td><td class="exp">PENDING → CONFIRMED</td><td class="exp">execution_order with legs</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A2-91</td><td class="what">Reject (S2.5)</td><td>confirm T-201 action=REJECT</td><td class="exp">→ REJECTED</td><td class="exp">status REJECTED</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A2-92</td><td class="what">Confirm already-REJECTED (S2.6)</td><td>T-205</td><td class="exp">invalid transition</td><td class="exp">409 / 404</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A2-93</td><td class="what">monitor-config with fills (S2.8)</td><td>T-207 + fill headers</td><td class="exp">build MonitorConfigDto</td><td class="exp">greeks + T1/T2/T3, slippageAlert=false</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A2-94</td><td class="what">Expired trade card</td><td>confirm after valid_until</td><td class="exp">reject stale</td><td class="exp">EXPIRED / error</td><td><span class="chip ok">offline</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ══════════════ AGENT 3 ══════════════ -->
+  <section class="mod" id="a3">
+    <div class="mod-head"><h2>Agent 3 — Monitor</h2><span class="tag">port 8083</span></div>
+    <p class="mod-intro">Runs every 5 min in market hours. <strong>Two different decision mechanisms</strong>: credit
+      2-leg spreads use a <strong>live PoP ladder</strong> (stored Nifty levels are informational); Iron Condors use
+      the <strong>stored bilateral Nifty levels</strong> as hard triggers (see F6). The <code>/evaluate</code> endpoint
+      accepts a spot-override body, so G1–G7 run fully offline against seeds 04/05.</p>
+
+    <div class="grp-title"><span class="gid">A3-G1</span> Credit-spread PoP ladder (concern #7)</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Trade</th><th>Override input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="ok"><td class="id">A3-01</td><td class="what">HOLD (T-301)</td><td>spot 24450, σ 0.185 → PoP ≈ 83.8%</td><td class="exp">PoP ≥ 80%</td><td class="exp">HOLD</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A3-02</td><td class="what">WATCH (T-302)</td><td>spot 24350, σ 0.192 → PoP ≈ 77.2%</td><td class="exp">75–79%</td><td class="exp">WATCH</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A3-03</td><td class="what">READJUST (T-303)</td><td>spot 24200, σ 0.200 → PoP ≈ 66.3%</td><td class="exp">65–74%</td><td class="exp">READJUST</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A3-04</td><td class="what">EXIT via PoP floor</td><td>PoP &lt; 65%</td><td class="exp">below floor</td><td class="exp">EXIT</td><td><span class="chip ok">offline</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">A3-G2…G5</span> Breach, VIX overrides, debit exits, Iron Condor</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Override input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="ok"><td class="id">A3-10</td><td class="what">Short-strike breach (T-304)</td><td>spot 23950 &lt; short 24000</td><td class="exp">breach fires before PoP ladder</td><td class="exp">EXIT (T3_SHORT_STRIKE_BREACH)</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A3-11</td><td class="what">VIX Extreme pause (T-305)</td><td>spot fine, VIX 32</td><td class="exp">VIX &gt; 24 checked first</td><td class="exp">PAUSE / alert</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A3-12</td><td class="what">VIX intraday spike &gt;30%</td><td>prior 18.5 → 25 in cycle</td><td class="exp">spike override → EXIT</td><td class="exp">EXIT (needs prior reading seeded)</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A3-13</td><td class="what">Debit profit exit (T-306)</td><td>spot 24250 ≥ T2 level</td><td class="exp">1% RoC target</td><td class="exp">EXIT (book profit)</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A3-14</td><td class="what">Debit loss cut (T-307)</td><td>MTM −6617 vs stop 3829</td><td class="exp">loss ≥ 50% premium paid</td><td class="exp">EXIT (loss cut)</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A3-15</td><td class="what">Iron Condor bilateral (T-204 / F5)</td><td>spot 24060 (CE T1 zone)</td><td class="exp">stored levels: T2 either side &gt; T1</td><td class="exp">WATCH (CE T1, not T2)</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="live"><td class="id">A3-16</td><td class="what">Iron Condor P&amp;L trigger (T-401)</td><td>live PE LTP vs net 1.00</td><td class="exp">MTM loss ≥ t2LossThreshold</td><td class="exp">READJUST before proximity</td><td><span class="chip live">live</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">A3-G6</span> Monitoring persisted to DB (concern #8)</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Check</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="ok"><td class="id">A3-20</td><td class="what">Every evaluate writes a row</td><td>SELECT from monitoring_evaluations</td><td class="exp">one row per cycle per trade</td><td class="exp">action, threshold_hit, reason, mark_to_market_pnl, evaluated_at</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A3-21</td><td class="what">Snapshot matches decision</td><td>row.action == API action</td><td class="exp">recorded = returned</td><td class="exp">consistent HOLD/WATCH/…</td><td><span class="chip ok">offline</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">A3-G7…G10</span> Guards, reconciliation, readjust, level recompute</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="ok"><td class="id">A3-30</td><td class="what">CLOSED / ineligible trade guard (S3.8)</td><td>evaluate a CLOSED trade</td><td class="exp">isEligibleForMonitoring=false</td><td class="exp">409 Conflict</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="gap"><td class="id">A3-31</td><td class="what">Externally deleted position (concern #9)</td><td>position closed on Upstox out-of-band</td><td class="exp">PositionReconciliationService detects</td><td class="exp">trade marked closed / alert — <b>no seeded/mock test</b></td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="live"><td class="id">A3-32</td><td class="what">Readjust 6-step chain (S6 / T-401)</td><td>scheduler cycle, sandbox</td><td class="exp">DTE guard→exit→signal→recommend(relaxed)→confirm→execute</td><td class="exp">old CLOSED + new ACTIVE, ledger events</td><td><span class="chip live">live</span></td></tr>
+        <tr data-c="live"><td class="id">A3-33</td><td class="what">Readjust partial (re-entry fails)</td><td>A1 SKIP or gates fail</td><td class="exp">give up cleanly</td><td class="exp">old CLOSED, no new trade, warning alert</td><td><span class="chip live">live</span></td></tr>
+        <tr data-c="live"><td class="id">A3-34</td><td class="what">Duplicate-exit guard on scheduler</td><td>two cycles overlap</td><td class="exp">EXIT_IN_PROGRESS before Agent 5</td><td class="exp">single exit only</td><td><span class="chip live">live</span></td></tr>
+        <tr data-c="unit"><td class="id">A3-35</td><td class="what">Live PoP recompute each cycle (concern #6)</td><td>spot/IV change between cycles</td><td class="exp">ladder uses fresh PoP</td><td class="exp">action changes as PoP crosses bands</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="live"><td class="id">A3-36</td><td class="what">Expiry-day buffers (DTE 0)</td><td>expiry Tuesday</td><td class="exp">watch/exit pt buffers 150/75</td><td class="exp">point-based, not PoP</td><td><span class="chip live">live</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ══════════════ AGENT 5 ══════════════ -->
+  <section class="mod" id="a5">
+    <div class="mod-head"><h2>Agent 5 — Execution</h2><span class="tag">port 8085 · sandbox</span></div>
+    <p class="mod-intro">Upstox v2 multi-leg orders. Offline coverage comes from the <strong>sandbox profile</strong>
+      (<code>simulate-fills=true</code>) — never enable those flags outside <code>application-sandbox.yml</code>.
+      The permutations in concern #5 (margin reject, partial fill, timeout) are written as sandbox integration tests
+      (<code>TradeExecutionSandboxIT</code>) but need live tokens to actually run.</p>
+
+    <div class="grp-title"><span class="gid">A5-G1…G9</span> Entry, exit &amp; failure permutations (concern #5)</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="ok"><td class="id">A5-01</td><td class="what">Both legs fill → ACTIVE (S4.1 / T-207)</td><td>simulate-fills</td><td class="exp">multi/place → poll → fills</td><td class="exp">ACTIVE, SIM order IDs, slippageAlert=false</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A5-02</td><td class="what">Debit spread no false slippage (S4.2 / T-208)</td><td>net debit</td><td class="exp">slippage sign uses actual.signum()</td><td class="exp">slippageAlert=false</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A5-03</td><td class="what">Slippage alert (S4.3)</td><td>fill worse than exp×0.90</td><td class="exp">10% threshold</td><td class="exp">slippageAlert=true, trade still ACTIVE</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="live"><td class="id">A5-04</td><td class="what">Insufficient margin → reject (concern #5)</td><td>margin check fails</td><td class="exp">POST /charges/margin before place</td><td class="exp">FAILED, no order placed, alert</td><td><span class="chip live">live</span></td></tr>
+        <tr data-c="live"><td class="id">A5-05</td><td class="what">Partial fill / one leg rejects → rollback</td><td>leg2 rejected</td><td class="exp">reverse MARKET on filled leg</td><td class="exp">FAILED, leg1 flattened, alert</td><td><span class="chip live">live</span></td></tr>
+        <tr data-c="live"><td class="id">A5-06</td><td class="what">Fill timeout → LIMIT→MARKET / cancel</td><td>30s no fill</td><td class="exp">prod: modify→MARKET; sandbox: cancel</td><td class="exp">resolved per profile flag</td><td><span class="chip live">live</span></td></tr>
+        <tr data-c="ok"><td class="id">A5-07</td><td class="what">Exit → CLOSED (S4.6)</td><td>reverse MARKET multi/place</td><td class="exp">BUY↔SELL, exit tag</td><td class="exp">CLOSED, exit fills recorded</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A5-08</td><td class="what">Non-existent / double execute (S4.4/4.5)</td><td>bad id / already ACTIVE</td><td class="exp">status guard</td><td class="exp">404 / 409</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="unit"><td class="id">A5-09</td><td class="what">Duplicate-exit guard</td><td>exit twice</td><td class="exp">EXIT_IN_PROGRESS / EXIT_FAILED</td><td class="exp">second call no-ops</td><td><span class="chip unit">unit</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ══════════════ LEDGER ══════════════ -->
+  <section class="mod" id="ledger">
+    <div class="mod-head"><h2>Ledger &amp; Persistence</h2><span class="tag">event sourcing</span></div>
+    <p class="mod-intro">Event-sourced <code>trade_ledger</code> plus <code>trade_executions</code> and <code>trade_pnl</code>.
+      Ledger writes use <code>REQUIRES_NEW</code> so an audit trail survives a business-transaction rollback — that
+      isolation property is the one most worth an explicit test, and currently has none.</p>
+
+    <div class="grp-title"><span class="gid">LG-G1…G5</span> Ledger integrity (concern #10)</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Check</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="ok"><td class="id">LG-01</td><td class="what">Lifecycle event sequence</td><td>ledger for one trade</td><td class="exp">RECOMMENDED→CONFIRMED→EXECUTED→…→CLOSED</td><td class="exp">ordered events, correct types</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">LG-02</td><td class="what">Per-leg executions recorded</td><td>trade_executions rows</td><td class="exp">one row per filled leg</td><td class="exp">fill price, qty, order id per leg</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">LG-03</td><td class="what">P&amp;L rows on close</td><td>trade_pnl</td><td class="exp">realised P&amp;L persisted</td><td class="exp">matches actual_pnl on trade</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="gap"><td class="id">LG-04</td><td class="what">REQUIRES_NEW isolation</td><td>force business tx rollback</td><td class="exp">ledger write commits independently</td><td class="exp">ledger event present despite rollback — <b>no test</b></td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="ok"><td class="id">LG-05</td><td class="what">trade_code format</td><td>generated code</td><td class="exp">T-YYYYMMDD-NNNN</td><td class="exp">unique, well-formed</td><td><span class="chip ok">offline</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ══════════════ AGENT 4 ══════════════ -->
+  <section class="mod" id="a4">
+    <div class="mod-head"><h2>Agent 4 — Audit &amp; Analytics</h2><span class="tag">port 8084 · read-only</span></div>
+    <p class="mod-intro">Read-only reporting over closed trades. 37 unit tests + integration tests already exist; the
+      value-add here is asserting the <strong>aggregations reconcile against the underlying <code>trade_pnl</code></strong>
+      rather than just returning a shape (concern #11).</p>
+
+    <div class="grp-title"><span class="gid">A4-G1…G6</span> Analytics endpoints</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Endpoint</th><th>Input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="ok"><td class="id">A4-01</td><td class="what">/summary</td><td>from/to (optional)</td><td class="exp">win rate, P&amp;L, RoC, drawdown, adj count, A1 accuracy</td><td class="exp">figures reconcile with trade_pnl sum</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A4-02</td><td class="what">/trades pagination</td><td>page, size</td><td class="exp">hasMore flag; size 1–100</td><td class="exp">correct page slice + hasMore</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A4-03</td><td class="what">/trades/{id}/audit</td><td>closed trade id</td><td class="exp">signal→recommend→execute→monitor timeline</td><td class="exp">full ordered trace</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A4-04</td><td class="what">/signal-quality</td><td>from/to</td><td class="exp">accuracy by confidence & bias, divergence impact, top gap</td><td class="exp">buckets computed from signals+outcomes</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">A4-05</td><td class="what">Date-range validation</td><td>from&gt;to; range&gt;max</td><td class="exp">reject invalid ranges</td><td class="exp">400 with clear message</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="unit"><td class="id">A4-06</td><td class="what">P&amp;L aggregation correctness</td><td>known closed set</td><td class="exp">Σ realised = summary total</td><td class="exp">no double-count / sign error</td><td><span class="chip unit">unit</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ══════════════ CROSS ══════════════ -->
+  <section class="mod" id="cross">
+    <div class="mod-head"><h2>Cross-cutting</h2><span class="tag">all modules</span></div>
+    <div class="grp-title"><span class="gid">X-G1</span> Security, errors, scheduling</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="gap"><td class="id">X-01</td><td class="what">X-API-Key filter</td><td>missing/wrong header</td><td class="exp">validate vs env var</td><td class="exp">401 — <b>filter only on agent1, pending elsewhere</b></td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="live"><td class="id">X-02</td><td class="what">Stale signal refresh (&gt;15 min)</td><td>old signal in DB</td><td class="exp">caller re-scores</td><td class="exp">fresh /score before recommend</td><td><span class="chip live">live</span></td></tr>
+        <tr data-c="live"><td class="id">X-03</td><td class="what">Expired Upstox token</td><td>Upstox 401</td><td class="exp">structured 503, no retry</td><td class="exp">503 problem-details, logged</td><td><span class="chip live">live</span></td></tr>
+        <tr data-c="unit"><td class="id">X-04</td><td class="what">RFC 9457 problem details</td><td>any handled exception</td><td class="exp">GlobalExceptionHandler mapping</td><td class="exp">type/title/status/detail body</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="gap"><td class="id">X-05</td><td class="what">ShedLock — no overlapping cycle</td><td>two schedulers</td><td class="exp">@SchedulerLock on runMonitoringCycle</td><td class="exp">one holder — <b>wired, not tested</b></td><td><span class="chip gap">gap</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ══════════════ BOUNDARIES & STATE ══════════════ -->
+  <section class="mod" id="edges">
+    <div class="mod-head"><h2>Boundaries &amp; state machine</h2><span class="tag">hidden cases</span></div>
+    <p class="mod-intro">A deterministic system fails at the <strong>edges of its own thresholds</strong> and at
+      <strong>illegal state transitions</strong> — and almost none of that is exercised today. Every threshold in the
+      code uses a specific comparison (<code>&lt;</code> vs <code>≤</code>); the boundary value is where off-by-one bugs
+      hide. The seeds only test the middle of each band.</p>
+
+    <div class="grp-title"><span class="gid">BND</span> Threshold-edge values — which side of the line wins</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Edge</th><th>Input at the boundary</th><th>Question the test answers</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="unit"><td class="id">BND-01</td><td class="what">Bias-score buckets</td><td>score = 0.10 / 0.25 / 0.50 / −0.10 / −0.50</td><td class="exp">boundary belongs to which bucket?</td><td class="exp">documented inclusive/exclusive rule, both sides</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="gap"><td class="id">BND-02</td><td class="what">VIX regime edges</td><td>VIX = 13.00 / 18.00 / 24.00</td><td class="exp">18.00 = NORMAL or HIGH? 24.00 = HIGH or EXTREME?</td><td class="exp">consistent &lt; vs ≤ across selector &amp; monitor</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="unit"><td class="id">BND-03</td><td class="what">IV/HV regime edges</td><td>ratio = 1.20 / 0.85</td><td class="exp">code uses strict &gt; — 1.20 exactly = FAIR not RICH</td><td class="exp">RICH-gated strategies do NOT fire at exactly 1.20</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">BND-04</td><td class="what">PoP ladder edges</td><td>PoP = 0.8000 / 0.7500 / 0.6500</td><td class="exp"><code>livePop &lt; min</code> → exactly 0.80 HOLDs, not WATCH</td><td class="exp">HOLD / WATCH / READJUST at each edge</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="gap"><td class="id">BND-05</td><td class="what">Confidence label edges</td><td>0.41 / 0.70</td><td class="exp">LOW→MEDIUM→HIGH boundary; drives G3D</td><td class="exp">label + debit-gate pass flip at edge</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">BND-06</td><td class="what">Spot exactly at short strike</td><td>spot == short strike</td><td class="exp">breach uses ≤ for IC — is credit-spread the same?</td><td class="exp">consistent breach semantics both strategies</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="unit"><td class="id">BND-07</td><td class="what">PoP−PoPP gap == limit</td><td>gap exactly 15.0%</td><td class="exp">≤ passes</td><td class="exp">G3 PASS at exactly 15.0</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">BND-08</td><td class="what">RoC == DTE-adjusted floor</td><td>roc exactly = minRoc</td><td class="exp">≥ passes</td><td class="exp">G4 PASS at exact floor</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="ok"><td class="id">BND-09</td><td class="what">Iron Condor — both sides fire same cycle</td><td>spot triggers PE-T2 and CE-T1 together</td><td class="exp">priority order in detectPressure()</td><td class="exp">PE checked before CE, T2 before T1 → deterministic winner</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="live"><td class="id">BND-10</td><td class="what">DTE boundaries</td><td>DTE = 1, then DTE = 0</td><td class="exp">switch from PoP ladder to expiry-day point buffers</td><td class="exp">correct mechanism per DTE</td><td><span class="chip live">live</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">STM</span> Illegal / edge state transitions</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Transition</th><th>Input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="ok"><td class="id">STM-01</td><td class="what">Execute a non-CONFIRMED trade</td><td>Agent 5 execute on PENDING</td><td class="exp">status guard</td><td class="exp">reject (not CONFIRMED)</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">STM-02</td><td class="what">Confirm a non-PENDING trade</td><td>confirm an ACTIVE / CLOSED</td><td class="exp">invalid transition</td><td class="exp">409 Conflict</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="unit"><td class="id">STM-03</td><td class="what">Exit a non-ACTIVE trade</td><td>exit a PENDING / CONFIRMED</td><td class="exp">guard (covered in exit unit tests)</td><td class="exp">no-op / early return</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="gap"><td class="id">STM-04</td><td class="what">Auto-expire stale PENDING</td><td>valid_until passes, never confirmed</td><td class="exp">who moves it to EXPIRED?</td><td class="exp">background expiry — <b>no owner found in code</b></td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">STM-05</td><td class="what">Orphan CONFIRMED never executed</td><td>confirmed, execute never called</td><td class="exp">cleanup / timeout</td><td class="exp">defined disposition — <b>none</b></td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">STM-06</td><td class="what">EXIT_FAILED recovery</td><td>exit order rejected by broker</td><td class="exp">retry / manual / alert path</td><td class="exp">actionable recovery, not stuck state</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">STM-07</td><td class="what">Re-entry lineage</td><td>readjust creates new trade</td><td class="exp">new trade references old id</td><td class="exp">auditable parent→child link</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">STM-08</td><td class="what">Recommend off overwritten signal</td><td>9:00 signal replaced by 9:20 Phase-2</td><td class="exp">staleness / referential integrity</td><td class="exp">trade pins the signal it used, not the latest</td><td><span class="chip gap">gap</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ══════════════ CONCURRENCY & RESILIENCE ══════════════ -->
+  <section class="mod" id="resilience">
+    <div class="mod-head"><h2>Concurrency &amp; resilience</h2><span class="tag">hidden cases</span></div>
+    <p class="mod-intro">Money systems get hit twice. A double-click, an overlapping scheduler tick, or a broker
+      timeout must never place, exit, or size a position twice. Spec rule #3 mandates a <strong>10s timeout, 3 retries
+      and a fallback on every external call</strong> — that contract is currently asserted nowhere.</p>
+
+    <div class="grp-title"><span class="gid">CNC</span> Concurrency &amp; idempotency</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="gap"><td class="id">CNC-01</td><td class="what">Double /recommend</td><td>same signal + user, twice fast</td><td class="exp">idempotent or explicit two-card semantics</td><td class="exp">defined behaviour, no duplicate PENDING silently</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">CNC-02</td><td class="what">Concurrent /confirm</td><td>two confirms on one PENDING</td><td class="exp">optimistic lock / row guard</td><td class="exp">one CONFIRMED, other 409</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">CNC-03</td><td class="what">Double /execute (UI double-submit)</td><td>execute fired twice</td><td class="exp">order tag idempotency</td><td class="exp">one order set only, not two</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">CNC-04</td><td class="what">Overlapping scheduler cycles</td><td>slow cycle + next 5-min tick</td><td class="exp">ShedLock @SchedulerLock</td><td class="exp">single holder, no double evaluate</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">CNC-05</td><td class="what">Readjust vs manual exit race</td><td>user exits while readjust runs</td><td class="exp">EXIT_IN_PROGRESS guard</td><td class="exp">exactly one exit, no orphan re-entry</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">CNC-06</td><td class="what">Confirm at exact valid_until</td><td>confirm timestamp == expiry</td><td class="exp">boundary inclusivity</td><td class="exp">deterministic accept-or-expire</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">CNC-07</td><td class="what">Duplicate Upstox order tag</td><td>same ZUPP_ tag replayed</td><td class="exp">broker/side dedup</td><td class="exp">no duplicate live order</td><td><span class="chip gap">gap</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">EXT</span> External-API resilience (spec rule #3: 10s timeout · retry×3 · fallback)</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Dependency</th><th>Fault injected</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="live"><td class="id">EXT-01</td><td class="what">Upstox — timeout</td><td>no response &gt; 10s</td><td class="exp">retry ×3 → fallback</td><td class="exp">no thread hang; trade decision unaffected</td><td><span class="chip live">live</span></td></tr>
+        <tr data-c="live"><td class="id">EXT-02</td><td class="what">Upstox — 429 rate limit</td><td>burst of calls</td><td class="exp">exponential backoff</td><td class="exp">backoff honoured, eventual success/fallback</td><td><span class="chip live">live</span></td></tr>
+        <tr data-c="gap"><td class="id">EXT-03</td><td class="what">Upstox — empty / partial chain</td><td>missing strikes</td><td class="exp">graceful degrade or reject</td><td class="exp">no NPE; clear failure, not garbage card</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="unit"><td class="id">EXT-04</td><td class="what">Marketaux — down</td><td>5xx / timeout</td><td class="exp">tier4 → 0, log data gap</td><td class="exp">score unaffected, gap recorded</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">EXT-05</td><td class="what">LLM — timeout / error</td><td>slow or malformed</td><td class="exp">neutral(), never throw</td><td class="exp">pipeline completes</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="gap"><td class="id">EXT-06</td><td class="what">Gift Nifty — source fallback</td><td>primary source fails</td><td class="exp">fallback source</td><td class="exp">tier3 still scored or gap logged</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="live"><td class="id">EXT-07</td><td class="what">FII/DII — fetch failure</td><td>Upstox fii/dii error</td><td class="exp">tier2 → 0, data gaps</td><td class="exp">no crash; gap surfaced to confidence</td><td><span class="chip live">live</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ══════════════ DATA · MONEY · CALENDAR ══════════════ -->
+  <section class="mod" id="integrity">
+    <div class="mod-head"><h2>Data, money &amp; calendar</h2><span class="tag">hidden cases</span></div>
+    <p class="mod-intro">The correctness class the spec cares about most: <strong>no float leaks into money or scores</strong>,
+      <strong>nothing is hardcoded that should come from the DB</strong> (lot size!), and the system behaves on holidays,
+      at expiry, and across an overnight gap where NRML positions are held.</p>
+
+    <div class="grp-title"><span class="gid">DQ</span> Data quality &amp; market anomalies</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="gap"><td class="id">DQ-01</td><td class="what">Null / empty option chain</td><td>chain null at recommend</td><td class="exp">reject, no NPE</td><td class="exp">clean 4xx/5xx, logged</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">DQ-02</td><td class="what">Requested strike absent from chain</td><td>target strike missing</td><td class="exp">fallback strike or reject</td><td class="exp">deterministic handling, not silent null</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="unit"><td class="id">DQ-03</td><td class="what">TA4J indicator NaN</td><td>insufficient candles → NaN</td><td class="exp">treat as 0 (neutral), log gap</td><td class="exp">signal scores, no exception</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="unit"><td class="id">DQ-04</td><td class="what">Zero / negative IV</td><td>iv ≤ 0 on a leg</td><td class="exp">inversePopSpot → null → buffer fallback</td><td class="exp">T1/T2 fall back to §9 point buffers</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="gap"><td class="id">DQ-05</td><td class="what">Illiquid strike (wide bid-ask)</td><td>huge spread on short leg</td><td class="exp">liquidity guard before selecting</td><td class="exp"><b>no liquidity gate found — likely missing</b></td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">DQ-06</td><td class="what">Anomalous candle pre-recommend</td><td>5-min spike / gap</td><td class="exp">reject 422 (IMPL #18, pending)</td><td class="exp">no trade off a bad tick</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">DQ-07</td><td class="what">Spot drift signal→recommend</td><td>large move between the two</td><td class="exp">revalidate before card</td><td class="exp">stale-spot guard</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">DQ-08</td><td class="what">Silent IvRegime → FAIR fallback</td><td>HV or ATM IV null</td><td class="exp">selector silently downgrades to FAIR</td><td class="exp">RICH strategies suppressed — should surface (F13)</td><td><span class="chip gap">gap</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">FIN</span> Money &amp; precision</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Check</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="unit"><td class="id">FIN-01</td><td class="what">No float/double in money or scores</td><td>static scan of calc paths</td><td class="exp">BigDecimal throughout (rule #6)</td><td class="exp">no double leakage, deterministic rounding</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="gap"><td class="id">FIN-02</td><td class="what">Lot size from reference_data</td><td>delete NIFTY_LOT_SIZE row</td><td class="exp">never hardcode 65 (rule #2)</td><td class="exp">fail loud, not silent fallback to 65</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="unit"><td class="id">FIN-03</td><td class="what">Strike rounding to nearest 50</td><td>odd computed strike</td><td class="exp">consistent HALF_UP</td><td class="exp">deterministic strike</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="gap"><td class="id">FIN-04</td><td class="what">Iron Condor max-loss side</td><td>asymmetric PE/CE widths</td><td class="exp">use the wider side for max loss</td><td class="exp">sizing uses worst side, not average</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="unit"><td class="id">FIN-05</td><td class="what">P&amp;L sign convention</td><td>credit vs debit MTM</td><td class="exp">consistent sign across strategies</td><td class="exp">profit &gt; 0, loss &lt; 0 uniformly</td><td><span class="chip unit">unit</span></td></tr>
+        <tr data-c="live"><td class="id">FIN-06</td><td class="what">Naked strangle SPAN margin</td><td>per-lot margin from Upstox</td><td class="exp">margin-constrained sizing</td><td class="exp">lots capped by real SPAN, not spread math</td><td><span class="chip live">live</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <div class="grp-title"><span class="gid">CAL</span> Calendar, market hours &amp; expiry</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="gap"><td class="id">CAL-01</td><td class="what">Trading holiday</td><td>NSE holiday</td><td class="exp">holiday calendar → no schedule/skip</td><td class="exp">no signal/trade attempted</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">CAL-02</td><td class="what">Signal staleness at exactly 15 min</td><td>signal age == 15:00</td><td class="exp">boundary of refresh rule</td><td class="exp">deterministic fresh-vs-stale</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="live"><td class="id">CAL-03</td><td class="what">Weekend / after-hours recommend</td><td>market closed</td><td class="exp">no live chain</td><td class="exp">clear "no live data", not a stale card</td><td><span class="chip live">live</span></td></tr>
+        <tr data-c="live"><td class="id">CAL-04</td><td class="what">Expiry-day settlement (DTE=0)</td><td>Tuesday expiry</td><td class="exp">point buffers + pin/assignment risk</td><td class="exp">correct exit before settlement</td><td><span class="chip live">live</span></td></tr>
+        <tr data-c="gap"><td class="id">CAL-05</td><td class="what">Overnight gap-open past T3</td><td>Mon opens beyond exit level</td><td class="exp">NRML held overnight</td><td class="exp">first 9:15 cycle exits at gap, damage bounded</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="live"><td class="id">CAL-06</td><td class="what">Weekly expiry rollover</td><td>after this Tuesday</td><td class="exp">ExpiryDateService picks next Tuesday</td><td class="exp">correct new expiry, holiday-shifted</td><td><span class="chip live">live</span></td></tr>
+        <tr data-c="unit"><td class="id">CAL-07</td><td class="what">IST timestamp correctness</td><td>all persisted times</td><td class="exp">IST, no UTC drift</td><td class="exp">schedules &amp; ages computed in IST</td><td><span class="chip unit">unit</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ══════════════ PORTFOLIO & GUARDS ══════════════ -->
+  <section class="mod" id="portfolio">
+    <div class="mod-head"><h2>Portfolio, alerts &amp; guards</h2><span class="tag">hidden cases</span></div>
+    <p class="mod-intro">Every scenario above treats one trade in isolation. Real risk is <strong>across trades</strong> —
+      total margin, concentration, and whether a testing-only bypass can ever reach production.</p>
+
+    <div class="grp-title"><span class="gid">PORT</span> Portfolio-level &amp; safety guards</div>
+    <div class="twrap"><table>
+      <thead><tr><th>ID</th><th>Scenario</th><th>Input</th><th>Rule</th><th>Expected</th><th>Cover</th></tr></thead>
+      <tbody>
+        <tr data-c="ok"><td class="id">PORT-01</td><td class="what">Multiple active trades monitored</td><td>N ACTIVE in one cycle</td><td class="exp">each evaluated independently</td><td class="exp">one failing trade doesn't block the others</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="gap"><td class="id">PORT-02</td><td class="what">Aggregate margin / capital</td><td>3 trades open at once</td><td class="exp">portfolio-level cap</td><td class="exp"><b>none exists — per-trade sizing only (F12)</b></td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="ok"><td class="id">PORT-03</td><td class="what">AlertService fires per critical event</td><td>VIX-extreme, slippage, reject, readjust, reconcile</td><td class="exp">notifications row each time; never throws</td><td class="exp">one alert per event, no swallow</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="ok"><td class="id">PORT-04</td><td class="what">Endpoint input validation</td><td>malformed UUID, negative/huge overrideLots, bad dates</td><td class="exp">validate before processing (rule #8)</td><td class="exp">400 with clear message, no side effects</td><td><span class="chip ok">offline</span></td></tr>
+        <tr data-c="gap"><td class="id">PORT-05</td><td class="what">Secrets never logged</td><td>logs during token use</td><td class="exp">no token/API key in logs (rule #7)</td><td class="exp">redacted in all log lines</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="gap"><td class="id">PORT-06</td><td class="what">Testing-mode bypass off in prod</td><td>hardGateEnabled flag</td><td class="exp">must be false outside test profile</td><td class="exp">prod asserts gates enforced — see F11</td><td><span class="chip gap">gap</span></td></tr>
+        <tr data-c="ok"><td class="id">PORT-07</td><td class="what">UI contract &amp; empty states</td><td>no signal / no active trades</td><td class="exp">well-formed empty responses</td><td class="exp">/active-trades &amp; /latest degrade cleanly</td><td><span class="chip ok">offline</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <!-- ══════════════ FLAWS ══════════════ -->
+  <section class="flaws" id="flaws">
+    <div class="mod-head" style="border-color:var(--gap)"><h2>Flaws &amp; coverage gaps</h2><span class="tag" style="color:var(--gap);border-color:var(--gap)">read before trusting the seeds</span></div>
+    <p class="mod-intro">Found by diffing the engine code against the spec and the seed data. The first three are the
+      ones that will actively mislead an auditor, because the seeds assert outcomes the code no longer produces.</p>
+
+    <div class="flaw">
+      <h4><span class="fid">F1</span> <code>/confirm</code> never recomputes gates <span class="sev">Coverage</span></h4>
+      <p>The confirm endpoint reads the stored <code>gate_results</code> JSONB and passes it straight through.
+        The whole of <code>GateValidator</code> — every credit and debit gate — is exercised only by JUnit and by the
+        live <code>/recommend</code> path. The offline S2 suite proves the confirm/reject state machine, <em>not</em>
+        that any gate works.</p>
+      <p class="fix"><b>Do:</b> add a replay-backed <code>/recommend</code> test (the capture snapshot already exists under
+        <code>test-data/capture/snapshot/</code>) so gate logic has one deterministic end-to-end path.</p>
+    </div>
+
+    <div class="flaw">
+      <h4><span class="fid">F2</span> Seed gate results describe rules the engine dropped <span class="sev">Misleading</span></h4>
+      <p>Debit seeds T-202 / T-208 / T-211 record a G1 of "breakeven PoP ≥ 35%". The current debit path computes
+        something entirely different: <code>G1D</code> reward:risk ≥ 1.4, <code>G2D</code> breakeven ≤ 100 pts,
+        <code>G3D</code> confidence ≥ MEDIUM, <code>G4D</code> debit ≤ 0.5% capital. Anyone auditing debit behaviour
+        from the seeds is reading a spec the code abandoned.</p>
+      <p class="fix"><b>Do:</b> regenerate the debit seed <code>gate_results</code> from the live engine, or annotate them
+        as "display-only, not engine output".</p>
+    </div>
+
+    <div class="flaw">
+      <h4><span class="fid">F3</span> Strategy matrix disagrees with spec and seeds <span class="sev">Correctness</span></h4>
+      <p>Neutral·Weak·Normal·Rich → code returns <code>IRON_CONDOR</code>, but spec and seed T-210 expect a
+        Short Strangle. Neutral·Weak·High·Rich → code returns <code>WIDE_IRON_CONDOR</code>, seed T-204 says
+        <code>IRON_CONDOR</code>. <code>SHORT_STRADDLE</code>/<code>SHORT_STRANGLE</code> are <em>unreachable</em> from
+        <code>StrategySelector</code>. And weak-bullish skips while weak-bearish reroutes to neutral (IMPL_STATUS #19,
+        still open) — an asymmetry with no stated rationale.</p>
+      <p class="fix"><b>Do:</b> decide whether strangles are in scope; if not, delete the dead enum branches and fix the
+        two seed labels. Mirror the weak-bullish/bearish handling.</p>
+    </div>
+
+    <div class="flaw warn">
+      <h4><span class="fid">F4</span> G4 RoC divisor is DTE/7, spec says DTE/5 <span class="sev">Spec drift</span></h4>
+      <p>Spec §8 defines the DTE-adjusted RoC floor as <code>0.5% × (DTE/5)</code>; the code divides by 7 (calendar
+        week). The threshold a trade must clear is materially different from the documented one. Pick one and make
+        spec + code agree.</p>
+    </div>
+
+    <div class="flaw warn">
+      <h4><span class="fid">F5</span> T-210 passes G4 on lots it won't trade <span class="sev">Sizing</span></h4>
+      <p>The strangle's G4 was pre-set "passed" using a 6-lot RoC of 0.995%, but margin sizes the position to 3 lots
+        where real RoC is 0.50% &lt; the 0.70% floor. Because gates aren't recomputed after sizing (F1), the mismatch
+        never surfaces. Combined with F3, the trade is unreachable anyway — but the pattern (gate green on numbers the
+        position doesn't use) is worth banning.</p>
+    </div>
+
+    <div class="flaw warn">
+      <h4><span class="fid">F6</span> Two monitor mechanisms for one trade family <span class="sev">Design</span></h4>
+      <p>2-leg credit spreads decide on a <em>live recomputed PoP ladder</em> (stored T1/T2 Nifty levels are cosmetic);
+        Iron Condors decide on <em>stored bilateral Nifty levels</em>. Same economic structure, two code paths — exactly
+        the split that produced the "levels way too deep" Iron Condor you flagged. Consider unifying on PoP for both, or
+        document loudly why they differ.</p>
+    </div>
+
+    <div class="flaw warn">
+      <h4><span class="fid">F7</span> Readjust test relies on non-physical inputs <span class="sev">Test quality</span></h4>
+      <p>T-401 forces <code>actualNetPremiumPerUnit=1.00</code> and <code>t3LossThreshold=9999999</code> to guarantee
+        READJUST. It proves the chain <em>fires</em>, but not that MTM math is right on realistic premiums. Add a
+        companion case with true entry premium and a real loss threshold.</p>
+    </div>
+
+    <div class="flaw">
+      <h4><span class="fid">F8</span> The entire <code>/recommend</code> pipeline has no offline path <span class="sev">Coverage</span></h4>
+      <p>Layers 1–5 (strategy, expected move, strike, gates, sizing) can only run against a live option chain. So
+        concerns #2, #3 (override's effect on the recommendation), #4 (profile-driven sizing) and #6 (level computation)
+        can't be verified without market hours. The capture snapshot exists but no S-script drives <code>/recommend</code>
+        through it.</p>
+      <p class="fix"><b>Do:</b> wire a <code>replay</code> profile that serves <code>snapshot/option_chain.json</code> to
+        <code>/recommend</code> — unlocks the largest block of amber rows above.</p>
+    </div>
+
+    <div class="flaw">
+      <h4><span class="fid">F9</span> External-deletion reconciliation is untested (concern #9) <span class="sev">Coverage</span></h4>
+      <p><code>PositionReconciliationService</code> needs the live Upstox positions API and has no mock or seed to
+        simulate "position closed out-of-band". There is no offline scenario for the exact case you asked about.</p>
+      <p class="fix"><b>Do:</b> inject a stub positions client returning an empty book for an ACTIVE trade; assert the
+        trade is reconciled to closed + alert raised.</p>
+    </div>
+
+    <div class="flaw warn">
+      <h4><span class="fid">F10</span> Confidence=LOW silently blocks directional credit <span class="sev">Behaviour</span></h4>
+      <p>At Layer 1, a LOW-confidence directional credit strategy becomes <code>NO_TRADE</code> → fallback → REJECTED —
+        before any gate runs. So S11 (data gaps) and S12 (commentary divergence), both LOW, are rejected upstream. That's
+        defensible, but it isn't captured in any seed's expected outcome, so concern #1's "signal → recommendation" link
+        looks broken when it's actually working as designed. Iron Condors are exempt (non-directional).</p>
+    </div>
+
+    <div class="flaw">
+      <h4><span class="fid">F11</span> A testing bypass can turn "SKIP" into a live trade <span class="sev">Latent risk</span></h4>
+      <p>When <code>hardGateEnabled=false</code>, <code>GateValidator</code> forces <code>allHardGatesPassed=true</code>
+        even on real gate failures, <em>and</em> <code>StrategySelector</code> converts a <code>SKIP</code>/<code>NO_TRADE</code>
+        decision into a fallback strategy marked <code>PENDING_CONFIRM</code>. That combination is fine in a test profile,
+        but if the flag is ever true in a non-test environment the system will present tradeable cards for setups it is
+        supposed to reject — including VIX-Extreme. Nothing asserts the flag is off in prod.</p>
+      <p class="fix"><b>Do:</b> add a startup assertion that <code>hardGateEnabled=true</code> whenever the active profile is
+        not <code>sandbox</code>/<code>test</code>, and a test (PORT-06) that proves a real gate failure yields REJECTED in prod config.</p>
+    </div>
+
+    <div class="flaw warn">
+      <h4><span class="fid">F12</span> Position sizing is per-trade — no portfolio ceiling <span class="sev">Risk</span></h4>
+      <p>Layer 5 sizes each trade against <em>full</em> capital and its own margin. Two or three simultaneous ACTIVE
+        trades can therefore each consume the 1.5% loss budget independently, so aggregate risk and total SPAN margin are
+        unbounded by design. For a "consistency over returns" system this is the biggest structural gap — concentration
+        and total-margin limits simply don't exist.</p>
+      <p class="fix"><b>Do:</b> add a portfolio guard that sums open risk/margin before sizing a new trade (PORT-02), and a
+        cap on concurrent same-direction exposure.</p>
+    </div>
+
+    <div class="flaw warn">
+      <h4><span class="fid">F13</span> Silent volatility-regime downgrades change the strategy <span class="sev">Observability</span></h4>
+      <p>When historical vol or ATM IV is null, <code>resolveIvRegime()</code> silently returns <code>FAIR</code>, and
+        ATM-IV lookup silently falls back to a <code>VIX/100</code> proxy. Both quietly suppress every RICH-gated strategy
+        (Iron Condor, credit spreads), so a data gap changes <em>which trade you get</em> with nothing written to
+        <code>data_gaps</code> or shown to the user.</p>
+      <p class="fix"><b>Do:</b> record the IV source and any FAIR-by-fallback in <code>data_gaps</code>/score_breakdown so the
+        downgrade is auditable (DQ-08).</p>
+    </div>
+  </section>
+
+  <footer>
+    <p>Generated from a code + seed scan of the ZuppTrade monorepo. Coverage chips reflect what is runnable today, not
+      aspirational coverage. Counts in the header are indicative totals across the tables above. Keep this file in sync
+      when seeds 01–05 or the gate/strategy code change — the expected-outcome columns are only trustworthy while they
+      track the engine.</p>
+  </footer>
+</div>
+
+<script>
+  // Coverage filter
+  const btns = document.querySelectorAll('.fbtn');
+  const rows = document.querySelectorAll('tbody tr[data-c]');
+  btns.forEach(b => b.addEventListener('click', () => {
+    const f = b.dataset.f;
+    btns.forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+    rows.forEach(r => {
+      r.classList.toggle('hidden', !(f === 'all' || r.dataset.c === f));
+    });
+  }));
+
+  // Active section in sticky nav
+  const links = [...document.querySelectorAll('nav.toc a')];
+  const map = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const a = map.get(e.target.id); if (a) a.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  document.querySelectorAll('section[id]').forEach(s => obs.observe(s));
+</script>

@@ -32,7 +32,7 @@ public class MonitorStrategyFactory {
     public MonitorStrategy resolve(Strategy strategy) {
         return switch (strategy) {
             case BULL_PUT_SPREAD, BEAR_CALL_SPREAD -> creditStrategy;
-            case BULL_CALL_SPREAD -> debitStrategy;
+            case BULL_CALL_SPREAD, BEAR_PUT_SPREAD -> debitStrategy;
             case IRON_CONDOR, WIDE_IRON_CONDOR      -> ironCondorStrategy;
             case SHORT_STRADDLE                     -> creditStrategy;  // treat as credit spread
             default -> throw new IllegalArgumentException(

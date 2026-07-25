@@ -13,6 +13,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.UUID;
 
@@ -30,6 +31,7 @@ import static net.logstash.logback.argument.StructuredArguments.kv;
 public class MarginCheckService {
 
     private static final Logger log = LoggerFactory.getLogger(MarginCheckService.class);
+    private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
     private final UpstoxOrderClient        orderClient;
     private final Agent5ExecutionProperties props;
@@ -55,6 +57,17 @@ public class MarginCheckService {
             BigDecimal availableMargin,
             boolean    sufficient,
             BigDecimal shortfall   // null when sufficient
+    ) {}
+
+    /**
+     * Account-level margin utilisation — powers the UI "Capital Deployed" bar.
+     * Unlike {@link #check}, this is portfolio-wide and not tied to any single trade.
+     */
+    public record MarginUtilizationDto(
+            BigDecimal usedMargin,       // blocked by open positions
+            BigDecimal availableMargin,  // free margin
+            BigDecimal totalMargin,      // used + available
+            BigDecimal utilizationPct    // used / total × 100 (ZERO when total is 0)
     ) {}
 
     // ── Public API ──────────────────────────────────────────────────────────────
@@ -87,6 +100,38 @@ public class MarginCheckService {
                 kv("required", required), kv("available", available), kv("sufficient", sufficient));
 
         return new MarginCheckResultDto(required, available, sufficient, shortfall);
+    }
+
+    /**
+     * Account-level margin utilisation from Upstox /v2/user/get-funds-and-margin.
+     * Read-only, no DB access — reflects margin blocked across ALL open positions,
+     * not just trades known to this system.
+     */
+    public MarginUtilizationDto utilization() {
+        log.info("margin.utilization.start");
+
+        FundsAndMarginResponse resp;
+        try {
+            resp = orderClient.getAvailableFunds();
+        } catch (UpstoxOrderException e) {
+            log.error("margin.utilization.funds.error", kv("error", e.getMessage()));
+            throw new MarginCheckException("Upstox funds check failed: " + e.getMessage(), e);
+        }
+
+        BigDecimal used      = resp.usedMargin();
+        BigDecimal available = resp.availableMargin();
+        BigDecimal total     = used.add(available);
+
+        // Guard against a zero/empty account — never divide by zero.
+        BigDecimal utilizationPct = total.compareTo(BigDecimal.ZERO) > 0
+                ? used.multiply(HUNDRED).divide(total, 2, RoundingMode.HALF_UP)
+                : BigDecimal.ZERO;
+
+        log.info("margin.utilization.result",
+                kv("used", used), kv("available", available),
+                kv("total", total), kv("utilizationPct", utilizationPct));
+
+        return new MarginUtilizationDto(used, available, total, utilizationPct);
     }
 
     // ── Private helpers ─────────────────────────────────────────────────────────

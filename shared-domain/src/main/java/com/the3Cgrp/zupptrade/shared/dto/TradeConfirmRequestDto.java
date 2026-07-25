@@ -1,6 +1,7 @@
 package com.the3Cgrp.zupptrade.shared.dto;
 
 import com.the3Cgrp.zupptrade.shared.enums.ConfirmAction;
+import com.the3Cgrp.zupptrade.shared.enums.OptionType;
 import jakarta.validation.constraints.NotNull;
 
 import java.math.BigDecimal;
@@ -49,6 +50,9 @@ public record TradeConfirmRequestDto(
             BigDecimal maxProfitTotal,
             BigDecimal theoreticalMaxLossTotal,
             BigDecimal realExpectedLossTotal,
-            BigDecimal roc
+            BigDecimal roc,
+            // Option type of the PRIMARY pair (peShort/peLong). Null → PE (back-compat).
+            // CALL spreads set this to CE so legs are built and executed as calls, not puts.
+            OptionType optionType
     ) {}
 }

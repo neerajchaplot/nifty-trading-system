@@ -1,6 +1,7 @@
 package com.the3Cgrp.zupptrade.agent2.service;
 
 import tools.jackson.core.type.TypeReference;
+import com.the3Cgrp.zupptrade.agent2.config.TradingConfig;
 import com.the3Cgrp.zupptrade.agent2.client.MarketDataClient;
 import com.the3Cgrp.zupptrade.agent2.client.OptionChainClient;
 import com.the3Cgrp.zupptrade.agent2.client.model.MarketSnapshot;
@@ -26,6 +27,7 @@ import com.the3Cgrp.zupptrade.ledger.LedgerEventType;
 import com.the3Cgrp.zupptrade.ledger.TradeLedgerService;
 import com.the3Cgrp.zupptrade.ledger.payload.*;
 import com.the3Cgrp.zupptrade.ledger.payload.TradeOverrideConfirmedPayload;
+import com.the3Cgrp.zupptrade.shared.calc.CreditLadderCalculator;
 import com.the3Cgrp.zupptrade.shared.dto.*;
 import com.the3Cgrp.zupptrade.shared.enums.Bias;
 import com.the3Cgrp.zupptrade.shared.enums.LegAction;
@@ -74,6 +76,7 @@ public class RecommendationService {
     private final BlackScholesCalculator blackScholes;
     private final JsonUtil jsonUtil;
     private final TradeLedgerService ledger;
+    private final TradingConfig config;
 
     public RecommendationService(Agent1SignalRepository signalRepository,
                                   UserProfileRepository userProfileRepository,
@@ -85,7 +88,8 @@ public class RecommendationService {
                                   VolatilityService volatilityService,
                                   BlackScholesCalculator blackScholes,
                                   JsonUtil jsonUtil,
-                                  TradeLedgerService ledger) {
+                                  TradeLedgerService ledger,
+                                  TradingConfig config) {
         this.signalRepository = signalRepository;
         this.userProfileRepository = userProfileRepository;
         this.tradeRepository = tradeRepository;
@@ -97,6 +101,7 @@ public class RecommendationService {
         this.blackScholes = blackScholes;
         this.jsonUtil = jsonUtil;
         this.ledger = ledger;
+        this.config = config;
     }
 
     @Transactional
@@ -126,6 +131,28 @@ public class RecommendationService {
 
         int dte = (int) ChronoUnit.DAYS.between(LocalDate.now(), signal.getExpiryDate());
 
+        // Expiry-day guard: never open a fresh weekly trade with 0 days left. The expected-move and
+        // Black-Scholes maths are degenerate at t=0 (zero boundary, binary probabilities) and the
+        // gamma/volatility risk near expiry is extreme. Reject cleanly with a clear message rather
+        // than build a meaningless trade card (which also caused the divide-by-zero in Layer 5).
+        if (dte <= 0) {
+            RecommendationContext expiryCtx = new RecommendationContext();
+            expiryCtx.setSignal(signal);
+            expiryCtx.setUserProfile(userProfile);
+            expiryCtx.setLotSize(lotSize);
+            expiryCtx.setSpot(spot);
+            expiryCtx.setVix(vix);
+            expiryCtx.setHistoricalVolatility(BigDecimal.ZERO);
+            expiryCtx.setExpiryDate(signal.getExpiryDate());
+            expiryCtx.setDte(dte);
+            expiryCtx.setStrategy(Strategy.NO_TRADE);
+            // Keep ≤ 100 chars — this is persisted to trades.close_reason (VARCHAR(100)).
+            expiryCtx.setSkipReason("No trade — expiry day (DTE=0): excessive volatility & gamma risk. Wait for next expiry.");
+            log.warn("recommendation.blocked reason=EXPIRY_DAY dte={} expiry={} spot={} vix={}",
+                    dte, signal.getExpiryDate(), spot, vix);
+            return handleNoTrade(expiryCtx, signal, userProfile);
+        }
+
         RecommendationContext ctx = new RecommendationContext();
         ctx.setSignal(signal);
         ctx.setUserProfile(userProfile);
@@ -141,16 +168,13 @@ public class RecommendationService {
         ctx.setDte(dte);
         ctx.setOptionChainData(optionChain);
         ctx.setRelaxedGate1PopPct(request.relaxedGate1PopPct());  // null for normal flow; set by ReadjustmentService
+        ctx.setHardGateEnabled(config.isHardGateEnabled());
 
         applyUserWeightRecomposition(ctx, signal, userProfile);
 
         engine.execute(ctx);
-
-        // Layer 1 selected NO_TRADE or SKIP — engine exits before strike selection;
-        // shortLeg/longLeg remain null and List.of(null, null) in buildAndPersistTrade would NPE.
-        if (ctx.getStrategy() == Strategy.NO_TRADE || ctx.getStrategy() == Strategy.SKIP) {
-            return handleNoTrade(ctx, signal, userProfile);
-        }
+        // StrategySelector always picks a real strategy; SKIP/NO_TRADE decisions are marked
+        // as ctx.skipDecision=true and routed to REJECTED (prod) or PENDING_CONFIRM (testing mode).
 
         TradeEntity trade = buildAndPersistTrade(ctx, signal, userProfile, optionChain);
 
@@ -173,8 +197,9 @@ public class RecommendationService {
                             orZero(ctx.getRoc())),
                     "AGENT2:SYSTEM");
         } else {
+            String rejectReason = ctx.isSkipDecision() ? "SKIP_DECISION" : "GATE_FAILURE";
             ledger.record(trade.getId(), LedgerEventType.TRADE_REJECTED,
-                    new TradeRejectedPayload("GATE_FAILURE", trade.getCloseReason()),
+                    new TradeRejectedPayload(rejectReason, trade.getCloseReason()),
                     "AGENT2:SYSTEM");
         }
 
@@ -229,8 +254,11 @@ public class RecommendationService {
                     if (request.overrideLots() != null) {
                         applyLotOverride(trade, request.overrideLots());
                     }
+                    // T1/T2/T3 exit levels are algorithm-locked (70/64/57-style ladder scaled to entry
+                    // PoP, recomputed live by Agent 3). User-supplied threshold overrides are ignored.
                     if (request.overrideThresholds() != null) {
-                        applyThresholdOverride(trade, request.overrideThresholds());
+                        log.info("confirm.threshold.override.ignored tradeId={} — exit ladder is algorithm-locked",
+                                trade.getId());
                     }
                 }
                 trade.setStatus(TradeStatus.CONFIRMED);
@@ -250,7 +278,7 @@ public class RecommendationService {
                 TradeOverrideConfirmedPayload payload = new TradeOverrideConfirmedPayload(
                         trade.getUserProfile() != null ? trade.getUserProfile().getId() : null,
                         originalLegsJson,
-                        originalSummary != null ? originalSummary.pop().multiply(HUNDRED).setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO,
+                        originalSummary != null ? originalSummary.pop() : BigDecimal.ZERO,   // pop is already a percentage (0–100)
                         originalSummary != null ? originalSummary.roc() : BigDecimal.ZERO,
                         request.overrideParams().peShortStrike(), request.overrideParams().peLongStrike(),
                         request.overrideParams().ceShortStrike(), request.overrideParams().ceLongStrike(),
@@ -364,13 +392,17 @@ public class RecommendationService {
         int dte = (int) ChronoUnit.DAYS.between(LocalDate.now(), trade.getExpiryDate());
         BigDecimal capital = trade.getUserProfile().getCapital();
         boolean isIc = req.ceShortStrike() != null && req.ceLongStrike() != null;
+        // Primary pair option type — CALL spreads (bear/bull call) resolve against the calls
+        // chain, not puts. Null defaults to PE for backward compatibility (put spreads / IC).
+        OptionType primaryType = req.optionType() != null ? req.optionType() : OptionType.PE;
 
         // Fetch live option chain for current expiry
         OptionChainData chain = optionChainClient.fetch(trade.getExpiryDate());
+        List<StrikeData> primaryStrikes = (primaryType == OptionType.CE) ? chain.calls() : chain.puts();
 
-        // Resolve LTP and IV for each requested strike
-        StrikeData peShortData = findStrike(chain.puts(), req.peShortStrike(), "PE short");
-        StrikeData peLongData  = findStrike(chain.puts(), req.peLongStrike(),  "PE long");
+        // Resolve LTP and IV for each requested strike (primary pair from calls or puts per type)
+        StrikeData peShortData = findStrike(primaryStrikes, req.peShortStrike(), primaryType + " short");
+        StrikeData peLongData  = findStrike(primaryStrikes, req.peLongStrike(),  primaryType + " long");
 
         StrikeData ceShortData = isIc ? findStrike(chain.calls(), req.ceShortStrike(), "CE short") : null;
         StrikeData ceLongData  = isIc ? findStrike(chain.calls(), req.ceLongStrike(),  "CE long")  : null;
@@ -403,15 +435,17 @@ public class RecommendationService {
         BigDecimal roc = maxProfitTotal.divide(capital, 6, RoundingMode.HALF_UP)
                 .multiply(HUNDRED).setScale(4, RoundingMode.HALF_UP);
 
-        // Black-Scholes PoP on PE short strike (the defining downside risk leg)
+        // Black-Scholes PoP on the primary short strike, using its actual option type
+        // (short PUT → N(d2); short CALL → N(-d2)). A bear call spread was previously
+        // mis-priced as a put here, tripping the PoP floor and blocking placement.
         BigDecimal iv = peShortData.iv() != null ? peShortData.iv() : chain.spot().divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP);
-        BigDecimal popRaw = blackScholes.calculatePop(chain.spot(), BigDecimal.valueOf(req.peShortStrike()), iv, dte, RISK_FREE_RATE);
+        BigDecimal popRaw = blackScholes.calculatePop(chain.spot(), BigDecimal.valueOf(req.peShortStrike()), iv, dte, RISK_FREE_RATE, primaryType);
         BigDecimal pop = popRaw.multiply(HUNDRED).setScale(2, RoundingMode.HALF_UP);
 
-        // Two-rule hard blocks
-        boolean popBlocked  = pop.compareTo(POP_HARD_FLOOR) < 0;
+        // Two-rule hard blocks — bypassed in testing mode (hardGateEnabled=false)
+        boolean popBlocked  = config.isHardGateEnabled() && pop.compareTo(POP_HARD_FLOOR) < 0;
         BigDecimal maxLossPct = capital.multiply(new BigDecimal("0.015"));
-        boolean lossBlocked = realExpectedLossTotal.compareTo(maxLossPct) > 0;
+        boolean lossBlocked = config.isHardGateEnabled() && realExpectedLossTotal.compareTo(maxLossPct) > 0;
 
         log.info("override.calculate",
                 kv("tradeId", req.tradeId()),
@@ -433,7 +467,7 @@ public class RecommendationService {
                 isIc ? ceLongData.instrumentKey()  : null,
                 netPremiumPerUnit, pop,
                 maxProfitTotal, theoreticalMaxLossTotal, realExpectedLossTotal, roc,
-                popBlocked, lossBlocked);
+                popBlocked, lossBlocked, !config.isHardGateEnabled());
     }
 
     private StrikeData findStrike(List<com.the3Cgrp.zupptrade.agent2.client.model.StrikeData> chain,
@@ -623,12 +657,38 @@ public class RecommendationService {
                 ? ctx.getShortLeg().ltp().subtract(ctx.getLongLeg().ltp())
                 : ctx.getLongLeg().ltp().subtract(ctx.getShortLeg().ltp());
 
+        // PoP / PoPP / gap on the card are PERCENTAGES (0–100) — the UI and gates use %, not the
+        // raw 0–1 leg probabilities (Upstox pop is the BUYER's P(ITM)). Direction-aware:
+        //   Credit: seller PoP = (1 − short buyer-pop)×100 (matches Gate G1); PoPP = (1 − long buyer-pop)×100.
+        //   Debit:  directional — long-leg ITM prob as PoP, short strike ITM prob as the PoPP boundary.
+        BigDecimal shortBuyerPop = ctx.getShortLeg().pop() != null ? ctx.getShortLeg().pop() : BigDecimal.ZERO;
+        BigDecimal longBuyerPop  = ctx.getLongLeg().pop()  != null ? ctx.getLongLeg().pop()  : BigDecimal.ZERO;
+        boolean isIronCondor = ctx.getShortLeg2() != null && ctx.getLongLeg2() != null;
+        BigDecimal popPct, poppPct;
+        if (direction == SpreadDirection.DEBIT) {
+            popPct  = longBuyerPop.multiply(HUNDRED);
+            poppPct = shortBuyerPop.multiply(HUNDRED);
+        } else if (isIronCondor) {
+            // DISPLAY-ONLY combined PoP. Gates (G1/G3) and Agent 3 monitoring stay per-side.
+            // A condor keeps its premium only if spot finishes BETWEEN both shorts. "Spot below the
+            // PE short" and "spot above the CE short" are mutually exclusive tails, so they ADD:
+            //   PoP = 1 − P(PE ITM) − P(CE ITM). See ironCondorDisplayPopPct().
+            BigDecimal ceBuyerPop = ctx.getShortLeg2().pop() != null ? ctx.getShortLeg2().pop() : BigDecimal.ZERO;
+            popPct  = ironCondorDisplayPopPct(shortBuyerPop, ceBuyerPop);
+            poppPct = popPct;   // single combined headline — no per-leg gap on the IC card
+        } else {
+            popPct  = BigDecimal.ONE.subtract(shortBuyerPop).multiply(HUNDRED);
+            poppPct = BigDecimal.ONE.subtract(longBuyerPop).multiply(HUNDRED);
+        }
+        popPct  = popPct.setScale(2, RoundingMode.HALF_UP);
+        poppPct = poppPct.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal popGapPct = popPct.subtract(poppPct).abs().setScale(2, RoundingMode.HALF_UP);
+
         // Layer 5 (PositionSizer) fields are null when engine exits early on HARD_GATE_FAILURE
         TradeSummary summary = new TradeSummary(
                 netPremium, ctx.getLots(), ctx.getLotSize(),
                 orZero(ctx.getMaxProfitTotal()), orZero(ctx.getTheoreticalMaxLossTotal()), orZero(ctx.getRealExpectedLossTotal()),
-                ctx.getShortLeg().pop(), ctx.getLongLeg().pop(),
-                ctx.getShortLeg().pop().subtract(ctx.getLongLeg().pop()).abs(),
+                popPct, poppPct, popGapPct,
                 orZero(ctx.getRoc()), orZero(ctx.getRocAnnualised()), orZero(ctx.getNetDelta())
         );
 
@@ -644,7 +704,8 @@ public class RecommendationService {
                 ctx.getSpot(), ctx.getVix(), atmIv,
                 ctx.getHistoricalVolatility(), ivHvRatio,
                 ctx.getIvRegime(), signal.getVixRegime(),
-                ctx.getExpectedMove(), ctx.getOneFourSdBoundary()
+                ctx.getExpectedMove(), ctx.getOneFourSdBoundary(),
+                ctx.getRelaxedGate1PopPct() != null   // readjustment re-entry → EXIT-only downstream
         );
 
         MonitorThresholdsDto thresholds = buildThresholds(ctx);
@@ -652,9 +713,24 @@ public class RecommendationService {
         String rationale = buildRationale(ctx);
 
         TradeEntity trade = new TradeEntity();
+        // Status: testing mode always PENDING_CONFIRM; production rejects skip decisions and gate failures.
+        TradeStatus status;
+        String closeReason = null;
+        if (!ctx.isHardGateEnabled()) {
+            status = TradeStatus.PENDING_CONFIRM;
+        } else if (ctx.isSkipDecision()) {
+            status = TradeStatus.REJECTED;
+            closeReason = "SKIP_DECISION:" + ctx.getSkipReason();
+        } else if (!ctx.isAllHardGatesPassed()) {
+            status = TradeStatus.REJECTED;
+            closeReason = resolveSkipReason(ctx);
+        } else {
+            status = TradeStatus.PENDING_CONFIRM;
+        }
+
         trade.setAgent1Signal(signal);
         trade.setUserProfile(userProfile);
-        trade.setStatus(ctx.isAllHardGatesPassed() ? TradeStatus.PENDING_CONFIRM : TradeStatus.REJECTED);
+        trade.setStatus(status);
         trade.setStrategy(ctx.getStrategy());
         trade.setSpreadDirection(ctx.getSpreadDirection() != null ? ctx.getSpreadDirection() : SpreadDirection.CREDIT);
         trade.setExpiryDate(signal.getExpiryDate());
@@ -666,10 +742,7 @@ public class RecommendationService {
         trade.setGateResults(jsonUtil.toJson(ctx.getGateResults()));
         trade.setGeneratedAt(now);
         trade.setValidUntil(now.plusMinutes(20));
-
-        if (!ctx.isAllHardGatesPassed()) {
-            trade.setCloseReason(resolveSkipReason(ctx));
-        }
+        trade.setCloseReason(closeReason);
 
         // Generate unique trade code from DB sequence: T-YYYYMMDD-XXXX
         long seqVal = tradeRepository.nextTradeCodeSeq();
@@ -694,64 +767,107 @@ public class RecommendationService {
         BigDecimal t3Loss = ctx.getTheoreticalMaxLossTotal();
 
         if (ctx.getStrategy() == Strategy.IRON_CONDOR || ctx.getStrategy() == Strategy.WIDE_IRON_CONDOR) {
-            // Iron Condor: bilateral thresholds — PE short (down side) + CE short (up side).
-            // T1/T2 are computed as the Nifty level where live PoP of the short leg equals
-            // POP_HOLD_MINIMUM (T1 WATCH) and POP_WATCH_MINIMUM (T2 READJUST) respectively.
-            // This makes thresholds adaptive to IV and DTE at trade entry.
-            BigDecimal peShort = BigDecimal.valueOf(ctx.getShortLeg().strike());
-            BigDecimal ceShort = BigDecimal.valueOf(ctx.getShortLeg2().strike());
-            BigDecimal peIv = lookupIv(ctx.getOptionChainData(), ctx.getShortLeg().strike(), OptionType.PE);
-            BigDecimal ceIv = lookupIv(ctx.getOptionChainData(), ctx.getShortLeg2().strike(), OptionType.CE);
+            // Iron Condor: bilateral credit ladder — PE short (down) + CE short (up), each scaled to
+            // its own entry seller PoP (70/64/57-style fractions). Levels are recomputed by Agent 3
+            // every cycle from live IV/DTE; ±125/100/75 floors guarantee ordering and a ≥75pt exit.
+            int peStrike = ctx.getShortLeg().strike();
+            int ceStrike = ctx.getShortLeg2().strike();
+            BigDecimal peIv = lookupIv(ctx.getOptionChainData(), peStrike, OptionType.PE);
+            BigDecimal ceIv = lookupIv(ctx.getOptionChainData(), ceStrike, OptionType.CE);
+            BigDecimal peEntryPop = sellerEntryPop(ctx.getShortLeg());
+            BigDecimal ceEntryPop = sellerEntryPop(ctx.getShortLeg2());
             int dte = ctx.getDte();
-            return MonitorThresholdsDto.ironCondor(
-                    popToNifty(peShort, peIv, dte, TradingConstants.POP_HOLD_MINIMUM,  OptionType.PE),
-                    popToNifty(peShort, peIv, dte, TradingConstants.POP_WATCH_MINIMUM, OptionType.PE),
-                    peShort,
-                    popToNifty(ceShort, ceIv, dte, TradingConstants.POP_HOLD_MINIMUM,  OptionType.CE),
-                    popToNifty(ceShort, ceIv, dte, TradingConstants.POP_WATCH_MINIMUM, OptionType.CE),
-                    ceShort,
-                    t2Loss, t3Loss);
+            CreditLadderCalculator.Ladder put  = CreditLadderCalculator.compute(peStrike, OptionType.PE, peEntryPop, peIv, dte, RISK_FREE_RATE);
+            CreditLadderCalculator.Ladder call = CreditLadderCalculator.compute(ceStrike, OptionType.CE, ceEntryPop, ceIv, dte, RISK_FREE_RATE);
+            return MonitorThresholdsDto.ironCondorCredit(
+                    put.t1Nifty(),  put.t2Nifty(),  put.t3Nifty(),
+                    call.t1Nifty(), call.t2Nifty(), call.t3Nifty(),
+                    t2Loss, t3Loss, peEntryPop, ceEntryPop);
         }
 
-        BigDecimal shortStrike = BigDecimal.valueOf(ctx.getShortLeg().strike());
         SpreadDirection direction = ctx.getSpreadDirection();
 
         if (direction == SpreadDirection.CREDIT) {
-            // Bull Put Spread (PE short): danger is Nifty FALLING → T1/T2 are ABOVE the short strike
-            // Bear Call Spread (CE short): danger is Nifty RISING → T1/T2 are BELOW the short strike
-            boolean isCeShort = ctx.getShortLeg().optionType() == OptionType.CE;
-            OptionType shortType = isCeShort ? OptionType.CE : OptionType.PE;
-            BigDecimal shortIv = lookupIv(ctx.getOptionChainData(), ctx.getShortLeg().strike(), shortType);
-            int dte = ctx.getDte();
-            BigDecimal t1 = popToNifty(shortStrike, shortIv, dte, TradingConstants.POP_HOLD_MINIMUM,  shortType);
-            BigDecimal t2 = popToNifty(shortStrike, shortIv, dte, TradingConstants.POP_WATCH_MINIMUM, shortType);
-            return MonitorThresholdsDto.twoLeg(t1, t2, shortStrike, t2Loss, t3Loss);
+            // Bull Put (PE short) / Bear Call (CE short): 70/64/57-style ladder scaled to entry PoP,
+            // recomputed live by Agent 3. PE levels sit above the short strike, CE below; ±75 T3 floor.
+            int strike = ctx.getShortLeg().strike();
+            OptionType shortType = ctx.getShortLeg().optionType();
+            BigDecimal shortIv = lookupIv(ctx.getOptionChainData(), strike, shortType);
+            BigDecimal entryPop = sellerEntryPop(ctx.getShortLeg());
+            CreditLadderCalculator.Ladder l = CreditLadderCalculator.compute(
+                    strike, shortType, entryPop, shortIv, ctx.getDte(), RISK_FREE_RATE);
+            return MonitorThresholdsDto.twoLegCredit(
+                    l.t1Nifty(), l.t2Nifty(), l.t3Nifty(), t2Loss, t3Loss, entryPop);
         } else {
-            // Debit spreads: profit exit targets (Nifty rising = profit for bull call)
-            return MonitorThresholdsDto.twoLeg(
-                    ctx.getSpot().multiply(new BigDecimal("1.005")).setScale(0, RoundingMode.HALF_UP), // T1: 0.5% RoC level
-                    ctx.getSpot().multiply(new BigDecimal("1.010")).setScale(0, RoundingMode.HALF_UP), // T2: 1% RoC level
-                    ctx.getSpot(),                                                                       // T3: entry level (loss exit)
-                    t2Loss, t3Loss);
+            // Debit spread (Bull Call / Bear Put): record entry directional PoP (at breakeven) and
+            // PoPP (at the short strike) so Agent 3 monitors via PoP (disaster stop) + the PoP−PoPP
+            // gap (give-back lock). Direction-correct for both — bull call profits up, bear put down.
+            TradeLegDto longLeg  = ctx.getLongLeg();
+            TradeLegDto shortLeg = ctx.getShortLeg();
+            boolean isBullCall = longLeg.optionType() == OptionType.CE;
+            BigDecimal netDebit    = longLeg.ltp().subtract(shortLeg.ltp());
+            BigDecimal longStrike  = BigDecimal.valueOf(longLeg.strike());
+            BigDecimal shortStrike = BigDecimal.valueOf(shortLeg.strike());
+            BigDecimal breakeven   = isBullCall ? longStrike.add(netDebit) : longStrike.subtract(netDebit);
+
+            BigDecimal iv = lookupIv(ctx.getOptionChainData(), longLeg.strike(), longLeg.optionType());
+            if (iv == null || iv.signum() <= 0) {
+                iv = (ctx.getVix() != null && ctx.getVix().signum() > 0)
+                        ? ctx.getVix().divide(HUNDRED, 6, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+            }
+            int dte = ctx.getDte();
+            // directionalPop: probability spot finishes on the PROFIT side of a level.
+            //   bull call (up):  P(spot > level) = N(d2)  → calculatePop(..., PE)
+            //   bear put (down): P(spot < level) = N(-d2) → calculatePop(..., CE)
+            OptionType popType = isBullCall ? OptionType.PE : OptionType.CE;
+            BigDecimal entryPop  = blackScholes.calculatePop(ctx.getSpot(), breakeven,   iv, dte, RISK_FREE_RATE, popType);
+            BigDecimal entryPopp = blackScholes.calculatePop(ctx.getSpot(), shortStrike, iv, dte, RISK_FREE_RATE, popType);
+            return MonitorThresholdsDto.debitSpread(breakeven, shortStrike, longStrike, t2Loss, t3Loss, entryPop, entryPopp);
         }
     }
 
+    private static final BigDecimal DEFAULT_ENTRY_POP = new BigDecimal("0.80");
+
     /**
-     * Returns the Nifty spot level where live PoP of the short option equals targetPop.
-     * Falls back to spec-defined fixed buffers (T1=150, T2=75 pts) when IV is unavailable.
+     * Iron Condor headline PoP for the trade card — DISPLAY ONLY. Gate validation (per-side G1/G3)
+     * and Agent 3 monitoring (per-side thresholds) are unaffected by this figure.
+     * <p>
+     * A condor keeps its full premium only if spot finishes BETWEEN the two short strikes. The two
+     * ways to lose — spot below the PE short, or spot above the CE short — are mutually exclusive
+     * (spot cannot be both), so those disjoint tail probabilities ADD:
+     * <pre>PoP = 1 − P(spot &lt; PE short) − P(spot &gt; CE short) = 1 − peBuyerPop − ceBuyerPop</pre>
+     * {@code peBuyerPop}/{@code ceBuyerPop} are the Upstox buyer P(ITM) of each short leg, i.e. each
+     * side's breach probability. Result is a percentage clamped to [0, 100].
      */
-    private BigDecimal popToNifty(BigDecimal strike, BigDecimal iv, int dte,
-                                   double targetPop, OptionType optionType) {
-        if (iv != null && iv.compareTo(BigDecimal.ZERO) > 0 && dte > 0) {
-            BigDecimal computed = blackScholes.inversePopSpot(strike, iv, dte, RISK_FREE_RATE, targetPop, optionType);
-            if (computed != null) {
-                return computed.setScale(0, RoundingMode.HALF_UP);
-            }
-        }
-        // Fallback: spec §9 fixed buffers (T1=150, T2=75 pts from short strike)
-        boolean isT1 = (targetPop >= TradingConstants.POP_WATCH_MINIMUM);
-        BigDecimal buf = BigDecimal.valueOf(isT1 ? 150 : 75);
-        return optionType == OptionType.PE ? strike.add(buf) : strike.subtract(buf);
+    static BigDecimal ironCondorDisplayPopPct(BigDecimal peBuyerPop, BigDecimal ceBuyerPop) {
+        BigDecimal pe = peBuyerPop != null ? peBuyerPop : BigDecimal.ZERO;
+        BigDecimal ce = ceBuyerPop != null ? ceBuyerPop : BigDecimal.ZERO;
+        BigDecimal pop = BigDecimal.ONE.subtract(pe).subtract(ce).multiply(HUNDRED);
+        if (pop.signum() < 0) pop = BigDecimal.ZERO;
+        if (pop.compareTo(HUNDRED) > 0) pop = HUNDRED;
+        return pop.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
+     * Seller PoP at entry for a credit short leg = 1 − buyer PoP (Upstox pop is buyer-side P(ITM)).
+     * Falls back to the 80% gate default when the leg has no PoP or the value is outside (0,1).
+     */
+    private BigDecimal sellerEntryPop(TradeLegDto shortLeg) {
+        if (shortLeg == null || shortLeg.pop() == null) return DEFAULT_ENTRY_POP;
+        BigDecimal seller = BigDecimal.ONE.subtract(shortLeg.pop());
+        if (seller.signum() <= 0 || seller.compareTo(BigDecimal.ONE) >= 0) return DEFAULT_ENTRY_POP;
+        return seller;
+    }
+
+    /**
+     * Entry seller PoP from a manual override's PoP percentage (already seller-side from
+     * /calculate-override, e.g. 85.00 → 0.85). Falls back to the 80% default when out of (0,1).
+     */
+    private BigDecimal overrideEntryPop(BigDecimal popPct) {
+        if (popPct == null) return DEFAULT_ENTRY_POP;
+        BigDecimal p = popPct.divide(HUNDRED, 4, RoundingMode.HALF_UP);
+        if (p.signum() <= 0 || p.compareTo(BigDecimal.ONE) >= 0) return DEFAULT_ENTRY_POP;
+        return p;
     }
 
     /** Looks up the IV for a specific strike from the option chain. Returns null if not found. */
@@ -766,14 +882,18 @@ public class RecommendationService {
     }
 
     private String buildRationale(RecommendationContext ctx) {
-        if (ctx.getStrategy() == Strategy.NO_TRADE || ctx.getStrategy() == Strategy.SKIP) {
-            return "Strategy: " + ctx.getStrategy() + " — conditions not met for trade entry";
-        }
-        return "Strategy: " + ctx.getStrategy()
+        String base = "Strategy: " + ctx.getStrategy()
                 + " | VIX: " + ctx.getVix() + " (" + ctx.getSignal().getVixRegime() + ")"
                 + " | IV regime: " + ctx.getIvRegime()
                 + " | EM(1.4SD): " + ctx.getOneFourSdBoundary()
                 + " | Gates: " + (ctx.isAllHardGatesPassed() ? "ALL PASSED" : "FAILED");
+        if (ctx.isSkipDecision()) {
+            base = "[" + ctx.getSkipReason() + " overridden → fallback " + ctx.getStrategy() + "] " + base;
+        } else if (ctx.isSoftSkip()) {
+            base = "[LOW-CONVICTION: " + ctx.getSoftSkipReason()
+                    + " — card produced, gates/user decide] " + base;
+        }
+        return base;
     }
 
     private String resolveSkipReason(RecommendationContext ctx) {
@@ -788,7 +908,10 @@ public class RecommendationService {
                                        Agent1SignalEntity signal,
                                        UserProfileEntity userProfile) {
         LocalDateTime now = LocalDateTime.now();
-        String reason = ctx.getStrategy().name();
+        // Prefer the human-readable skip reason (e.g. the expiry-day message); fall back to the enum name.
+        String reason = (ctx.getSkipReason() != null && !ctx.getSkipReason().isBlank())
+                ? ctx.getSkipReason()
+                : ctx.getStrategy().name();
 
         TradeSummary summary = new TradeSummary(
                 BigDecimal.ZERO, 0, ctx.getLotSize(),
@@ -800,7 +923,7 @@ public class RecommendationService {
                 ctx.getSpot(), ctx.getVix(), BigDecimal.ZERO,
                 ctx.getHistoricalVolatility(), BigDecimal.ZERO,
                 ctx.getIvRegime(), signal.getVixRegime(),
-                null, null);
+                null, null, false);   // no-trade cards are never monitored
 
         MonitorThresholdsDto thresholds = MonitorThresholdsDto.twoLeg(
                 BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
@@ -858,7 +981,8 @@ public class RecommendationService {
                 ctx.getGateResults(),
                 jsonUtil.fromJson(trade.getThresholds(), MonitorThresholdsDto.class),
                 buildRationale(ctx),
-                trade.getGeneratedAt(), trade.getValidUntil(), trade.getStatus()
+                trade.getGeneratedAt(), trade.getValidUntil(), trade.getStatus(),
+                !config.isHardGateEnabled(), ctx.isSkipDecision(), ctx.getSkipReason()
         );
     }
 
@@ -893,7 +1017,8 @@ public class RecommendationService {
                 gates,
                 jsonUtil.fromJson(trade.getThresholds(), MonitorThresholdsDto.class),
                 trade.getCloseReason(),
-                trade.getGeneratedAt(), trade.getValidUntil(), trade.getStatus()
+                trade.getGeneratedAt(), trade.getValidUntil(), trade.getStatus(),
+                !config.isHardGateEnabled(), false, null  // skipDecision/skipReason not available from entity
         );
     }
 
@@ -908,10 +1033,12 @@ public class RecommendationService {
      */
     private void applyManualOverride(TradeEntity trade, TradeConfirmRequestDto.OverrideParams ov) {
         boolean isIc = ov.ceShortStrike() != null && ov.ceLongStrike() != null;
+        // Primary pair option type — CALL spreads build CE legs, not PE. Null → PE (back-compat).
+        OptionType primaryType = ov.optionType() != null ? ov.optionType() : OptionType.PE;
 
-        TradeLegDto peShortLeg = new TradeLegDto(OptionType.PE, ov.peShortStrike(), ov.peShortLtp(),
+        TradeLegDto peShortLeg = new TradeLegDto(primaryType, ov.peShortStrike(), ov.peShortLtp(),
                 LegAction.SELL, null, null, ov.peShortInstrumentKey());
-        TradeLegDto peLongLeg = new TradeLegDto(OptionType.PE, ov.peLongStrike(), ov.peLongLtp(),
+        TradeLegDto peLongLeg = new TradeLegDto(primaryType, ov.peLongStrike(), ov.peLongLtp(),
                 LegAction.BUY, null, null, ov.peLongInstrumentKey());
 
         List<TradeLegDto> newLegs;
@@ -929,7 +1056,7 @@ public class RecommendationService {
         TradeSummary updatedSummary = new TradeSummary(
                 ov.netPremiumPerUnit(), ov.lots(), existingSummary.lotSize(),
                 ov.maxProfitTotal(), ov.theoreticalMaxLossTotal(), ov.realExpectedLossTotal(),
-                ov.pop().divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP),
+                ov.pop(),   // already a percentage (0–100) from /calculate-override — store as-is
                 existingSummary.popp(), existingSummary.popGap(),
                 ov.roc(), existingSummary.rocAnnualised(), existingSummary.netDelta()
         );
@@ -937,31 +1064,32 @@ public class RecommendationService {
         trade.setLegs(jsonUtil.toJson(newLegs));
         trade.setSummary(jsonUtil.toJson(updatedSummary));
 
-        // Compute thresholds from override strikes so monitor_config seeding gets correct values.
+        // Exit ladder is algorithm-locked even for hand-built overrides: derive the 70/64/57-style
+        // ladder from the override's OWN entry seller PoP (ov.pop()), and store entryPop so Agent 3
+        // recomputes the Nifty levels live each cycle — identical to algorithm-recommended trades.
+        // Initial levels use the ±125/100/75 floors here (no live IV in the confirm path); Agent 3
+        // replaces them from live IV on its first cycle. Users cannot adjust these levels.
         BigDecimal maxLoss = ov.theoreticalMaxLossTotal() != null ? ov.theoreticalMaxLossTotal() : BigDecimal.ZERO;
         BigDecimal t2Loss = maxLoss.multiply(new BigDecimal("0.30")).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal entryPop = overrideEntryPop(ov.pop());
+        int dte = trade.getExpiryDate() != null
+                ? (int) ChronoUnit.DAYS.between(LocalDate.now(), trade.getExpiryDate()) : 0;
         MonitorThresholdsDto overrideThresholds;
         if (isIc) {
-            BigDecimal peShortBd = BigDecimal.valueOf(ov.peShortStrike());
-            BigDecimal ceShortBd = BigDecimal.valueOf(ov.ceShortStrike());
-            overrideThresholds = MonitorThresholdsDto.ironCondor(
-                    peShortBd.add(BigDecimal.valueOf(100)),
-                    peShortBd.add(BigDecimal.valueOf(50)),
-                    peShortBd,
-                    ceShortBd.subtract(BigDecimal.valueOf(100)),
-                    ceShortBd.subtract(BigDecimal.valueOf(50)),
-                    ceShortBd,
-                    t2Loss, maxLoss);
+            // Only the primary (PE) PoP is supplied for a hand-built IC — reuse it for both sides.
+            CreditLadderCalculator.Ladder down = CreditLadderCalculator.compute(
+                    ov.peShortStrike(), OptionType.PE, entryPop, null, dte, RISK_FREE_RATE);
+            CreditLadderCalculator.Ladder up = CreditLadderCalculator.compute(
+                    ov.ceShortStrike(), OptionType.CE, entryPop, null, dte, RISK_FREE_RATE);
+            overrideThresholds = MonitorThresholdsDto.ironCondorCredit(
+                    down.t1Nifty(), down.t2Nifty(), down.t3Nifty(),
+                    up.t1Nifty(),   up.t2Nifty(),   up.t3Nifty(),
+                    t2Loss, maxLoss, entryPop, entryPop);
         } else {
-            boolean isCeShort = trade.getStrategy() == Strategy.BEAR_CALL_SPREAD;
-            BigDecimal shortStrikeBd = BigDecimal.valueOf(ov.peShortStrike());
-            BigDecimal t1 = isCeShort
-                    ? shortStrikeBd.subtract(BigDecimal.valueOf(100))
-                    : shortStrikeBd.add(BigDecimal.valueOf(100));
-            BigDecimal t2 = isCeShort
-                    ? shortStrikeBd.subtract(BigDecimal.valueOf(50))
-                    : shortStrikeBd.add(BigDecimal.valueOf(50));
-            overrideThresholds = MonitorThresholdsDto.twoLeg(t1, t2, shortStrikeBd, t2Loss, maxLoss);
+            CreditLadderCalculator.Ladder l = CreditLadderCalculator.compute(
+                    ov.peShortStrike(), primaryType, entryPop, null, dte, RISK_FREE_RATE);
+            overrideThresholds = MonitorThresholdsDto.twoLegCredit(
+                    l.t1Nifty(), l.t2Nifty(), l.t3Nifty(), t2Loss, maxLoss, entryPop);
         }
         trade.setThresholds(jsonUtil.toJson(overrideThresholds));
 
@@ -1088,8 +1216,12 @@ public class RecommendationService {
         }
 
         try {
-            TypeReference<List<Map<String, Object>>> listType = new TypeReference<>() {};
-            List<Map<String, Object>> tiers = jsonUtil.fromJson(scoreBreakdownJson, listType);
+            // Agent 1 writes score_breakdown as a JSON OBJECT keyed by tier name:
+            //   { "TIER_1A_PRICE_STRUCTURE": { "average": .., "weight": .., "contribution": .. }, ... }
+            // It was previously parsed as a List, which always threw → this method silently fell back
+            // to SYSTEM_DEFAULT and user tier weights never took effect. Parse the correct shape.
+            TypeReference<Map<String, Map<String, Object>>> mapType = new TypeReference<>() {};
+            Map<String, Map<String, Object>> tiers = jsonUtil.fromJson(scoreBreakdownJson, mapType);
 
             Map<String, BigDecimal> tierWeightMap = Map.of(
                     "TIER_1A_PRICE_STRUCTURE",    userProfile.getTier1aWeight(),
@@ -1100,10 +1232,12 @@ public class RecommendationService {
             );
 
             BigDecimal composite = BigDecimal.ZERO;
-            for (Map<String, Object> tier : tiers) {
-                String tierName = (String) tier.get("tierName");
-                Object avgObj   = tier.get("average");
-                if (tierName == null || avgObj == null) continue;
+            for (Map.Entry<String, Map<String, Object>> entry : tiers.entrySet()) {
+                String tierName          = entry.getKey();
+                Map<String, Object> tier = entry.getValue();
+                if (tier == null) continue;
+                Object avgObj = tier.get("average");
+                if (avgObj == null) continue;
 
                 BigDecimal average    = new BigDecimal(avgObj.toString());
                 BigDecimal userWeight = tierWeightMap.getOrDefault(tierName, BigDecimal.ZERO);
