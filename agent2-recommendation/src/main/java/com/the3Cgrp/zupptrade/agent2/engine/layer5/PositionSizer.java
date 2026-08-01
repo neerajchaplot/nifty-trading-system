@@ -72,7 +72,7 @@ public class PositionSizer {
         int lots;
         BigDecimal realExpectedLossTotal;
         if (ctx.getStrategy().isDebit()) {
-            lots = sizeDebitLots(capital, maxLossPerLot);
+            lots = sizeDebitLots(capital, ctx.getUserProfile().getMaxLossPct(), maxLossPerLot);
             realExpectedLossTotal = maxLossPerLot.multiply(BigDecimal.valueOf(lots))
                     .multiply(DEBIT_REAL_LOSS_FACTOR).setScale(2, RoundingMode.HALF_UP);
         } else {
@@ -131,9 +131,10 @@ public class PositionSizer {
                 kv("finalGatePassed", finalGate.passed()));
     }
 
-    private int sizeDebitLots(BigDecimal capital, BigDecimal maxLossPerLot) {
-        // Budget = 0.5% of capital; maxLossPerLot = net debit × lotSize (the most we can lose per lot)
-        BigDecimal budget = capital.multiply(config.getMaxLossDebitPct()).divide(HUNDRED, 2, RoundingMode.HALF_UP);
+    private int sizeDebitLots(BigDecimal capital, BigDecimal maxLossPct, BigDecimal maxLossPerLot) {
+        // Budget = user profile max-loss % of capital (single source of truth, matches G4D gate);
+        // maxLossPerLot = net debit × lotSize (the most we can lose per lot — defined risk).
+        BigDecimal budget = capital.multiply(maxLossPct).divide(HUNDRED, 2, RoundingMode.HALF_UP);
         int lots = maxLossPerLot.compareTo(BigDecimal.ZERO) > 0
                 ? budget.divide(maxLossPerLot, 0, RoundingMode.FLOOR).intValue()
                 : 1;

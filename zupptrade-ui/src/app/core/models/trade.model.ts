@@ -185,6 +185,7 @@ export interface CalculateOverrideResult {
   popBlocked: boolean;
   lossBlocked: boolean;
   testingModeActive: boolean;    // true when trading.hard-gate-enabled=false on backend
+  maxLossPctLimit: number;       // user profile max-loss % used for lossBlocked (e.g. 2.0)
 }
 
 export interface MarginCheckRequest {

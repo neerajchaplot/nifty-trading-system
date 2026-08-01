@@ -403,7 +403,7 @@
               <span class="ob-metric-val"
                     [style.color]="overrideMetrics.lossBlocked ? '#DC2626' : 'inherit'">
                 {{ formatInr(overrideMetrics.realExpectedLossTotal) }}
-                <span class="ob-block-tag" *ngIf="overrideMetrics.lossBlocked">✗ exceeds 1.5% capital</span>
+                <span class="ob-block-tag" *ngIf="overrideMetrics.lossBlocked">✗ exceeds {{ overrideMetrics.maxLossPctLimit }}% capital</span>
               </span>
             </div>
           </div>
@@ -411,11 +411,17 @@
           <div class="ob-actions">
             <button class="btn-confirm"
                     [disabled]="!canConfirmOverrideBuilder || overrideMetricsLoading"
+                    [title]="overrideBlockReason"
                     (click)="confirmOverrideBuilder()">
               ✓ &nbsp;Confirm to Place Trade
             </button>
             <button class="btn-override-toggle" (click)="closeBuilderMode()">✕ Cancel</button>
           </div>
+          <p class="ob-block-hint"
+             *ngIf="overrideBlockReason && !overrideMetricsLoading"
+             style="margin:6px 0 0; font-size:12px; color:#DC2626;">
+            {{ overrideBlockReason }}
+          </p>
         </div>
 
         <div class="rej-actions">

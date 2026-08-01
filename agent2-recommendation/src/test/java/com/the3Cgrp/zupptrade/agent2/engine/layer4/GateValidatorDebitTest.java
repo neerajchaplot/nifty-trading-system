@@ -153,6 +153,7 @@ class GateValidatorDebitTest {
         RecommendationContext ctx = buildDebitContext(SPOT_NEAR, Confidence.MEDIUM, longLtp, shortLtp);
         ctx.setLots(1);
         ctx.setLotSize(65);
+        ctx.getUserProfile().setMaxLossPct(new BigDecimal("0.5")); // pin budget to 0.5% for this test
 
         GateResultDto g4d = gateValidator.validateG4D(ctx);
         // maxLossTotal = 30 × 1 × 65 = 1950; threshold = 500000 × 0.5% = 2500 → passes
@@ -165,6 +166,7 @@ class GateValidatorDebitTest {
         // capital=500000, budget=2500; netDebit=45, lotSize=65: 45×1×65=2925 > 2500 → fails
         RecommendationContext ctx = buildDebitContext(SPOT_NEAR, Confidence.MEDIUM, LONG_LTP, SHORT_LTP);
         ctx.setLots(1);
+        ctx.getUserProfile().setMaxLossPct(new BigDecimal("0.5")); // pin budget to 0.5% for this test
 
         GateResultDto g4d = gateValidator.validateG4D(ctx);
         assertThat(g4d.passed()).isFalse();

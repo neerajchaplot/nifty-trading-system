@@ -117,8 +117,8 @@ class RecommendationScenarioTest {
     // Spot=24020, DTE=7, ATM call ltp=40, short call (ATM+200) ltp=10
     //   netDebit=30, maxProfit=170, R:R=5.67 ≥ 3 → G1D passes
     //   breakeven = 24000+30 = 24030; distance from spot = 10 ≤ 30 → G2D passes
-    //   maxLossPerLot = 30×65 = 1950; budget = 500000×0.5% = 2500
-    //   lots = floor(2500/1950) = 1; G4D: 1950 ≤ 2500 → G4D passes
+    //   maxLossPerLot = 30×65 = 1950; budget = 500000×1.5% (profile max-loss) = 7500
+    //   lots = floor(7500/1950) = 3; G4D: 30×3×65 = 5850 ≤ 7500 → G4D passes
     @Test
     void s2_bullishExtreme_vixNormal_bullCallSpread_debit_allGatesPass() {
         BigDecimal spot = new BigDecimal("24020");

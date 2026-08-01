@@ -390,6 +390,23 @@ export class RecommendationComponent implements OnInit, OnChanges, OnDestroy {
     return !this.overrideMetrics.popBlocked && !this.overrideMetrics.lossBlocked;
   }
 
+  /**
+   * Explains why "Confirm to Place Trade" is disabled, so the user isn't left guessing.
+   * Returns '' when the button is clickable.
+   */
+  get overrideBlockReason(): string {
+    const m = this.overrideMetrics;
+    if (!m) return 'Enter strikes and lots to calculate the trade.';
+    if (this.overrideMetricsLoading) return 'Calculating…';
+    if (this.canConfirmOverrideBuilder) return '';
+    const reasons: string[] = [];
+    if (m.popBlocked) reasons.push('PoP is below the 50% floor');
+    if (m.lossBlocked) {
+      reasons.push(`max loss exceeds your ${m.maxLossPctLimit}% limit — reduce lots/width or raise the limit in Profile`);
+    }
+    return `Can't place: ${reasons.join('; ')}.`;
+  }
+
   confirmOverrideBuilder(): void {
     if (!this.tradeCard || !this.overrideMetrics || !this.canConfirmOverrideBuilder) return;
 

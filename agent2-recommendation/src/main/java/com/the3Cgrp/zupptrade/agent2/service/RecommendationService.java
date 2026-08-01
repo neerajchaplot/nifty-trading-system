@@ -449,8 +449,11 @@ public class RecommendationService {
 
         // Two-rule hard blocks — bypassed in testing mode (hardGateEnabled=false)
         boolean popBlocked  = config.isHardGateEnabled() && pop.compareTo(POP_HARD_FLOOR) < 0;
-        BigDecimal maxLossPct = capital.multiply(new BigDecimal("0.015"));
-        boolean lossBlocked = config.isHardGateEnabled() && realExpectedLossTotal.compareTo(maxLossPct) > 0;
+        // Max-loss guardrail honors the user's profile limit (max_loss_pct, e.g. 2.00 = 2%),
+        // not a hardcoded 1.5%. Editing the profile now changes what the override panel allows.
+        BigDecimal maxLossPctLimit = trade.getUserProfile().getMaxLossPct();
+        BigDecimal maxLossBudget = capital.multiply(maxLossPctLimit).divide(HUNDRED, 2, RoundingMode.HALF_UP);
+        boolean lossBlocked = config.isHardGateEnabled() && realExpectedLossTotal.compareTo(maxLossBudget) > 0;
 
         log.info("override.calculate",
                 kv("tradeId", req.tradeId()),
@@ -463,7 +466,8 @@ public class RecommendationService {
                 kv("pop", pop),
                 kv("roc", roc),
                 kv("popBlocked", popBlocked),
-                kv("lossBlocked", lossBlocked));
+                kv("lossBlocked", lossBlocked),
+                kv("maxLossPctLimit", maxLossPctLimit));
 
         return new CalculateOverrideResultDto(
                 peShortLtp, peLongLtp, ceShortLtp, ceLongLtp,
@@ -472,7 +476,7 @@ public class RecommendationService {
                 isIc ? ceLongData.instrumentKey()  : null,
                 netPremiumPerUnit, pop,
                 maxProfitTotal, theoreticalMaxLossTotal, realExpectedLossTotal, roc,
-                popBlocked, lossBlocked, !config.isHardGateEnabled());
+                popBlocked, lossBlocked, !config.isHardGateEnabled(), maxLossPctLimit);
     }
 
     private StrikeData findStrike(List<com.the3Cgrp.zupptrade.agent2.client.model.StrikeData> chain,

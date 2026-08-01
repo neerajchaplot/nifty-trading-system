@@ -28,6 +28,7 @@ public record CalculateOverrideResultDto(
         BigDecimal roc,                    // %
 
         boolean popBlocked,                // true if PoP < 50% — hard block (always false in testing mode)
-        boolean lossBlocked,               // true if real expected loss > 1.5% of capital — hard block (always false in testing mode)
-        boolean testingModeActive          // true when trading.hard-gate-enabled=false
+        boolean lossBlocked,               // true if real expected loss > user profile max-loss % — hard block (always false in testing mode)
+        boolean testingModeActive,         // true when trading.hard-gate-enabled=false
+        BigDecimal maxLossPctLimit         // the user profile's max-loss % used for lossBlocked (e.g. 2.00 = 2%)
 ) {}

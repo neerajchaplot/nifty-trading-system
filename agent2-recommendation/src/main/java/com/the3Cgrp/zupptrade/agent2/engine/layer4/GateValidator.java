@@ -187,20 +187,25 @@ public class GateValidator {
         return results;
     }
 
-    /** G4D (debit) — total max loss ≤ 0.5% of capital. Called by PositionSizer after sizing. */
+    /**
+     * G4D (debit) — total max loss ≤ the user profile's max-loss % of capital.
+     * Uses the same profile limit as PositionSizer.sizeDebitLots so sizing and the gate never disagree.
+     * Called by PositionSizer after sizing.
+     */
     public GateResultDto validateG4D(RecommendationContext ctx) {
         BigDecimal netDebitPerUnit = ctx.getLongLeg().ltp().subtract(ctx.getShortLeg().ltp());
         BigDecimal maxLossTotal = netDebitPerUnit
                 .multiply(BigDecimal.valueOf(ctx.getLots()))
                 .multiply(BigDecimal.valueOf(ctx.getLotSize()));
+        BigDecimal maxLossPct = ctx.getUserProfile().getMaxLossPct();
         BigDecimal threshold = ctx.getUserProfile().getCapital()
-                .multiply(config.getMaxLossDebitPct())
+                .multiply(maxLossPct)
                 .divide(HUNDRED, 2, RoundingMode.HALF_UP);
 
         boolean passed = maxLossTotal.compareTo(threshold) <= 0;
 
         GateResultDto g4d = new GateResultDto("G4D", passed,
-                "Total debit cost ≤ " + config.getMaxLossDebitPct() + "% of capital",
+                "Total debit cost ≤ " + maxLossPct + "% of capital",
                 maxLossTotal.setScale(2, RoundingMode.HALF_UP), threshold);
 
         log.info("layer4.gate.g4d",
