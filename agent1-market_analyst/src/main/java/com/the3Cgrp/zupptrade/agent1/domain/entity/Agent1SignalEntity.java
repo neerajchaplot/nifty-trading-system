@@ -69,6 +69,10 @@ public class Agent1SignalEntity {
     @Column(name = "commentary_divergence", nullable = false)
     private Boolean commentaryDivergence = false;
 
+    /** Plain-English "why" for this signal (deterministic; shown behind the UI help icon). */
+    @Column(name = "explanation", columnDefinition = "text")
+    private String explanation;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "key_levels", columnDefinition = "jsonb")
     private String keyLevels;
@@ -114,6 +118,8 @@ public class Agent1SignalEntity {
     public void setScoreBreakdown(String v) { this.scoreBreakdown = v; }
     public Boolean getCommentaryDivergence() { return commentaryDivergence; }
     public void setCommentaryDivergence(Boolean v) { this.commentaryDivergence = v; }
+    public String getExplanation() { return explanation; }
+    public void setExplanation(String v) { this.explanation = v; }
     public String getKeyLevels() { return keyLevels; }
     public void setKeyLevels(String v) { this.keyLevels = v; }
     public String getRawInputs() { return rawInputs; }

@@ -75,7 +75,8 @@ class RecommendExpiryDayTest {
         service = new RecommendationService(
                 signalRepository, userProfileRepository, tradeRepository,
                 referenceDataRepository, optionChainClient, marketDataClient,
-                engine, volatilityService, blackScholes, jsonUtil, ledger, tradingConfig);
+                engine, volatilityService, blackScholes, jsonUtil, ledger, tradingConfig,
+                java.time.Clock.systemDefaultZone());
     }
 
     @Test

@@ -39,6 +39,10 @@ agent5:
     #  a distinct Sandbox-App token, both now resolved.)
     simulate-fills: false
     simulate-exit: false
+    # Place ENTRY legs as MARKET so they fill immediately: the sandbox book does not match a resting
+    # LIMIT, so a LIMIT entry sits open and is cancelled at timeout (never reaching ACTIVE).
+    # Production keeps the default (false = LIMIT entry) for slippage control.
+    market-order-entry: true
 
 logging:
   level:

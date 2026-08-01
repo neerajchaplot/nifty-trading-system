@@ -301,6 +301,74 @@ class AnalyticsControllerIT {
         assertFieldNotNull(resp.getBody(), "$.totalSignals");
     }
 
+    // ── /critical-alerts ──────────────────────────────────────────────────────
+
+    private final UUID alertId = UUID.fromString("aaaaaaaa-0000-0000-0000-00000000000a");
+
+    @Test
+    @Order(16)
+    void criticalAlertsListContainsSeededLiveAlert() {
+        ResponseEntity<String> resp = restClient.get()
+                .uri("/api/v1/agent4/critical-alerts")
+                .retrieve()
+                .toEntity(String.class);
+
+        assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.OK);
+        String body = resp.getBody();
+        List<?> matched = JsonPath.read(body,
+                "$[?(@.alertId == '" + alertId + "')]");
+        assertThat(matched).as("Seeded LIVE alert should appear in list").isNotEmpty();
+        // trade_details JSONB surfaces as a nested object, not an escaped string
+        assertThat((String) JsonPath.read(body,
+                "$[?(@.alertId == '" + alertId + "')].tradeDetails.tag").toString())
+                .contains("ZUPP_IT_TEST");
+    }
+
+    @Test
+    @Order(17)
+    void acknowledgeFlipsAlertOutOfLiveList() {
+        // Acknowledge succeeds
+        ResponseEntity<String> ack = restClient.post()
+                .uri("/api/v1/agent4/critical-alerts/{id}/acknowledge", alertId)
+                .retrieve()
+                .toEntity(String.class);
+        assertThat(ack.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat((String) JsonPath.read(ack.getBody(), "$.status")).isEqualTo("ACKNOWLEDGED");
+
+        // No longer in the LIVE list
+        ResponseEntity<String> list = restClient.get()
+                .uri("/api/v1/agent4/critical-alerts")
+                .retrieve()
+                .toEntity(String.class);
+        List<?> matched = JsonPath.read(list.getBody(),
+                "$[?(@.alertId == '" + alertId + "')]");
+        assertThat(matched).as("Acknowledged alert must drop out of LIVE list").isEmpty();
+    }
+
+    @Test
+    @Order(18)
+    void acknowledgeAlreadyAcknowledgedReturns404() {
+        // Depends on Order(17) having acknowledged it already
+        assertThatThrownBy(() ->
+            restClient.post()
+                      .uri("/api/v1/agent4/critical-alerts/{id}/acknowledge", alertId)
+                      .retrieve()
+                      .toEntity(String.class)
+        ).isInstanceOf(HttpClientErrorException.NotFound.class);
+    }
+
+    @Test
+    @Order(19)
+    void acknowledgeUnknownAlertReturns404() {
+        assertThatThrownBy(() ->
+            restClient.post()
+                      .uri("/api/v1/agent4/critical-alerts/{id}/acknowledge",
+                            UUID.fromString("00000000-dead-dead-dead-00000000000a"))
+                      .retrieve()
+                      .toEntity(String.class)
+        ).isInstanceOf(HttpClientErrorException.NotFound.class);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     /** Avoids AssertJ overload ambiguity from JsonPath.read() generic return type. */
@@ -379,9 +447,20 @@ class AnalyticsControllerIT {
             )
             ON CONFLICT (id) DO NOTHING
             """, tradeId, signalId, profileId);
+
+        // 4. A LIVE critical alert for the acknowledge flow.
+        jdbc.update("""
+            INSERT INTO zupptrade_dev.critical_alerts
+              (alert_id, trade_id, alert_reason, trade_details, status, created_at)
+            VALUES (?, ?, 'ambiguous placement failure — verify Upstox positions',
+                    '{"tag":"ZUPP_IT_TEST","outcome":"RECONCILE_REQUIRED"}'::jsonb,
+                    'LIVE', NOW())
+            ON CONFLICT (alert_id) DO NOTHING
+            """, alertId, tradeId);
     }
 
     private void cleanData() {
+        jdbc.update("DELETE FROM zupptrade_dev.critical_alerts WHERE alert_id = ?", alertId);
         jdbc.update("DELETE FROM zupptrade_dev.trades WHERE id = ?",         tradeId);
         jdbc.update("DELETE FROM zupptrade_dev.agent1_signals WHERE id = ?", signalId);
         jdbc.update("DELETE FROM zupptrade_dev.user_profiles WHERE id = ?",  profileId);

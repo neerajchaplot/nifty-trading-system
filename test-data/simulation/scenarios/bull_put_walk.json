@@ -1,0 +1,12 @@
+{
+  "name": "bull-put spread walks HOLD -> WATCH -> READJUST -> EXIT",
+  "phase": "B",
+  "note": "Spots/IVs mirror S3 seeds T-301..T-304 (DTE=4), which reproduce the four PoP bands. Credit spread => decision comes from LIVE recomputed PoP, not the stored Nifty levels.",
+  "tradeId": "b0000001-0000-0000-0000-000000000001",
+  "ticks": [
+    { "at": "day1 13:00", "niftySpot": 24450, "vix": 18.0, "shortLegLtp": 40,  "longLegLtp": 20,  "shortLegIv": 0.185, "expectAction": "HOLD",     "note": "PoP ~= 0.84  (>= 0.80)" },
+    { "at": "day2 11:00", "niftySpot": 24350, "vix": 18.0, "shortLegLtp": 82,  "longLegLtp": 49,  "shortLegIv": 0.192, "expectAction": "WATCH",    "note": "PoP ~= 0.77  (0.75-0.79)" },
+    { "at": "day3 14:00", "niftySpot": 24200, "vix": 18.0, "shortLegLtp": 130, "longLegLtp": 78,  "shortLegIv": 0.200, "expectAction": "READJUST", "note": "PoP ~= 0.66  (0.65-0.74)  -> readjust=STUB in Increment 1" },
+    { "at": "day4 10:00", "niftySpot": 23950, "vix": 18.0, "shortLegLtp": 210, "longLegLtp": 130, "shortLegIv": 0.210, "expectAction": "EXIT",     "note": "spot 23950 < short 24000 => breach, fires before PoP ladder" }
+  ]
+}

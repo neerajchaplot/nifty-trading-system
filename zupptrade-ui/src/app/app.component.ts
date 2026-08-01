@@ -10,6 +10,7 @@ import { NavComponent } from './features/nav/nav.component';
 import { MarketStripComponent } from './features/market-strip/market-strip.component';
 import { RecommendationComponent } from './features/recommendation/recommendation.component';
 import { LiveMonitorComponent } from './features/live-monitor/live-monitor.component';
+import { CriticalAlertsComponent } from './features/critical-alerts/critical-alerts.component';
 import { AuditComponent } from './features/audit/audit.component';
 import { UserProfileComponent } from './features/user-profile/user-profile.component';
 
@@ -24,6 +25,7 @@ type TabId = 'trading' | 'audit' | 'profile';
     MarketStripComponent,
     RecommendationComponent,
     LiveMonitorComponent,
+    CriticalAlertsComponent,
     AuditComponent,
     UserProfileComponent,
   ],
@@ -52,6 +54,7 @@ type TabId = 'trading' | 'audit' | 'profile';
             <app-recommendation [signal]="signal$ | async"></app-recommendation>
           </div>
           <div class="right-zone">
+            <app-critical-alerts></app-critical-alerts>
             <app-live-monitor [trades]="(trades$ | async) ?? []"></app-live-monitor>
           </div>
         </div>
@@ -122,6 +125,10 @@ type TabId = 'trading' | 'audit' | 'profile';
       border: 1px solid #D1D9E6;
       box-shadow: 0 1px 4px rgba(0,0,0,0.06);
     }
+    /* Critical-alerts widget sits above the monitor at natural height (collapses when empty);
+       the live monitor takes the remaining space and scrolls internally. */
+    .right-zone > app-critical-alerts { flex: 0 0 auto; }
+    .right-zone > app-live-monitor { flex: 1 1 auto; min-height: 0; height: auto; }
     /* Audit fills remaining height */
     .audit-fill {
       flex: 1;

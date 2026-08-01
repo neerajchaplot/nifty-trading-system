@@ -33,5 +33,7 @@ public record Agent1SignalDto(
         @JsonRawValue String keyLevels,
         @JsonRawValue String dataGaps,
         // Nifty 50 spot captured at scoring time (last close when market is shut).
-        BigDecimal spot
+        BigDecimal spot,
+        // Plain-English "why" for this signal — shown behind the market-strip help icon.
+        String explanation
 ) {}

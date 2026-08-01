@@ -27,6 +27,7 @@ import org.mockito.quality.Strictness;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
@@ -73,7 +74,8 @@ class ReadjustmentServiceTest {
     void setUp() {
         service = new ReadjustmentService(
                 agent5ExitClient, agent1ScoreClient, agent2RecommendClient,
-                agent5ExecuteClient, props, alertService, jdbc, ledger);
+                agent5ExecuteClient, props, alertService, jdbc, ledger,
+                Clock.systemDefaultZone(), new org.springframework.core.env.StandardEnvironment());
 
         // Default config values used in all tests
         when(props.getReadjustMinDteDays()).thenReturn(1);

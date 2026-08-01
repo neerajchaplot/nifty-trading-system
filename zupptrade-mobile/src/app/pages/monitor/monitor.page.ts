@@ -204,8 +204,17 @@ export class MonitorPage implements OnInit {
     const v = this.live(trade, key);
     return v == null ? null : v * 100;   // PoP/PoPP/gap stored as fractions (0–1)
   }
-  debitBreakeven(trade: ActiveTrade): number | null { return this.live(trade, 'liveBreakevenLevel'); }
-  debitProfitBook(trade: ActiveTrade): number | null { return this.live(trade, 'liveProfitBookLevel'); }
+  // Breakeven and Profit-Book are fixed at entry (stored in monitor_config: t1WatchNiftyLevel = breakeven,
+  // t2ReadjustNiftyLevel = short strike), so fall back to the static thresholds when no live cycle has run
+  // yet. Loss-Cut is dynamic (recomputed each cycle) with no static equivalent — stays live-only.
+  debitBreakeven(trade: ActiveTrade): number | null {
+    return this.live(trade, 'liveBreakevenLevel')
+      ?? (trade.monitorConfig?.thresholds?.t1WatchNiftyLevel ?? null);
+  }
+  debitProfitBook(trade: ActiveTrade): number | null {
+    return this.live(trade, 'liveProfitBookLevel')
+      ?? (trade.monitorConfig?.thresholds?.t2ReadjustNiftyLevel ?? null);
+  }
   debitLossCut(trade: ActiveTrade): number | null { return this.live(trade, 'liveLossCutLevel'); }
   debitPopPct(trade: ActiveTrade): number | null { return this.livePct(trade, 'livePop'); }
   debitPoppPct(trade: ActiveTrade): number | null { return this.livePct(trade, 'livePopp'); }

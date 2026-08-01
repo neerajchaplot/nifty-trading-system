@@ -57,6 +57,16 @@ public class Agent5ExecutionProperties {
     private boolean simulateFills = false;
 
     /**
+     * When true: place ENTRY legs as MARKET orders instead of LIMIT-at-quote.
+     * Default false (production): LIMIT entry controls slippage; the timeout path converts to MARKET
+     * only if a liquid strike hasn't filled (see cancelOnTimeoutInsteadOfMarket).
+     * Set true in sandbox: the sandbox book does not match a resting LIMIT, so a LIMIT entry never
+     * fills and is cancelled at timeout — a MARKET entry fills immediately, exercising the real
+     * place → fill → ACTIVE path. Exit/rollback orders are already MARKET regardless of this flag.
+     */
+    private boolean marketOrderEntry = false;
+
+    /**
      * Delay (ms) before querying the order book by tag during ambiguous-placement-failure
      * reconciliation. A booked-but-unacknowledged order may not surface in the order book
      * immediately after a 5xx/timeout; this short settle window lets it appear before we decide.
@@ -99,6 +109,9 @@ public class Agent5ExecutionProperties {
 
     public boolean isSimulateFills() { return simulateFills; }
     public void setSimulateFills(boolean v) { this.simulateFills = v; }
+
+    public boolean isMarketOrderEntry() { return marketOrderEntry; }
+    public void setMarketOrderEntry(boolean v) { this.marketOrderEntry = v; }
 
     public boolean isSimulateExit() { return simulateExit; }
     public void setSimulateExit(boolean v) { this.simulateExit = v; }

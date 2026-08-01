@@ -1,29 +1,18 @@
 package com.the3Cgrp.zupptrade.agent1.pipeline;
 
-import com.the3Cgrp.zupptrade.agent1.client.GiftNiftyClient;
-import com.the3Cgrp.zupptrade.agent1.client.MarketauxClient;
 import com.the3Cgrp.zupptrade.agent1.client.MarketauxClient.NseiSentiment;
-import com.the3Cgrp.zupptrade.agent1.domain.model.FiiDiiData;
-import com.the3Cgrp.zupptrade.agent1.domain.model.FiiDiiTrend;
-import com.the3Cgrp.zupptrade.agent1.service.FiiDiiService;
-import com.the3Cgrp.zupptrade.agent1.client.UpstoxHistoricalClient;
-import com.the3Cgrp.zupptrade.agent1.client.UpstoxOptionChainClient;
 import com.the3Cgrp.zupptrade.agent1.composer.SignalComposer;
 import com.the3Cgrp.zupptrade.agent1.domain.entity.Agent1SignalEntity;
 import com.the3Cgrp.zupptrade.agent1.domain.model.CommentarySignal;
 import com.the3Cgrp.zupptrade.agent1.domain.model.MarketInputs;
-import com.the3Cgrp.zupptrade.agent1.domain.model.OhlcCandle;
 import com.the3Cgrp.zupptrade.agent1.domain.model.PrecomputedIndicators;
 import com.the3Cgrp.zupptrade.agent1.domain.model.TierScore;
 import com.the3Cgrp.zupptrade.agent1.dto.ScoreRequestDto;
+import com.the3Cgrp.zupptrade.agent1.explain.SignalExplanationService;
 import com.the3Cgrp.zupptrade.agent1.repository.Agent1SignalRepository;
 import com.the3Cgrp.zupptrade.agent1.scoring.TierScorer;
-import com.the3Cgrp.zupptrade.agent1.service.CommentaryExtractorService;
-import com.the3Cgrp.zupptrade.agent1.service.NiftyCloseRecorderService;
-import com.the3Cgrp.zupptrade.agent1.service.TechnicalIndicatorService;
 import com.the3Cgrp.zupptrade.agent1.service.TierWeightResolver;
 import com.the3Cgrp.zupptrade.core.expiry.ExpiryDateService;
-import com.the3Cgrp.zupptrade.shared.enums.VixRegime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -60,43 +49,25 @@ public class ScoringPipeline {
     private final List<TierScorer> tierScorers;
     private final SignalComposer composer;
     private final Agent1SignalRepository repository;
-    private final UpstoxHistoricalClient historicalClient;
-    private final UpstoxOptionChainClient optionChainClient;
-    private final FiiDiiService fiiDiiService;
-    private final MarketauxClient marketauxClient;
-    private final GiftNiftyClient giftNiftyClient;
-    private final CommentaryExtractorService commentaryExtractor;
-    private final TechnicalIndicatorService technicalIndicatorService;
+    private final MarketInputsProvider marketInputsProvider;
     private final ExpiryDateService expiryDateService;
     private final TierWeightResolver tierWeightResolver;
-    private final NiftyCloseRecorderService niftyCloseRecorder;
+    private final SignalExplanationService explanationService;
 
     public ScoringPipeline(List<TierScorer> tierScorers,
                            SignalComposer composer,
                            Agent1SignalRepository repository,
-                           UpstoxHistoricalClient historicalClient,
-                           UpstoxOptionChainClient optionChainClient,
-                           FiiDiiService fiiDiiService,
-                           MarketauxClient marketauxClient,
-                           GiftNiftyClient giftNiftyClient,
-                           CommentaryExtractorService commentaryExtractor,
-                           TechnicalIndicatorService technicalIndicatorService,
+                           MarketInputsProvider marketInputsProvider,
                            ExpiryDateService expiryDateService,
                            TierWeightResolver tierWeightResolver,
-                           NiftyCloseRecorderService niftyCloseRecorder) {
+                           SignalExplanationService explanationService) {
         this.tierScorers = tierScorers;
         this.composer = composer;
         this.repository = repository;
-        this.historicalClient = historicalClient;
-        this.optionChainClient = optionChainClient;
-        this.fiiDiiService = fiiDiiService;
-        this.marketauxClient = marketauxClient;
-        this.giftNiftyClient = giftNiftyClient;
-        this.commentaryExtractor = commentaryExtractor;
-        this.technicalIndicatorService = technicalIndicatorService;
+        this.marketInputsProvider = marketInputsProvider;
         this.expiryDateService = expiryDateService;
         this.tierWeightResolver = tierWeightResolver;
-        this.niftyCloseRecorder = niftyCloseRecorder;
+        this.explanationService = explanationService;
     }
 
     /** Step 1-4 outside transaction (no DB writes during external API calls). Step 5 in transaction. */
@@ -115,8 +86,9 @@ public class ScoringPipeline {
         }
         log.info("pipeline.expiry resolved={} supplied={}", effectiveExpiry, request.expiryDate() != null);
 
-        // Step 1: Fetch all inputs — each client handles its own errors, returns null on failure
-        MarketInputs inputs = fetchInputs(request, effectiveExpiry);
+        // Step 1: Fetch all inputs via the provider (live Upstox/Marketaux/LLM, or scenario folder
+        // under the simulation profile). The provider never throws — missing data becomes null.
+        MarketInputs inputs = marketInputsProvider.fetch(request, effectiveExpiry);
         logInputsSummary(inputs);
 
         // Step 2: Score each tier
@@ -141,93 +113,14 @@ public class ScoringPipeline {
         // BUG-05 fix: only persist key_levels when commentary was actually provided
         boolean hasCommentary = request.commentary() != null && !request.commentary().isBlank();
         signal.setKeyLevels(hasCommentary ? buildKeyLevelsJson(inputs.getCommentarySignal()) : null);
-        signal.setDataGaps(buildDataGapsJson(inputs, hasCommentary && request.shouldFetchMarketaux()));
+        List<String> dataGaps = collectDataGaps(inputs, hasCommentary && request.shouldFetchMarketaux());
+        signal.setDataGaps(dataGaps.isEmpty() ? null : toJsonArray(dataGaps));
+
+        // Plain-English explanation (deterministic, best-effort — never blocks the pipeline).
+        signal.setExplanation(explanationService.build(signal, tierScores, dataGaps));
 
         // Step 5: Persist
         return persist(signal);
-    }
-
-    private MarketInputs fetchInputs(ScoreRequestDto request, LocalDate expiryDate) {
-        // Historical candles for TA4J (200+ days)
-        List<OhlcCandle> candles = safeGet(() -> historicalClient.fetchDailyCandles(200), List.of());
-
-        // Record settled daily closes as a byproduct (no extra Upstox call) for Agent 4's
-        // signal-accuracy metric. Best-effort — never breaks scoring.
-        niftyCloseRecorder.record(candles);
-
-        // Pre-compute TA4J indicators from candle history
-        PrecomputedIndicators indicators = technicalIndicatorService.compute(candles);
-
-        // Fetch previous session's VIX close from Upstox historical candles.
-        // More accurate than reading the DB signal's vix_level, which reflects the last Agent1 run
-        // (an intraday value) rather than the true previous trading day close.
-        BigDecimal lastVix = safeGet(historicalClient::fetchVixPrevClose, null);
-        log.debug("pipeline.vixPrevLevel historical={}", lastVix);
-
-        // Option chain: spot, PCR, max pain, futures premium from Upstox
-        // Pass lastVix so VolatilityMacroScorer can calculate vix_daily_change (Tier 3)
-        var chain = safeGet(() -> optionChainClient.fetch(expiryDate, lastVix), null);
-
-        // Upstox FII/DII data — fetch, persist daily snapshots, and compute 5-day trend
-        FiiDiiData fiiDii = safeGet(fiiDiiService::fetchAndPersist, null);
-
-        // Marketaux news sentiment — fetch once, split into score (for scorer) + details (for audit/display)
-        // Skipped only when caller explicitly sets fetchMarketaux=false (to conserve free-tier quota)
-        NseiSentiment marketauxResult;
-        if (request.shouldFetchMarketaux()) {
-            marketauxResult = safeGet(marketauxClient::fetchNiftySentiment, null);
-            log.debug("marketaux.fetch.result score={}", marketauxResult != null ? marketauxResult.averageScore() : "null");
-        } else {
-            log.info("marketaux.skipped — fetchMarketaux=false in request");
-            marketauxResult = null;
-        }
-        BigDecimal marketauxSentiment = marketauxResult != null ? marketauxResult.averageScore() : null;
-
-        // Gift Nifty premium vs Nifty previous close (Tier 3)
-        BigDecimal giftNiftyPremium = null;
-        BigDecimal giftNiftyLtp = safeGet(giftNiftyClient::fetchLtp, null);
-        if (giftNiftyLtp != null && !candles.isEmpty()) {
-            // candles[0] = most recent session close
-            BigDecimal niftyPrevClose = candles.get(0).close();
-            giftNiftyPremium = giftNiftyLtp.subtract(niftyPrevClose);
-        }
-
-        // LLM commentary extraction — keep full CommentarySignal for key_levels JSONB
-        boolean hasCommentary = request.commentary() != null && !request.commentary().isBlank();
-        CommentarySignal commentarySignal = CommentarySignal.neutral();
-        if (hasCommentary) {
-            commentarySignal = safeGet(
-                    () -> commentaryExtractor.extract(request.commentary(), marketauxSentiment),
-                    CommentarySignal.neutral());
-        }
-        // commentaryBias == null signals Tier 4 that NO user commentary was provided, so it takes
-        // Marketaux at face value instead of averaging with a 0 LLM vote. A genuinely NEUTRAL user
-        // view still yields a non-null "NEUTRAL" bias and keeps the two-signal average.
-        String commentaryBias = hasCommentary ? commentarySignal.bias() : null;
-
-        return MarketInputs.builder()
-                .spot(chain != null ? chain.spot() : null)
-                .futuresPremium(chain != null ? chain.futuresPremium() : null)
-                .pcr(chain != null ? chain.pcr() : null)
-                .maxPain(chain != null ? chain.maxPain() : null)
-                .vixLevel(chain != null ? chain.vixLevel() : null)
-                .vixPrevLevel(chain != null ? chain.vixPrevLevel() : null)
-                .vixRegime(chain != null ? chain.vixRegime() : VixRegime.NORMAL)
-                .fiiNetFutures(fiiDii != null ? fiiDii.fiiNetFutures() : null)
-                .fiiNetOptions(fiiDii != null ? fiiDii.fiiNetOptions() : null)
-                .diiNet(fiiDii != null ? fiiDii.diiNet() : null)
-                .fiiLongRatio(fiiDii != null ? fiiDii.fiiLongRatio() : null)
-                .fiiTrend(fiiDii != null ? fiiDii.futuresTrend() : null)
-                .callOiChange(chain != null ? chain.callOiChange() : null)
-                .putOiChange(chain != null ? chain.putOiChange() : null)
-                .giftNiftyPremium(giftNiftyPremium)
-                .marketauxSentiment(marketauxSentiment)
-                .marketauxDetails(marketauxResult)
-                .commentaryBias(commentaryBias)
-                .commentarySignal(commentarySignal)
-                .indicators(indicators)
-                .expiryDate(expiryDate)
-                .build();
     }
 
     private void logInputsSummary(MarketInputs i) {
@@ -369,7 +262,14 @@ public class ScoringPipeline {
      *
      * @param fetchedMarketaux true when marketaux fetch was requested (so a null value is a gap)
      */
-    private static String buildDataGapsJson(MarketInputs inputs, boolean fetchedMarketaux) {
+    /**
+     * Collects the input names that were null/unavailable during this scoring run.
+     * Only checks top-level inputs; TA4J NaN indicators are tracked per-scorer.
+     * Shared by the data_gaps JSON and the plain-English explanation so the two never drift.
+     *
+     * @param fetchedMarketaux true when marketaux fetch was requested (so a null value is a gap)
+     */
+    private static List<String> collectDataGaps(MarketInputs inputs, boolean fetchedMarketaux) {
         List<String> gaps = new ArrayList<>();
         if (inputs.getSpot() == null)             gaps.add("SPOT");
         if (inputs.getVixLevel() == null)         gaps.add("VIX");
@@ -379,26 +279,15 @@ public class ScoringPipeline {
         if (inputs.getDiiNet() == null)           gaps.add("DII");
         if (inputs.getGiftNiftyPremium() == null) gaps.add("GIFT_NIFTY");
         if (fetchedMarketaux && inputs.getMarketauxSentiment() == null) gaps.add("MARKETAUX");
-        if (gaps.isEmpty()) return null;
-        return "[" + gaps.stream().map(g -> "\"" + g + "\"").collect(Collectors.joining(",")) + "]";
+        return gaps;
+    }
+
+    private static String toJsonArray(List<String> values) {
+        return "[" + values.stream().map(g -> "\"" + g + "\"").collect(Collectors.joining(",")) + "]";
     }
 
     private static String escapeJson(String s) {
         if (s == null) return "";
         return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "");
-    }
-
-    @FunctionalInterface
-    private interface DataFetcher<T> {
-        T fetch() throws Exception;
-    }
-
-    private <T> T safeGet(DataFetcher<T> fetcher, T fallback) {
-        try {
-            return fetcher.fetch();
-        } catch (Exception e) {
-            log.warn("data.fetch.failed", kv("error", e.getMessage()));
-            return fallback;
-        }
     }
 }

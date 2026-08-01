@@ -1,0 +1,24 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Scenario spine. Copy this whole folder, tweak the CSVs, rename, and pass
+#   --simulation.scenario=<folder-name>
+# to every agent at startup. Everything else in this folder is plain data.
+# ─────────────────────────────────────────────────────────────────────────────
+name: bull_put_5day
+description: >
+  Bull-put spread (SELL 24000 PE / BUY 23900 PE) entered Wed, spot drifts down over
+  5 sessions and breaches the short strike near Tuesday expiry → WATCH → EXIT.
+
+# Virtual-clock window the conductor walks. `step` = virtual minutes advanced per tick
+# during market hours (09:15–15:30 IST). 5 sessions at 5-min steps ≈ a few hundred ticks,
+# which run in seconds of real time.
+clock:
+  start: 2026-07-08T09:15:00+05:30
+  end:   2026-07-14T15:30:00+05:30
+  step:  5m
+
+# When to run the entry pipeline (Agent 1 score → Agent 2 recommend → confirm → Agent 5 execute).
+# After this, Agent 3's scheduler monitors the resulting trade every `step` until `end`.
+entry:
+  at: 2026-07-08T09:20:00+05:30
+  userProfile: TEST_USER_10L
+  expiry: 2026-07-14

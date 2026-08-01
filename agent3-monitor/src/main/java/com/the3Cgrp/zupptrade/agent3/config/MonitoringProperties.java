@@ -52,6 +52,9 @@ public class MonitoringProperties {
     // Scheduler — cron and NSE market hours (IST)
     private String schedulerCron       = "0 */5 9-15 * * MON-FRI";
     private String expiryPnlCron       = "0 30 8 * * MON-FRI"; // 8:30 AM — before market opens
+    // Run the expiry sweep once on startup so a restart settles lingering expired trades immediately,
+    // instead of waiting for the next 8:30 AM cron (which is simply missed if the service was down then).
+    private boolean sweepOnStartup     = true;
     private int    marketOpenHour      = 9;
     private int    marketOpenMinute    = 15;
     private int    marketCloseHour     = 15;
@@ -110,6 +113,9 @@ public class MonitoringProperties {
 
     public String getExpiryPnlCron()            { return expiryPnlCron; }
     public void setExpiryPnlCron(String v)      { this.expiryPnlCron = v; }
+
+    public boolean isSweepOnStartup()           { return sweepOnStartup; }
+    public void setSweepOnStartup(boolean v)    { this.sweepOnStartup = v; }
 
     public int getMarketOpenHour()              { return marketOpenHour; }
     public void setMarketOpenHour(int v)        { this.marketOpenHour = v; }

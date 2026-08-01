@@ -19,6 +19,14 @@ public class GlobalExceptionHandler {
         return pd;
     }
 
+    @ExceptionHandler(AlertNotFoundException.class)
+    public ProblemDetail handleAlertNotFound(AlertNotFoundException ex) {
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        pd.setType(URI.create("urn:agent4:alert-not-found"));
+        pd.setTitle("Critical Alert Not Found");
+        return pd;
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail handleBadRequest(IllegalArgumentException ex) {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());

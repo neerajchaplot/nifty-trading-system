@@ -11,6 +11,7 @@ import com.the3Cgrp.zupptrade.shared.dto.TradeLegDto;
 import com.the3Cgrp.zupptrade.shared.enums.OptionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -34,7 +35,8 @@ import java.util.Set;
  * All errors are swallowed — a missing field returns null. Strategies handle nulls.
  */
 @Service
-public class LiveMarketDataService {
+@Profile("!simulation")
+public class LiveMarketDataService implements MarketDataService {
 
     private static final Logger log = LoggerFactory.getLogger(LiveMarketDataService.class);
 

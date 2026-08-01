@@ -18,13 +18,13 @@ public class AlertAutoConfiguration {
 
     @Bean
     @ConditionalOnClass(JdbcTemplate.class)
-    public AlertService alertService(JdbcTemplate jdbc) {
-        return new AlertService(jdbc);
+    public CriticalAlertService criticalAlertService(JdbcTemplate jdbc) {
+        return new CriticalAlertService(jdbc);
     }
 
     @Bean
     @ConditionalOnClass(JdbcTemplate.class)
-    public CriticalAlertService criticalAlertService(JdbcTemplate jdbc) {
-        return new CriticalAlertService(jdbc);
+    public AlertService alertService(JdbcTemplate jdbc, CriticalAlertService criticalAlertService) {
+        return new AlertService(jdbc, criticalAlertService);
     }
 }

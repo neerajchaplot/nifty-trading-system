@@ -19,6 +19,7 @@ import static net.logstash.logback.argument.StructuredArguments.kv;
 
 // Verify Upstox quote endpoint and VIX instrument key against v2 API docs before going live
 @Component
+@org.springframework.context.annotation.Profile("!simulation")
 public class UpstoxMarketDataClient implements MarketDataClient {
 
     private static final Logger log = LoggerFactory.getLogger(UpstoxMarketDataClient.class);

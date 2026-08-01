@@ -34,6 +34,13 @@
     </build>
 
     <dependencies>
+        <!-- Shared enums/DTOs — used by the explain package (MarketVocab phrasing over Bias/VixRegime/…) -->
+        <dependency>
+            <groupId>com.the3Cgrp.zupptrade</groupId>
+            <artifactId>shared-domain</artifactId>
+            <version>1.0.0-SNAPSHOT</version>
+        </dependency>
+
         <!-- Spring Boot auto-configuration support (no embedded server pulled in) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -1,0 +1,14 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Simulation profile — FULLY OFFLINE synthetic execution (no Upstox calls at all).
+#
+# Activate with:  -Dspring.profiles.active=local,simulation
+#
+# Overrides the production/sandbox flags so /execute and /exit take the synthetic
+# path; fault modes are then driven per call by the X-Sim-Fill-Mode header.
+# NEVER combine with a production profile.
+# ─────────────────────────────────────────────────────────────────────────────
+agent5:
+  execution:
+    simulate-fills: true
+    simulate-exit: true
+    bypass-margin-check: true

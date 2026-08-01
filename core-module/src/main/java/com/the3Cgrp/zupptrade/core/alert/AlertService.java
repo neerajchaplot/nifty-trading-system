@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -20,15 +21,23 @@ public class AlertService {
 
     private static final Logger log = LoggerFactory.getLogger(AlertService.class);
 
-    private final JdbcTemplate jdbc;
+    private final JdbcTemplate         jdbc;
+    private final CriticalAlertService criticalAlertService;
 
-    public AlertService(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+    public AlertService(JdbcTemplate jdbc, CriticalAlertService criticalAlertService) {
+        this.jdbc                 = jdbc;
+        this.criticalAlertService = criticalAlertService;
     }
 
-    /** Write a CRITICAL alert — requires immediate user attention (exit failed, manual intervention). */
+    /**
+     * Write a CRITICAL alert — requires immediate user attention (exit failed, rollback failed,
+     * manual intervention). Goes to BOTH the notifications feed AND the critical_alerts table
+     * (the user-actionable card): every critical failure, from any agent, lands in critical_alerts.
+     */
     public void critical(UUID tradeId, String event, String message) {
         write(tradeId, "CRITICAL", event, message);
+        criticalAlertService.record(tradeId, message != null ? message : event,
+                Map.of("event", event, "message", message != null ? message : ""));
     }
 
     /** Write a WARNING alert — elevated risk, user should review (slippage, T2 threshold hit). */

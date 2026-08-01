@@ -24,7 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
-import java.time.Instant;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
@@ -53,21 +53,24 @@ public class MonitorEvaluationService {
     private static final Logger log = LoggerFactory.getLogger(MonitorEvaluationService.class);
 
     private final TradeMonitorReader tradeReader;
-    private final LiveMarketDataService marketDataService;
+    private final MarketDataService marketDataService;
     private final MonitorStrategyFactory strategyFactory;
     private final MonitoringEvaluationRepository evaluationRepository;
     private final JsonUtil jsonUtil;
+    private final Clock clock;
 
     public MonitorEvaluationService(TradeMonitorReader tradeReader,
-                                     LiveMarketDataService marketDataService,
+                                     MarketDataService marketDataService,
                                      MonitorStrategyFactory strategyFactory,
                                      MonitoringEvaluationRepository evaluationRepository,
-                                     JsonUtil jsonUtil) {
+                                     JsonUtil jsonUtil,
+                                     Clock clock) {
         this.tradeReader = tradeReader;
         this.marketDataService = marketDataService;
         this.strategyFactory = strategyFactory;
         this.evaluationRepository = evaluationRepository;
         this.jsonUtil = jsonUtil;
+        this.clock = clock;
     }
 
     /**
@@ -126,7 +129,7 @@ public class MonitorEvaluationService {
                 .orElse(null);
         BigDecimal entryVix = extractEntryVix(trade.marketContextJson());
         boolean readjustmentEntry = extractReadjustmentEntry(trade.marketContextJson());
-        int currentDte = (int) ChronoUnit.DAYS.between(LocalDate.now(), config.expiryDate());
+        int currentDte = (int) ChronoUnit.DAYS.between(LocalDate.now(clock), config.expiryDate());
 
         MonitorEvaluationContext ctx = new MonitorEvaluationContext(
                 config, liveData, currentDte, previousVix, entryVix);
@@ -222,7 +225,7 @@ public class MonitorEvaluationService {
                                                   EvaluationResult result) {
         MonitoringEvaluationEntity entity = new MonitoringEvaluationEntity();
         entity.setTradeId(tradeId);
-        entity.setEvaluatedAt(Instant.now());
+        entity.setEvaluatedAt(clock.instant());
         entity.setAction(result.action());
         entity.setThresholdHit(result.thresholdHit() != null ? result.thresholdHit() : ThresholdHit.NONE);
         entity.setReason(result.reason());
@@ -255,7 +258,7 @@ public class MonitorEvaluationService {
                 result.currentNetPremium(),
                 liveData.shortLegLtp(),
                 liveData.longLegLtp(),
-                Instant.now()
+                clock.instant()
         );
     }
 

@@ -15,6 +15,7 @@ import com.the3Cgrp.zupptrade.agent2.domain.entity.UserProfileEntity;
 import com.the3Cgrp.zupptrade.agent2.domain.model.MarketContext;
 import com.the3Cgrp.zupptrade.agent2.domain.model.TradeSummary;
 import com.the3Cgrp.zupptrade.agent2.engine.RecommendationContext;
+import com.the3Cgrp.zupptrade.agent2.explain.RecommendationRationale;
 import com.the3Cgrp.zupptrade.agent2.engine.RecommendationEngine;
 import com.the3Cgrp.zupptrade.agent2.exception.MarketDataUnavailableException;
 import com.the3Cgrp.zupptrade.agent2.exception.TradeNotFoundException;
@@ -43,6 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -77,6 +79,7 @@ public class RecommendationService {
     private final JsonUtil jsonUtil;
     private final TradeLedgerService ledger;
     private final TradingConfig config;
+    private final Clock clock;
 
     public RecommendationService(Agent1SignalRepository signalRepository,
                                   UserProfileRepository userProfileRepository,
@@ -89,7 +92,8 @@ public class RecommendationService {
                                   BlackScholesCalculator blackScholes,
                                   JsonUtil jsonUtil,
                                   TradeLedgerService ledger,
-                                  TradingConfig config) {
+                                  TradingConfig config,
+                                  Clock clock) {
         this.signalRepository = signalRepository;
         this.userProfileRepository = userProfileRepository;
         this.tradeRepository = tradeRepository;
@@ -102,6 +106,7 @@ public class RecommendationService {
         this.jsonUtil = jsonUtil;
         this.ledger = ledger;
         this.config = config;
+        this.clock = clock;
     }
 
     @Transactional
@@ -129,7 +134,7 @@ public class RecommendationService {
         BigDecimal vix = (snapshot != null && snapshot.vix().compareTo(BigDecimal.ZERO) > 0)
                 ? snapshot.vix() : (signal.getVixLevel() != null ? signal.getVixLevel() : BigDecimal.ZERO);
 
-        int dte = (int) ChronoUnit.DAYS.between(LocalDate.now(), signal.getExpiryDate());
+        int dte = (int) ChronoUnit.DAYS.between(LocalDate.now(clock), signal.getExpiryDate());
 
         // Expiry-day guard: never open a fresh weekly trade with 0 days left. The expected-move and
         // Black-Scholes maths are degenerate at t=0 (zero boundary, binary probabilities) and the
@@ -389,7 +394,7 @@ public class RecommendationService {
                 .orElseThrow(() -> new TradeNotFoundException(req.tradeId()));
 
         int lotSize = fetchLotSize();
-        int dte = (int) ChronoUnit.DAYS.between(LocalDate.now(), trade.getExpiryDate());
+        int dte = (int) ChronoUnit.DAYS.between(LocalDate.now(clock), trade.getExpiryDate());
         BigDecimal capital = trade.getUserProfile().getCapital();
         boolean isIc = req.ceShortStrike() != null && req.ceLongStrike() != null;
         // Primary pair option type — CALL spreads (bear/bull call) resolve against the calls
@@ -491,7 +496,7 @@ public class RecommendationService {
         // For 2-leg spreads only — IC thresholds are computed from legs below (override path can leave zeros here)
         MonitorThresholdsDto storedThresholds = jsonUtil.fromJson(trade.getThresholds(), MonitorThresholdsDto.class);
         SpreadDirection direction = trade.getSpreadDirection();
-        int dte = (int) ChronoUnit.DAYS.between(LocalDate.now(), trade.getExpiryDate());
+        int dte = (int) ChronoUnit.DAYS.between(LocalDate.now(clock), trade.getExpiryDate());
 
         MonitorConfigDto monitorConfig;
         boolean isIronCondor = trade.getStrategy() == Strategy.IRON_CONDOR
@@ -882,18 +887,9 @@ public class RecommendationService {
     }
 
     private String buildRationale(RecommendationContext ctx) {
-        String base = "Strategy: " + ctx.getStrategy()
-                + " | VIX: " + ctx.getVix() + " (" + ctx.getSignal().getVixRegime() + ")"
-                + " | IV regime: " + ctx.getIvRegime()
-                + " | EM(1.4SD): " + ctx.getOneFourSdBoundary()
-                + " | Gates: " + (ctx.isAllHardGatesPassed() ? "ALL PASSED" : "FAILED");
-        if (ctx.isSkipDecision()) {
-            base = "[" + ctx.getSkipReason() + " overridden → fallback " + ctx.getStrategy() + "] " + base;
-        } else if (ctx.isSoftSkip()) {
-            base = "[LOW-CONVICTION: " + ctx.getSoftSkipReason()
-                    + " — card produced, gates/user decide] " + base;
-        }
-        return base;
+        // Plain-English "why", built via the shared explain helpers (core-module) plus agent2's
+        // own strategy/gate/leg vocabulary. Shown behind the recommendation-card help icon.
+        return RecommendationRationale.build(ctx);
     }
 
     private String resolveSkipReason(RecommendationContext ctx) {
@@ -1073,7 +1069,7 @@ public class RecommendationService {
         BigDecimal t2Loss = maxLoss.multiply(new BigDecimal("0.30")).setScale(2, RoundingMode.HALF_UP);
         BigDecimal entryPop = overrideEntryPop(ov.pop());
         int dte = trade.getExpiryDate() != null
-                ? (int) ChronoUnit.DAYS.between(LocalDate.now(), trade.getExpiryDate()) : 0;
+                ? (int) ChronoUnit.DAYS.between(LocalDate.now(clock), trade.getExpiryDate()) : 0;
         MonitorThresholdsDto overrideThresholds;
         if (isIc) {
             // Only the primary (PE) PoP is supplied for a hand-built IC — reuse it for both sides.

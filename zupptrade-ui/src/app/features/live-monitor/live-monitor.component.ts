@@ -103,8 +103,19 @@ export class LiveMonitorComponent implements OnInit {
   isDebit(trade: ActiveTrade): boolean {
     return trade.monitorConfig?.spreadDirection === 'DEBIT';
   }
-  debitBreakeven(trade: ActiveTrade): number | null { return this.liveLevel(trade, 'liveBreakevenLevel'); }
-  debitProfitBook(trade: ActiveTrade): number | null { return this.liveLevel(trade, 'liveProfitBookLevel'); }
+  // Breakeven and Profit-Book are fixed at entry and stored in monitor_config, so fall back to the
+  // static thresholds when no live cycle has run yet (e.g. trade created after market close).
+  //   debitSpread thresholds: t1WatchNiftyLevel = breakeven, t2ReadjustNiftyLevel = short strike (profit-book).
+  // Loss-Cut is dynamic (recomputed each cycle from live IV/DTE) — no static equivalent, so it stays
+  // live-only rather than showing a stale entry-time value.
+  debitBreakeven(trade: ActiveTrade): number | null {
+    return this.liveLevel(trade, 'liveBreakevenLevel')
+      ?? (trade.monitorConfig?.thresholds?.t1WatchNiftyLevel ?? null);
+  }
+  debitProfitBook(trade: ActiveTrade): number | null {
+    return this.liveLevel(trade, 'liveProfitBookLevel')
+      ?? (trade.monitorConfig?.thresholds?.t2ReadjustNiftyLevel ?? null);
+  }
   debitLossCut(trade: ActiveTrade): number | null { return this.liveLevel(trade, 'liveLossCutLevel'); }
   private livePct(trade: ActiveTrade, key: string): number | null {
     const v = this.liveLevel(trade, key);

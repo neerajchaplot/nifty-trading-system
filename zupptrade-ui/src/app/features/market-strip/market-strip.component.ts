@@ -3,11 +3,12 @@ import { CommonModule } from '@angular/common';
 import { Agent1Signal } from '../../core/models/agent1-signal.model';
 import { BiasPillComponent } from '../../shared/components/bias-pill/bias-pill.component';
 import { ConfidencePillComponent } from '../../shared/components/confidence-pill/confidence-pill.component';
+import { HelpPopoverComponent } from '../../shared/components/help-popover/help-popover.component';
 
 @Component({
   selector: 'app-market-strip',
   standalone: true,
-  imports: [CommonModule, BiasPillComponent, ConfidencePillComponent],
+  imports: [CommonModule, BiasPillComponent, ConfidencePillComponent, HelpPopoverComponent],
   template: `
     <div class="strip-wrapper">
       <div class="strip" (click)="expanded = !expanded">
@@ -56,6 +57,8 @@ import { ConfidencePillComponent } from '../../shared/components/confidence-pill
           <span class="strip-value" style="font-size:12px;">{{ signalAge }}</span>
         </div>
         <span class="strip-expand">{{ expanded ? '⌃' : '⌄' }}</span>
+        <app-help-popover *ngIf="signal?.explanation" class="strip-help"
+                          [text]="signal?.explanation ?? null" subject="signal" align="right"></app-help-popover>
       </div>
 
       <div class="strip-expanded" *ngIf="expanded && signal && scoreBreakdown">
@@ -147,6 +150,7 @@ import { ConfidencePillComponent } from '../../shared/components/confidence-pill
       color: #94A3B8;
       line-height: 1;
     }
+    .strip-help { display: inline-flex; align-items: center; margin-left: 10px; }
     .muted { color: #94A3B8; font-size: 12px; }
     .strip-expanded {
       padding: 12px 20px 16px;

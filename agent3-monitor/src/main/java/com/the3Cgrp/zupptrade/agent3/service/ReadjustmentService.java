@@ -16,9 +16,12 @@ import com.the3Cgrp.zupptrade.shared.dto.TradeCardDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
@@ -59,6 +62,8 @@ public class ReadjustmentService {
     private final AlertService            alertService;
     private final JdbcTemplate            jdbc;
     private final TradeLedgerService      ledger;
+    private final Clock                   clock;
+    private final boolean                 stubReentry;
 
     public ReadjustmentService(Agent5ExitClient agent5ExitClient,
                                 Agent1ScoreClient agent1ScoreClient,
@@ -67,7 +72,9 @@ public class ReadjustmentService {
                                 MonitoringProperties props,
                                 AlertService alertService,
                                 JdbcTemplate jdbc,
-                                TradeLedgerService ledger) {
+                                TradeLedgerService ledger,
+                                Clock clock,
+                                Environment environment) {
         this.agent5ExitClient      = agent5ExitClient;
         this.agent1ScoreClient     = agent1ScoreClient;
         this.agent2RecommendClient = agent2RecommendClient;
@@ -76,6 +83,10 @@ public class ReadjustmentService {
         this.alertService          = alertService;
         this.jdbc                  = jdbc;
         this.ledger                = ledger;
+        this.clock                 = clock;
+        // Simulation (contract §6/§11.1): on READJUST, exit the old trade but skip the live
+        // Agent 1 / Agent 2 re-entry chain — Phase-B sims run without those services.
+        this.stubReentry           = environment.acceptsProfiles(Profiles.of("simulation"));
     }
 
     /**
@@ -113,6 +124,15 @@ public class ReadjustmentService {
         boolean exitSuccess = exitOldTrade(trade, config, response.reason(), response.markToMarketPnl());
         if (!exitSuccess) {
             // exitOldTrade already alerted — abort re-entry to avoid double exposure
+            return;
+        }
+
+        // ── Simulation STUB — old trade exited above; skip the live Agent 1/2 re-entry chain ──
+        if (stubReentry) {
+            log.warn("readjust.reentry_stubbed tradeId={} tradeCode={} — old trade exited, re-entry skipped",
+                    oldTradeId, trade.tradeCode());
+            alertService.warning(oldTradeId, "readjust_reentry_stubbed",
+                    "Trade " + trade.tradeCode() + " READJUST (simulation) — old trade exited; re-entry skipped (STUB).");
             return;
         }
 
@@ -278,7 +298,7 @@ public class ReadjustmentService {
 
     private int calculateDte(LocalDate expiryDate) {
         if (expiryDate == null) return 0;
-        long days = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), expiryDate);
+        long days = java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(clock), expiryDate);
         return (int) Math.max(0, days);
     }
 

@@ -68,6 +68,17 @@
             <artifactId>ledger-module</artifactId>
         </dependency>
 
+        <!--
+            core-module: used ONLY for the pure explain package (ExplanationBuilder / MarketVocab).
+            core-module's four auto-configurations are EXCLUDED on Agent2Application so this
+            dependency cannot register Upstox/Alert/expiry/exception beans that would clash with
+            agent2's own configuration — see Agent2Application @SpringBootApplication(exclude=…).
+        -->
+        <dependency>
+            <groupId>com.the3Cgrp.zupptrade</groupId>
+            <artifactId>core-module</artifactId>
+        </dependency>
+
         <!-- Structured JSON logging -->
         <dependency>
             <groupId>net.logstash.logback</groupId>

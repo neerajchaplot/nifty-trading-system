@@ -16,6 +16,7 @@ export interface Agent1Signal {
   scoreBreakdown: string | null;   // serialised JSON — parse on demand
   commentaryDivergence: boolean | null;
   keyLevels: string | null;
+  explanation: string | null;      // plain-English "why" — shown behind the help icon
 }
 
 export interface Agent1Health {

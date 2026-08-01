@@ -170,6 +170,7 @@
   align-items: center;
   justify-content: space-between;
 }
+.tc-title-group { display: inline-flex; align-items: center; gap: 8px; }
 .tc-strategy { font-size: 14px; font-weight: 800; color: #fff; letter-spacing: 0.3px; }
 .tc-conf-pill {
   background: rgba(255,255,255,0.2);

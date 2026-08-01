@@ -229,6 +229,25 @@ class TradeExecutionServiceTest {
     }
 
     @Test
+    void execute_rejectStatusUpdateFails_firesCriticalAlert() {
+        givenConfirmedTrade(EXPECTED_NET);
+        givenSufficientMargin();
+        // First (protective) leg deterministically rejected → rollback empty → rejected() invoked.
+        when(orderClient.placeOrder(any()))
+                .thenThrow(new UpstoxOrderException("400 bad request", null, false));
+        // The REJECTED status write fails (e.g. DB down) — must NOT be swallowed silently.
+        when(jdbc.update(contains("status = 'REJECTED'"), any(), any()))
+                .thenThrow(new RuntimeException("ERROR: value too long / 22001"));
+
+        ExecuteTradeResponse response = service.execute(buildRequest());
+
+        // Caller still gets REJECTED (exchange is flat), but the DB↔state mismatch is escalated.
+        assertThat(response.executionStatus()).isEqualTo(TradeStatus.REJECTED);
+        verify(alertService).critical(eq(TRADE_ID), eq("status_update_failed"),
+                contains("MANUAL INTERVENTION REQUIRED"));
+    }
+
+    @Test
     void execute_shortLegRejectedAfterLongFilled_rollsBackLong() {
         givenConfirmedTrade(EXPECTED_NET);
         givenSufficientMargin();
@@ -260,6 +279,7 @@ class TradeExecutionServiceTest {
         ExecuteTradeResponse response = service.execute(buildRequest());
 
         assertThat(response.executionStatus()).isEqualTo(TradeStatus.REJECTED);
+        // AlertService.critical routes to both notifications and critical_alerts (verified in AlertServiceTest)
         verify(alertService).critical(eq(TRADE_ID), eq("rollback_failed"), anyString());
     }
 
@@ -516,6 +536,7 @@ class TradeExecutionServiceTest {
 
         assertThat(response.status()).isEqualTo(TradeStatus.EXIT_FAILED);
         assertThat(response.failureReason()).isNotBlank();
+        // AlertService.critical routes to both notifications and critical_alerts (verified in AlertServiceTest)
         verify(alertService).critical(eq(TRADE_ID), anyString(), anyString());
     }
 

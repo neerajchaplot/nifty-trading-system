@@ -53,7 +53,8 @@ class Agent1SignalDtoSerializationTest {
                 new BigDecimal("0.1590"), new BigDecimal("0.55"), Confidence.MEDIUM,
                 new BigDecimal("12.25"), VixRegime.LOW, "Falling",
                 "{}", false, null, "[]",
-                new BigDecimal("23412.60"));
+                new BigDecimal("23412.60"),
+                "Marginally bullish — composite score +0.16.");
     }
 
     @Test

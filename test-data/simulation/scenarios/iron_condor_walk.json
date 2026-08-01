@@ -1,0 +1,12 @@
+{
+  "name": "iron-condor drifts down the PE side WATCH -> READJUST -> EXIT",
+  "phase": "B",
+  "note": "Iron Condor => decision comes from the STORED bilateral Nifty levels (not live PoP). Leg LTPs kept near entry so P&L stays inside t2Loss and proximity drives the action. NOTE: this narrow IC (shorts 23900/24150, 150-pt T1 buffers) has NO HOLD zone - the down-T1 (24050) and up-T1 (24000) overlap, so 24000-24050 triggers both. That is a real property worth seeing.",
+  "tradeId": "b0000001-0000-0000-0000-000000000002",
+  "ticks": [
+    { "at": "day1 12:00", "niftySpot": 24030, "vix": 20.0, "shortLegLtp": 39, "longLegLtp": 30, "shortLegIv": 0.205, "expectAction": "WATCH",    "note": "in overlap zone: peT1(<=24050) and ceT1(>=24000) both fire -> WATCH" },
+    { "at": "day2 11:00", "niftySpot": 23990, "vix": 20.0, "shortLegLtp": 48, "longLegLtp": 35, "shortLegIv": 0.210, "expectAction": "WATCH",    "note": "peT1(24050) fires; peT2(23975) not yet" },
+    { "at": "day3 14:00", "niftySpot": 23970, "vix": 20.0, "shortLegLtp": 62, "longLegLtp": 44, "shortLegIv": 0.215, "expectAction": "READJUST", "note": "peT2 readjust level 23975 breached (23970 <= 23975)" },
+    { "at": "day4 10:00", "niftySpot": 23890, "vix": 20.0, "shortLegLtp": 95, "longLegLtp": 60, "shortLegIv": 0.225, "expectAction": "EXIT",     "note": "PE short 23900 breached (23890 <= 23900)" }
+  ]
+}

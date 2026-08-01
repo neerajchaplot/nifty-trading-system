@@ -60,19 +60,27 @@ public class ExecutionController {
     }
 
     @PostMapping("/execute")
-    public ResponseEntity<ExecuteTradeResponse> execute(@Valid @RequestBody ExecuteTradeRequest request) {
-        log.info("api.execute", kv("tradeId", request.tradeId()), kv("legs", request.legs().size()));
-        return ResponseEntity.ok(executionService.execute(request));
+    public ResponseEntity<ExecuteTradeResponse> execute(
+            @Valid @RequestBody ExecuteTradeRequest request,
+            @RequestHeader(value = "X-Sim-Fill-Mode", required = false) SimFillMode simMode) {
+        log.info("api.execute", kv("tradeId", request.tradeId()), kv("legs", request.legs().size()),
+                kv("simMode", simMode));
+        // simMode is honored ONLY when simulate-fills is enabled (sandbox/simulation); the real
+        // production order path ignores it entirely.
+        SimFillMode mode = (simMode == null) ? SimFillMode.FILL : simMode;
+        return ResponseEntity.ok(executionService.execute(request, mode));
     }
 
     @PostMapping("/exit/{tradeId}")
     public ResponseEntity<ExitTradeResponse> exit(@PathVariable UUID tradeId,
-                                                   @Valid @RequestBody ExitTradeRequest request) {
+                                                   @Valid @RequestBody ExitTradeRequest request,
+                                                   @RequestHeader(value = "X-Sim-Fill-Mode", required = false) SimFillMode simMode) {
         if (!request.tradeId().equals(tradeId)) {
             return ResponseEntity.badRequest().build();
         }
-        log.info("api.exit", kv("tradeId", tradeId), kv("reason", request.reason()));
-        ExitTradeResponse response = executionService.exit(request);
+        log.info("api.exit", kv("tradeId", tradeId), kv("reason", request.reason()), kv("simMode", simMode));
+        SimFillMode mode = (simMode == null) ? SimFillMode.FILL : simMode;
+        ExitTradeResponse response = executionService.exit(request, mode);
         return ResponseEntity.ok(response);
     }
 

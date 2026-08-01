@@ -27,6 +27,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -79,7 +80,12 @@ public class TradeExecutionService {
 
     // ── Entry ───────────────────────────────────────────────────────────────
 
+    /** Overload for callers that don't specify a simulation fault mode (production + tests). */
     public ExecuteTradeResponse execute(ExecuteTradeRequest request) {
+        return execute(request, SimFillMode.FILL);
+    }
+
+    public ExecuteTradeResponse execute(ExecuteTradeRequest request, SimFillMode simMode) {
         UUID tradeId = request.tradeId();
 
         log.info("execution.start", kv("tradeId", tradeId), kv("legCount", request.legs().size()));
@@ -109,6 +115,12 @@ public class TradeExecutionService {
                         kv("max", props.getMaxOrderQuantity()));
                 return rejected(tradeId, expectedNet, "QUANTITY_LIMIT", reason);
             }
+        }
+
+        // Simulate path (offline) — bypasses Upstox margin AND order calls. All fault modes
+        // (including MARGIN_REJECT) are produced synthetically inside executeSimulated.
+        if (props.isSimulateFills()) {
+            return executeSimulated(tradeId, request, expectedNet, simMode);
         }
 
         // ── Step 2: Margin check — required margin from /v2/charges/margin ────
@@ -144,11 +156,6 @@ public class TradeExecutionService {
             }
         }
 
-        // Sandbox may not fill weekly NIFTY on a resting LIMIT — simulate fills when flag set.
-        if (props.isSimulateFills()) {
-            return executeSimulated(tradeId, request, expectedNet);
-        }
-
         // ── Step 3: Sequential placement — protective (BUY) legs first ───────
         // One leg per call (place → poll to fill → next). At any failure, the only live orders are
         // the ones already filled (tracked in filledInPlacementOrder) — reverse them and stop.
@@ -161,9 +168,12 @@ public class TradeExecutionService {
 
             PlaceOrderV3Response placed;
             try {
-                placed = orderClient.placeOrder(PlaceOrderV3Request.limit(
-                        leg.instrumentKey(), leg.action().name(), props.getProduct(),
-                        leg.quantity(), leg.limitPrice(), legTag));
+                PlaceOrderV3Request order = props.isMarketOrderEntry()
+                        ? PlaceOrderV3Request.market(leg.instrumentKey(), leg.action().name(),
+                                props.getProduct(), leg.quantity(), legTag)
+                        : PlaceOrderV3Request.limit(leg.instrumentKey(), leg.action().name(),
+                                props.getProduct(), leg.quantity(), leg.limitPrice(), legTag);
+                placed = orderClient.placeOrder(order);
             } catch (UpstoxOrderException e) {
                 if (e.isAmbiguous()) {
                     // 5xx/timeout — the order may or may not have reached the exchange. We do NOT
@@ -248,7 +258,12 @@ public class TradeExecutionService {
 
     // ── Exit ─────────────────────────────────────────────────────────────────
 
+    /** Overload for callers that don't specify a simulation fault mode (production + tests). */
     public ExitTradeResponse exit(ExitTradeRequest request) {
+        return exit(request, SimFillMode.FILL);
+    }
+
+    public ExitTradeResponse exit(ExitTradeRequest request, SimFillMode simMode) {
         UUID tradeId = request.tradeId();
 
         log.info("exit.start", kv("tradeId", tradeId),
@@ -264,14 +279,26 @@ public class TradeExecutionService {
                     "Trade not in exit-eligible status: " + current, null);
         }
 
-        // ── Simulate exit (sandbox only) — skip Upstox entirely, mark CLOSED ──
+        // ── Simulate exit (sandbox only) — skip Upstox entirely ──
         if (props.isSimulateExit()) {
+            // Fault modes on exit → simulate a failed exit (Agent 3 retries on its next cycle).
+            if (simMode != SimFillMode.FILL && simMode != SimFillMode.SLIPPAGE) {
+                String failReason = "Simulated exit failure (fault mode: " + simMode + ")";
+                log.warn("exit.simulated.fault tradeId={} mode={}", tradeId, simMode);
+                setTradeStatus(tradeId, TradeStatus.EXIT_FAILED, failReason);
+                alertService.critical(tradeId, "exit_failed",
+                        "Trade " + tradeId + " simulated exit FAILED (" + simMode + "). Agent 3 will retry.");
+                recordSilently(tradeId, LedgerEventType.EXIT_FAILED,
+                        new ExitFailedPayload("SIMULATED", failReason, 0), "AGENT5:SIMULATE");
+                return new ExitTradeResponse(tradeId, TradeStatus.EXIT_FAILED, failReason, null);
+            }
             log.warn("exit.fills.simulated tradeId={} — simulate-exit=true, NEVER use in production", tradeId);
             LocalDateTime closedAt = LocalDateTime.now();
             setTradeStatusClosed(tradeId, request.reason(), closedAt);
             recordSilently(tradeId, LedgerEventType.TRADE_CLOSED,
                     new TradeClosedPayload(request.reason(), List.of(), null, null),
                     "AGENT5:SIMULATE");
+            writeTradePnlOnClose(tradeId, closedAt.toLocalDate());
             log.info("exit.simulated.complete", kv("tradeId", tradeId), kv("reason", request.reason()));
             return new ExitTradeResponse(tradeId, TradeStatus.CLOSED, null, closedAt);
         }
@@ -299,6 +326,7 @@ public class TradeExecutionService {
 
         if (!failures.isEmpty()) {
             String reason = "Exit order placement failed for: " + String.join("; ", failures);
+            // AlertService.critical also records to critical_alerts (DB) for the UI card.
             log.error("exit.failed — MANUAL INTERVENTION REQUIRED", kv("tradeId", tradeId), kv("failures", reason));
             alertService.critical(tradeId, "exit_failed",
                     "Trade " + tradeId + " exit FAILED — position may still be open. " +
@@ -315,6 +343,7 @@ public class TradeExecutionService {
         recordSilently(tradeId, LedgerEventType.TRADE_CLOSED,
                 new TradeClosedPayload(request.reason(), List.of(), null, null),
                 "AGENT5:SYSTEM");
+        writeTradePnlOnClose(tradeId, closedAt.toLocalDate());
 
         log.info("exit.complete", kv("tradeId", tradeId), kv("reason", request.reason()),
                 kv("legs", request.exitLegs().size()));
@@ -374,6 +403,18 @@ public class TradeExecutionService {
                 log.error("execution.poll.error", kv("orderId", orderId), kv("error", e.getMessage()));
                 return PollResult.none();
             }
+
+            // Diagnostic: capture EXACTLY what the broker returns each poll. This is the field that
+            // tells us why an order didn't fill (open forever / rejected+message / unrecognised
+            // terminal string) instead of inferring it from the timeout.
+            OrderStatusResponse.OrderData d = status.data();
+            log.info("execution.poll.status", kv("orderId", orderId),
+                    kv("apiStatus", status.status()),
+                    kv("orderStatus", d != null ? d.orderStatus() : "null"),
+                    kv("filled", d != null ? d.filledQuantity() : 0),
+                    kv("pending", d != null ? d.pendingQuantity() : 0),
+                    kv("avgPrice", d != null ? d.averagePrice() : null),
+                    kv("message", d != null ? d.statusMessage() : null));
 
             if (status.isComplete()) {
                 return PollResult.full(toLegFill(orderId, legTag, leg, status));
@@ -445,6 +486,7 @@ public class TradeExecutionService {
                 log.info("execution.rollback.leg.placed",
                         kv("tradeId", tradeId), kv("instrument", fill.instrumentKey()));
             } catch (UpstoxOrderException e) {
+                // AlertService.critical also records to critical_alerts (DB) for the UI card.
                 log.error("execution.rollback.leg.FAILED — MANUAL INTERVENTION REQUIRED",
                         kv("tradeId", tradeId), kv("instrument", fill.instrumentKey()),
                         kv("quantity", fill.quantityFilled()), kv("error", e.getMessage()));
@@ -661,6 +703,41 @@ public class TradeExecutionService {
                 leg.limitPrice(), avgPrice, slippage.setScale(2, RoundingMode.HALF_UP));
     }
 
+    /**
+     * Writes the terminal trade_pnl row on a system-driven close (contract §7). Realised P&L is
+     * the mark-to-market P&L from the latest monitoring_evaluations row for the trade — i.e. the
+     * MTM at the moment Agent 3 triggered the exit. Idempotent per (trade_id, snapshot_date).
+     * Best-effort: a failure here never fails the exit — the position is already flat.
+     */
+    private void writeTradePnlOnClose(UUID tradeId, LocalDate snapshotDate) {
+        BigDecimal realised = readLatestMtmPnl(tradeId);   // null if no evaluation was recorded
+        try {
+            jdbc.update(
+                    "INSERT INTO trade_pnl (trade_id, snapshot_date, realised_pnl, unrealised_pnl, total_pnl, position_status, synced_at) " +
+                    "VALUES (?, ?, ?, 0, ?, 'CLOSED', NOW()) " +
+                    "ON CONFLICT (trade_id, snapshot_date) DO UPDATE " +
+                    "SET realised_pnl = EXCLUDED.realised_pnl, unrealised_pnl = 0, " +
+                    "    total_pnl = EXCLUDED.total_pnl, position_status = 'CLOSED', synced_at = NOW()",
+                    tradeId, snapshotDate, realised, realised);
+            log.info("trade_pnl.written", kv("tradeId", tradeId),
+                    kv("snapshotDate", snapshotDate), kv("realisedPnl", realised));
+        } catch (Exception e) {
+            log.error("trade_pnl.write.failed", kv("tradeId", tradeId), kv("error", e.getMessage()));
+        }
+    }
+
+    /** Latest mark-to-market P&L recorded for a trade, or null if none exists. */
+    private BigDecimal readLatestMtmPnl(UUID tradeId) {
+        try {
+            return jdbc.queryForObject(
+                    "SELECT mark_to_market_pnl FROM monitoring_evaluations " +
+                    "WHERE trade_id = ? ORDER BY evaluated_at DESC LIMIT 1",
+                    BigDecimal.class, tradeId);
+        } catch (Exception e) {
+            return null;   // no evaluations (e.g. immediate manual exit) — realised P&L unknown
+        }
+    }
+
     private BigDecimal readExpectedNetPremium(UUID tradeId) {
         try {
             return jdbc.queryForObject(
@@ -680,12 +757,35 @@ public class TradeExecutionService {
      * (zero slippage), then runs the normal downstream path: slippage check → persistFills → ACTIVE.
      */
     private ExecuteTradeResponse executeSimulated(UUID tradeId, ExecuteTradeRequest request,
-                                                  BigDecimal expectedNet) {
+                                                  BigDecimal expectedNet, SimFillMode simMode) {
         log.warn("execution.fills.simulated",
                 kv("tradeId", tradeId), kv("legCount", request.legs().size()),
+                kv("simMode", simMode),
                 kv("note", "simulate-fills=true — NEVER use in production"));
 
-        List<LegFillDto> fills = buildSimulatedFills(request);
+        // Fault modes that abort the entry with NO open position → REJECTED (via rejected()).
+        switch (simMode) {
+            case MARGIN_REJECT -> {
+                return rejected(tradeId, expectedNet, "MARGIN_CHECK",
+                        "Simulated insufficient margin (fault mode)");
+            }
+            case PARTIAL_ROLLBACK -> {
+                return rejected(tradeId, expectedNet, "PARTIAL_FILL",
+                        "Simulated partial fill — one leg rejected, filled leg rolled back to flat (fault mode)");
+            }
+            case TIMEOUT_MARKET -> {
+                if (props.isCancelOnTimeoutInsteadOfMarket()) {
+                    return rejected(tradeId, expectedNet, "FILL_TIMEOUT",
+                            "Simulated fill timeout — resting LIMIT orders cancelled (fault mode)");
+                }
+                log.warn("execution.simulated.timeout_market",
+                        kv("tradeId", tradeId), kv("note", "LIMIT timed out → converted to MARKET"));
+                // fall through — market fill goes ACTIVE
+            }
+            default -> { /* FILL, SLIPPAGE — fall through to the fill build */ }
+        }
+
+        List<LegFillDto> fills = buildSimulatedFills(request, simMode == SimFillMode.SLIPPAGE);
 
         BigDecimal actualNet = computeActualNet(fills);
         boolean slippage     = isSlippage(actualNet, expectedNet);
@@ -711,11 +811,23 @@ public class TradeExecutionService {
                 actualNet, expectedNet, slippage, slippageMsg, null, LocalDateTime.now());
     }
 
-    private List<LegFillDto> buildSimulatedFills(ExecuteTradeRequest request) {
+    private List<LegFillDto> buildSimulatedFills(ExecuteTradeRequest request, boolean degrade) {
         List<LegFillDto> fills = new ArrayList<>();
         for (int i = 0; i < request.legs().size(); i++) {
             LegOrderRequest leg = request.legs().get(i);
             String simulatedOrderId = "SIM-" + request.tradeId().toString().substring(0, 8).toUpperCase() + "-L" + i;
+
+            // Perfect fill at limitPrice, unless the SLIPPAGE fault mode degrades it: SELL fills
+            // lower (receive less), BUY fills higher (pay more) → net breaches the slippage threshold.
+            BigDecimal avgFill = leg.limitPrice();
+            BigDecimal slippagePerUnit = BigDecimal.ZERO;
+            if (degrade) {
+                BigDecimal factor = (leg.action() == LegAction.SELL)
+                        ? new BigDecimal("0.80") : new BigDecimal("1.20");
+                avgFill = leg.limitPrice().multiply(factor).setScale(2, RoundingMode.HALF_UP);
+                slippagePerUnit = avgFill.subtract(leg.limitPrice()).setScale(2, RoundingMode.HALF_UP);
+            }
+
             fills.add(new LegFillDto(
                     simulatedOrderId,
                     OrderTagBuilder.entryTag(request.tradeId(), i),
@@ -725,8 +837,8 @@ public class TradeExecutionService {
                     leg.action(),
                     leg.quantity(),
                     leg.limitPrice(),
-                    leg.limitPrice(),   // averageFillPrice = limitPrice (perfect fill, zero slippage)
-                    BigDecimal.ZERO));  // slippagePerUnit = 0
+                    avgFill,
+                    slippagePerUnit));
         }
         return fills;
     }
@@ -747,7 +859,15 @@ public class TradeExecutionService {
             jdbc.update("UPDATE trades SET status = 'REJECTED', close_reason = ? WHERE id = ?",
                     reason, tradeId);
         } catch (Exception e) {
-            log.error("execution.status.update.failed", kv("tradeId", tradeId));
+            // The exchange is flat here (nothing placed, or filled legs already rolled back), but the
+            // DB row is stuck in its prior status (e.g. CONFIRMED). Escalate so a human reconciles it
+            // rather than leaving a dead trade that looks live. AlertService.critical never throws.
+            log.error("execution.status.update.failed", kv("tradeId", tradeId), kv("error", e.getMessage()));
+            alertService.critical(tradeId, "status_update_failed",
+                    "Trade " + tradeId + " was rejected and the exchange is flat (no open position), " +
+                    "but its database status could NOT be updated to REJECTED — it is stuck in its prior " +
+                    "status. MANUAL INTERVENTION REQUIRED: mark the trade REJECTED in the DB. DB error: " +
+                    e.getMessage());
         }
         recordSilently(tradeId, LedgerEventType.TRADE_FAILED,
                 new TradeFailedPayload(failureStage, reason, null), "AGENT5:SYSTEM");
@@ -802,8 +922,13 @@ public class TradeExecutionService {
                 jdbc.update("UPDATE trades SET status = ? WHERE id = ?", status.name(), tradeId);
             }
         } catch (Exception e) {
+            // DB now disagrees with the real trade state. Escalate for manual reconciliation.
             log.error("exit.status.update.failed",
                     kv("tradeId", tradeId), kv("status", status), kv("error", e.getMessage()));
+            alertService.critical(tradeId, "status_update_failed",
+                    "Trade " + tradeId + " database status could NOT be updated to " + status +
+                    ". The DB now disagrees with the actual trade state. MANUAL INTERVENTION REQUIRED: " +
+                    "reconcile the trade status in the DB. DB error: " + e.getMessage());
         }
     }
 
@@ -812,7 +937,14 @@ public class TradeExecutionService {
             jdbc.update("UPDATE trades SET status = 'CLOSED', closed_at = NOW(), close_reason = ? WHERE id = ?",
                     closeReason, tradeId);
         } catch (Exception e) {
+            // Exit orders were placed (position closed on the exchange) but the row is stuck
+            // ACTIVE/EXIT_IN_PROGRESS. If left, Agent 3 could attempt a duplicate exit — escalate.
             log.error("exit.closed.update.failed", kv("tradeId", tradeId), kv("error", e.getMessage()));
+            alertService.critical(tradeId, "status_update_failed",
+                    "Trade " + tradeId + " exit orders were placed (position closed on the exchange) but " +
+                    "its database status could NOT be updated to CLOSED — it is stuck ACTIVE/EXIT_IN_PROGRESS. " +
+                    "MANUAL INTERVENTION REQUIRED: mark the trade CLOSED in the DB to prevent a duplicate " +
+                    "exit. DB error: " + e.getMessage());
         }
     }
 

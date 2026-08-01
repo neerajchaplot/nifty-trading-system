@@ -23,6 +23,7 @@ import { BiasPillComponent } from '../../shared/components/bias-pill/bias-pill.c
 import { ConfidencePillComponent } from '../../shared/components/confidence-pill/confidence-pill.component';
 import { GateBadgeComponent } from '../../shared/components/gate-badge/gate-badge.component';
 import { MetricBoxComponent } from '../../shared/components/metric-box/metric-box.component';
+import { HelpPopoverComponent } from '../../shared/components/help-popover/help-popover.component';
 import { catchError, of, switchMap } from 'rxjs';
 import { Subject, debounceTime, takeUntil, distinctUntilChanged } from 'rxjs';
 
@@ -39,6 +40,7 @@ const HARD_POP_FLOOR = 50;
   imports: [
     CommonModule, FormsModule, MatButtonModule, MatProgressSpinnerModule,
     BiasPillComponent, ConfidencePillComponent, GateBadgeComponent, MetricBoxComponent,
+    HelpPopoverComponent,
   ],
   templateUrl: './recommendation.component.html',
   styleUrls: ['./recommendation.component.scss'],

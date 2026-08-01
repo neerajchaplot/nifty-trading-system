@@ -44,8 +44,9 @@ nifty-trading-system/
 | V112__create_critical_alerts.sql | critical_alerts table (LIVE/ACKNOWLEDGED; user-actionable alerts w/ JSON trade snapshot) |
 | V100__create_api_tokens.sql | api_tokens table (written by upstox-auth) |
 | V101__seed_reference_data.sql | Seeds NIFTY_LOT_SIZE = 65 into reference_data |
+| V113__create_sim_clock.sql | `sim_clock` singleton — virtual-clock backing store for the simulation harness; read only under the `simulation` profile, inert in prod |
 
-**Next migration: V102** ⚠️ NEVER use V10–V99 — those versions are numerically < V100 which is already applied; Flyway rejects them as out-of-order.
+**Next migration: V114** ⚠️ NEVER use V10–V99 — those versions are numerically < V100 which is already applied; Flyway rejects them as out-of-order. (V109–V113 already exist.)
 **Migration location:** `db-migrations/src/main/resources/db/migration/` — single source of truth; agent1, agent2, and agent3 pull scripts via Maven dependency
 
 ---
@@ -119,6 +120,7 @@ When `RecommendRequestDto.relaxedGate1PopPct` is non-null, GateValidator uses th
 - **ShedLock WIRED** — `@EnableSchedulerLock` on `Agent3MonitorApplication`, `@SchedulerLock` on `runMonitoringCycle()`, `ShedLockConfig` provides `LockProvider`, shedlock-spring + shedlock-provider-jdbc-template v6.3.0 in agent3 pom + parent dependencyManagement
 - **GAP 1 FIXED** — `resolveMonitorConfig()` in MonitorSchedulerService: if `monitor_config` is null but `entry_fills` is present, parses fill prices (SELL→shortFill, BUY→longFill) and calls `Agent2RecommendClient.fetchMonitorConfig()` to seed the config. Agent2 writes to DB; subsequent cycles use the cached value.
 - `TradeMonitorData` record has 8th field `entryFillsJson`; SQL in `TradeMonitorReader` selects `entry_fills`; `Agent2RecommendClient.fetchMonitorConfig()` added (GET with X-Short-Fill-Price / X-Long-Fill-Price headers)
+- **Increment 1 (simulation):** `Clock` injection (`ClockConfig`, `now(clock)` at DTE/market-hours/staleness/timestamp sites in MonitorEvaluationService/MonitorSchedulerService/ReadjustmentService), `sim/` package (`SimClock`/`SimClockService`/`SimClockConfig`/`SimClockController` + V113 `sim_clock`), `MonitorActionRouter` (routing extracted from the scheduler — which lost 5 deps + 7 imports), and `POST /evaluate?act=true` (sandbox/simulation-gated push to Agent 5). See the **Simulation harness** section below.
 
 ### agent5-execution (port 8085)
 - `UpstoxOrderClient` — POST /v2/order/multi/place, GET status, PUT modify, DELETE cancel
@@ -137,6 +139,18 @@ When `RecommendRequestDto.relaxedGate1PopPct` is non-null, GateValidator uses th
 - Retry policy: idempotent reads (status, tag, margin, funds, cancel) retry 3× with a fixed **2s backoff** (`upstox.api.retry-delay-ms`, default 2000); **429 is retried** (not thrown); order **placement never retries** (retry=0). See `UpstoxOrderClient.withRetry`.
 - `TradeExecutionRequestMapper` was **deleted** (July 2026) — dead code (no caller; orchestrator unbuilt) and only handled 2 legs. When the orchestrator lands it should build the N-leg `ExecuteTradeRequest` directly (the live `execute()` path is already N-leg; `Agent5ExecuteClient` in agent3 handles 4-leg Iron Condor).
 - Sandbox IT (`TradeExecutionSandboxIT` T1–T5) written and ready — needs live tokens to run
+
+- **Fault-mode simulation (Increment 1):** `dto/SimFillMode` (`FILL | SLIPPAGE | PARTIAL_ROLLBACK | TIMEOUT_MARKET | MARGIN_REJECT`) supplied per call via the `X-Sim-Fill-Mode` header; honored ONLY when `simulate-fills`/`simulate-exit` is on (the real order path ignores it → prod-safe). Entry: SLIPPAGE degrades fills → slippageAlert; PARTIAL_ROLLBACK/MARGIN_REJECT → REJECTED; TIMEOUT_MARKET → REJECTED (cancel) or ACTIVE (market) per `cancel-on-timeout`. Exit: any fault mode → simulated EXIT_FAILED. `execute`/`exit` gained 2-arg overloads (1-arg preserved for existing callers + the 26 unit tests). The `simulate-fills` path now also bypasses the Upstox margin call → fully offline.
+- **`trade_pnl` on close (Increment 1, contract §7):** `writeTradePnlOnClose()` upserts the terminal `trade_pnl` row (`position_status=CLOSED`) on both success-close paths; realised P&L = latest `monitoring_evaluations.mark_to_market_pnl` for the trade (the MTM at the exit trigger). Idempotent per `(trade_id, snapshot_date)`, best-effort. **First writer of `trade_pnl` in the system.** Caveat: `snapshot_date` uses Agent 5 real time (no `Clock` injected in agent5 yet).
+
+### Simulation harness (Increment 0 + 1)
+
+Offline Phase-B simulator — see `test-data/simulation/` and the frozen `SIMULATION_PHASE_CONTRACT.md`.
+
+- **Increment 0** (`test-data/simulation/`, zero prod impact): golden fixtures (bull-put, iron-condor), Phase-B scenario JSONs, `seed_golden_active.sql`, `run_phase_b.sh` conductor. Drives the Agent 3 decision ladder via the `/evaluate` override body. Golden fixtures are **PROVISIONAL** until captured from a real Phase-A run (contract §5).
+- **Increment 1** — the virtual clock + act seam + Agent 5 fault modes + `trade_pnl` (detailed in the agent3 / agent5 sections above). **Full offline loop:** set virtual clock (`/sim/clock/set`) → `POST /evaluate/{id}?act=true` with an override body → decision → Agent 5 sandbox push (with fault modes) → trade CLOSED + `trade_pnl`. Run all agents with `-Dspring.profiles.active=sandbox,simulation`.
+- **Prod safety:** every sim bean is `@Profile("simulation")`; `act=true` requires sandbox/simulation; fault modes require `simulate-fills`; `SimClockService` logs a loud startup warning. **TODO:** a hard "fail-fast if `simulation` active in a prod environment" assertion (test-matrix F11).
+- **Still open:** capture real golden fixtures + §5 contract test; expiry `trade_pnl` positions-sync (§7); inject `Clock` into agent5 for virtual close dates.
 
 ### zupptrade-ui (Angular 18, port 4200)
 - Standalone components, Angular Material, SCSS
@@ -205,6 +219,10 @@ Update the "What's Built" section and cross off tasks from Pending when a sessio
 `INTEGRATION_TEST_GUIDE.md` contains pre-flight DB checks, per-agent test scenarios (S1.1–S5.3), DB seed SQL for Agent 3 scenarios, end-to-end flow test, and cleanup SQL.
 
 ---
+
+*Last updated: 2026-07-26 — SIMULATION HARNESS Increment 1 (offline Phase-B). Agent 3: `ClockConfig` (prod `Clock` bean, IST, `@Profile("!simulation")`) + `now()`→`now(clock)` at DTE/market-hours/staleness/audit-timestamp sites; new `sim/` package (`SimClock`/`SimClockService`/`SimClockConfig`/`SimClockController`) backed by **V113 `sim_clock`**; `MonitorActionRouter` — EXIT/READJUST/PAUSE routing extracted from `MonitorSchedulerService` (scheduler lost 5 deps + 7 imports, delegates to router; no drift); `POST /evaluate?act=true` (controller-gated to sandbox/simulation) routes a decision to Agent 5 AFTER the evaluate tx commits. Agent 5: `SimFillMode` + `X-Sim-Fill-Mode` header (FILL/SLIPPAGE/PARTIAL_ROLLBACK/TIMEOUT_MARKET/MARGIN_REJECT), `execute`/`exit` 2-arg overloads, simulate path now fully offline (bypasses Upstox margin), `writeTradePnlOnClose()` (first `trade_pnl` writer; realised = latest monitoring_evaluations MTM). Increment 0 folder `test-data/simulation/` (golden fixtures + scenarios + conductor). All changes additive/`@Profile`-gated; NOT compiled here — run `mvn compile` on agent3-monitor + agent5-execution. Contract frozen in `SIMULATION_PHASE_CONTRACT.md`. Open: capture real golden fixtures + §5 test; expiry trade_pnl (§7); agent5 Clock; hard prod-guard assertion (F11).*
+
+*Last updated: 2026-07-25 (5) — ALL critical alerts now fan out to the critical_alerts DB table: `AlertService.critical()` (core-module) records to critical_alerts in addition to notifications, so EVERY critical failure from any agent (agent5 rollback/exit, all of agent3's readjust/exit criticals, etc.) surfaces on the UI critical-alert card — one central change, no per-call-site edits. Reconcile keeps its own rich-JSON direct record. New AlertServiceTest. NOTE STILL OPEN (de-scoped by user): exit is not idempotent — Agent3 retry of EXIT_FAILED re-reverses already-closed legs (double-reverse). Deferred; failures are at least all captured in critical_alerts now.*
 
 *Last updated: 2026-07-25 (4) — Agent5 order READS moved to a dedicated `upstoxOrderReadRestClient` (core-module) on `upstox.api.order-read-base-url` (prod api.upstox.com / sandbox api-sandbox) — fixes reads being wrongly pointed at the HFT placement host `api-hft` which doesn't serve them. New config `order-read-base-url` in application.yml + application-sandbox.yml. UpstoxOrderClient now takes 3 RestClients. Also: sandbox by-tag lookup fixed to `/v2/order/history?tag=` (was `/v2/order/details`). Sandbox profile: simulate-fills/exit=false, bypass-margin-check=true (zero capital). All agent5 unit tests green.*
 

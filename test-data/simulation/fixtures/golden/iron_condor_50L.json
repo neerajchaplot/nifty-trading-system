@@ -1,0 +1,39 @@
+{
+  "_note": "PROVISIONAL bootstrap fixture — shape-correct, derived from seed T-204 (realistic premium, NOT the artificial net=1.00 of T-401). Per SIMULATION_PHASE_CONTRACT.md §5 regenerate from a real Phase-A iron-condor run before trusting; a contract test then locks the shape.",
+  "_meta": {
+    "strategy": "IRON_CONDOR",
+    "userProfile": "TEST_USER_50L",
+    "agent1Signal": "S05",
+    "tradeCode": "SIM-GOLDEN-IC"
+  },
+  "monitor_config": {
+    "tradeId": "b0000001-0000-0000-0000-000000000002",
+    "strategy": "IRON_CONDOR",
+    "spreadDirection": "CREDIT",
+    "shortLeg":  { "strike": 23900, "optionType": "PE", "action": "SELL", "ltp": 38.15, "instrumentKey": "NSE_FO|44617" },
+    "longLeg":   { "strike": 23850, "optionType": "PE", "action": "BUY",  "ltp": 29.45, "instrumentKey": "NSE_FO|44615" },
+    "shortLeg2": { "strike": 24150, "optionType": "CE", "action": "SELL", "ltp": 78.10, "instrumentKey": "NSE_FO|44635" },
+    "longLeg2":  { "strike": 24250, "optionType": "CE", "action": "BUY",  "ltp": 43.55, "instrumentKey": "NSE_FO|44642" },
+    "actualNetPremiumPerUnit": 43.25,
+    "lots": 40,
+    "lotSize": 65,
+    "maxProfitTotal": 112450,
+    "actualMaxLossTotal": 147550,
+    "slippageAlert": false,
+    "slippageAmount": 0,
+    "thresholds": {
+      "t1WatchNiftyDown": 24050, "t2ReadjustNiftyDown": 23975, "t3ExitNiftyDown": 23900,
+      "t1WatchNiftyUp":   24000, "t2ReadjustNiftyUp":   24075, "t3ExitNiftyUp":   24150,
+      "t2LossThreshold": 36887,
+      "t3LossThreshold": 73775
+    },
+    "expiryDate": "2026-07-28",
+    "dte": 4
+  },
+  "entry_fills": [
+    { "orderId": "SIM-IC-L0", "instrumentKey": "NSE_FO|44617", "action": "SELL", "strike": 23900, "optionType": "PE", "quantityFilled": 2600, "averageFillPrice": 38.15 },
+    { "orderId": "SIM-IC-L1", "instrumentKey": "NSE_FO|44615", "action": "BUY",  "strike": 23850, "optionType": "PE", "quantityFilled": 2600, "averageFillPrice": 29.45 },
+    { "orderId": "SIM-IC-L2", "instrumentKey": "NSE_FO|44635", "action": "SELL", "strike": 24150, "optionType": "CE", "quantityFilled": 2600, "averageFillPrice": 78.10 },
+    { "orderId": "SIM-IC-L3", "instrumentKey": "NSE_FO|44642", "action": "BUY",  "strike": 24250, "optionType": "CE", "quantityFilled": 2600, "averageFillPrice": 43.55 }
+  ]
+}

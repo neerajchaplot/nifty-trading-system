@@ -25,6 +25,7 @@ import java.util.List;
 import static net.logstash.logback.argument.StructuredArguments.kv;
 
 @Component
+@org.springframework.context.annotation.Profile("!simulation")
 public class UpstoxOptionChainClient implements OptionChainClient {
 
     private static final Logger log = LoggerFactory.getLogger(UpstoxOptionChainClient.class);

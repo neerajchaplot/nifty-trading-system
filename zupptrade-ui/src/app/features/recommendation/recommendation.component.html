@@ -102,7 +102,11 @@
 
     <div class="trade-card-rec">
       <div class="tc-header">
-        <span class="tc-strategy">✦ &nbsp;{{ strategyLabel(tradeCard.strategy) }}</span>
+        <span class="tc-title-group">
+          <span class="tc-strategy">✦ &nbsp;{{ strategyLabel(tradeCard.strategy) }}</span>
+          <app-help-popover *ngIf="tradeCard.rationale" [text]="tradeCard.rationale"
+                            subject="trade" tone="dark"></app-help-popover>
+        </span>
         <span class="tc-conf-pill">{{ effectiveSignal?.confidence }} CONF</span>
       </div>
       <div class="tc-body">
@@ -240,10 +244,6 @@
           <div class="pop-block-banner" *ngIf="isPopBlocked">
             ✗ PoP is below 50% — this trade cannot be confirmed.
           </div>
-        </div>
-
-        <div class="rationale" *ngIf="tradeCard.rationale">
-          💡 {{ tradeCard.rationale }}
         </div>
 
         <!-- Override toggle -->

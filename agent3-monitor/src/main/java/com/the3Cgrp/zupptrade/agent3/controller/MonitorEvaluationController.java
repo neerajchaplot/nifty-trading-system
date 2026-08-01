@@ -4,7 +4,12 @@ import com.the3Cgrp.zupptrade.agent3.dto.ActiveTradeDto;
 import com.the3Cgrp.zupptrade.agent3.dto.EvaluateOverrideRequest;
 import com.the3Cgrp.zupptrade.agent3.dto.EvaluationResponse;
 import com.the3Cgrp.zupptrade.agent3.service.ActiveTradesService;
+import com.the3Cgrp.zupptrade.agent3.service.MonitorActionRouter;
 import com.the3Cgrp.zupptrade.agent3.service.MonitorEvaluationService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.http.ResponseEntity;
 import org.springframework.lang.Nullable;
 import org.springframework.web.bind.annotation.*;
@@ -22,13 +27,23 @@ import java.util.UUID;
 @RequestMapping("/api/v1/agent3")
 public class MonitorEvaluationController {
 
+    private static final Logger log = LoggerFactory.getLogger(MonitorEvaluationController.class);
+
     private final MonitorEvaluationService evaluationService;
     private final ActiveTradesService activeTradesService;
+    private final MonitorActionRouter actionRouter;
+    private final boolean actAllowed;
 
     public MonitorEvaluationController(MonitorEvaluationService evaluationService,
-                                       ActiveTradesService activeTradesService) {
+                                       ActiveTradesService activeTradesService,
+                                       MonitorActionRouter actionRouter,
+                                       Environment environment) {
         this.evaluationService = evaluationService;
         this.activeTradesService = activeTradesService;
+        this.actionRouter = actionRouter;
+        // The act=true seam (routing a decision to Agent 5) is honored ONLY under the
+        // sandbox or simulation profile — never in production.
+        this.actAllowed = environment.acceptsProfiles(Profiles.of("sandbox", "simulation"));
     }
 
     /**
@@ -41,8 +56,21 @@ public class MonitorEvaluationController {
     @PostMapping("/evaluate/{tradeId}")
     public ResponseEntity<EvaluationResponse> evaluate(
             @PathVariable UUID tradeId,
+            @RequestParam(defaultValue = "false") boolean act,
             @RequestBody(required = false) @Nullable EvaluateOverrideRequest overrides) {
         EvaluationResponse response = evaluationService.evaluate(tradeId, overrides);
+        // act=true routes the decision to Agent 5 (exit / readjust) using the SAME router as
+        // the scheduler. Runs after evaluate() commits, so the Agent 5 call is outside the tx.
+        if (act) {
+            if (actAllowed) {
+                log.warn("agent3.evaluate.act tradeId={} action={} — routing decision to Agent 5 (sandbox/simulation)",
+                        tradeId, response.action());
+                actionRouter.applyById(tradeId, response);
+            } else {
+                log.warn("agent3.evaluate.act_ignored tradeId={} — 'act=true' requires the sandbox or simulation profile; decision returned only",
+                        tradeId);
+            }
+        }
         return ResponseEntity.ok(response);
     }
 

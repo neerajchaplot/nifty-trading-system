@@ -12,6 +12,7 @@ public class AnalyticsConfig {
 
     private int defaultPageSize = 5;
     private int maxDateRangeDays = 365;
+    private String dbSchema = "zupptrade_dev";
 
     @Bean
     public TradeAuditMapper tradeAuditMapper() {
@@ -25,4 +26,6 @@ public class AnalyticsConfig {
     public void setDefaultPageSize(int v) { this.defaultPageSize = v; }
     public int getMaxDateRangeDays() { return maxDateRangeDays; }
     public void setMaxDateRangeDays(int v) { this.maxDateRangeDays = v; }
+    public String getDbSchema()      { return dbSchema; }
+    public void setDbSchema(String v) { this.dbSchema = v; }
 }

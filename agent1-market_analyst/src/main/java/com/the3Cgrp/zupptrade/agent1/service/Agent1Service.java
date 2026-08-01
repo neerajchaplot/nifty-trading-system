@@ -75,7 +75,7 @@ public class Agent1Service {
                 e.getCompositeScore(), e.getConfidenceScore(), e.getConfidence(),
                 e.getVixLevel(), e.getVixRegime(), e.getVixDirection(),
                 e.getScoreBreakdown(), e.getCommentaryDivergence(), e.getKeyLevels(),
-                e.getDataGaps(), e.getSpot()
+                e.getDataGaps(), e.getSpot(), e.getExplanation()
         );
     }
 }
