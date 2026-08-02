@@ -1,0 +1,48 @@
+<div class="fm-panel">
+  <div class="fm-head">
+    <h2>Armed futures</h2>
+    <p class="sub">Accepted trades waiting for their entry, and live ones</p>
+  </div>
+
+  <!-- Empty -->
+  <div class="fm-empty" *ngIf="loaded && plans.length === 0">
+    No armed futures trades yet. Accept a plan from the Futures tab.
+  </div>
+
+  <!-- Cards -->
+  <div class="fm-list">
+    <div *ngFor="let plan of plans; trackBy: trackPlan" [ngClass]="cardClass(plan)">
+      <ng-container *ngIf="chosenArm(plan) as arm">
+
+        <div class="fm-card-head">
+          <span class="fm-label">{{ arm.label }}</span>
+          <span class="fm-status" [class.fm-status-active]="isActive(plan.status)">
+            {{ statusLabel(plan) }}
+          </span>
+        </div>
+
+        <div class="fm-levels">
+          <div><span>Entry</span><b>{{ fmt(arm.entry) }}</b></div>
+          <div><span>Stop loss</span><b class="neg">{{ fmt(arm.stop) }}</b></div>
+          <div><span>Target</span><b class="pos">{{ fmt(arm.target) }}</b></div>
+          <div><span>Lots</span><b>{{ arm.lots }}</b></div>
+        </div>
+
+        <!-- Dormant: show what makes it go live -->
+        <div class="fm-activation" *ngIf="!isActive(plan.status)">
+          <span class="dot"></span>{{ activationText(plan) }}
+        </div>
+
+        <!-- Active: order is placed / running -->
+        <div class="fm-live" *ngIf="isActive(plan.status)">
+          <span class="dot dot-live"></span>Order placed — running with a hard stop.
+        </div>
+
+        <div class="fm-foot">
+          <span class="fm-code">{{ plan.planCode }}</span>
+          <span class="fm-margin">Margin {{ rupees(arm.marginEstimate) }}</span>
+        </div>
+      </ng-container>
+    </div>
+  </div>
+</div>

@@ -9,11 +9,12 @@ import {
   SignalQuality,
 } from '../../core/models/audit.models';
 import { TradeAuditDrawerComponent } from './trade-audit-drawer.component';
+import { FuturesAuditComponent } from './futures-audit.component';
 
 @Component({
   selector: 'app-audit',
   standalone: true,
-  imports: [CommonModule, FormsModule, TradeAuditDrawerComponent],
+  imports: [CommonModule, FormsModule, TradeAuditDrawerComponent, FuturesAuditComponent],
   template: `
     <!-- Toolbar -->
     <div class="toolbar">
@@ -27,6 +28,15 @@ import { TradeAuditDrawerComponent } from './trade-audit-drawer.component';
       </div>
     </div>
 
+    <!-- Options | Futures filter -->
+    <div class="mode-toggle">
+      <button class="mode-btn" [class.mode-active]="mode === 'options'" (click)="mode = 'options'">Options</button>
+      <button class="mode-btn" [class.mode-active]="mode === 'futures'" (click)="mode = 'futures'">Futures</button>
+    </div>
+
+    <app-futures-audit *ngIf="mode === 'futures'" [from]="fromDate" [to]="toDate"></app-futures-audit>
+
+    <ng-container *ngIf="mode === 'options'">
     <!-- KPI cards -->
     <div class="kpi-row" *ngIf="summary">
       <div class="kpi-card">
@@ -226,6 +236,7 @@ import { TradeAuditDrawerComponent } from './trade-audit-drawer.component';
         </div>
       </div>
     </div>
+    </ng-container>
 
     <!-- Drawer overlay -->
     <ng-container *ngIf="selectedTrade">
@@ -265,6 +276,14 @@ import { TradeAuditDrawerComponent } from './trade-audit-drawer.component';
       padding: 4px 10px; font-size: 11px; color: #64748B; cursor: pointer;
     }
     .btn-reset:hover { background: #F1F5F9; }
+    /* Options | Futures toggle */
+    .mode-toggle { display: flex; gap: 6px; padding: 8px 20px 0; }
+    .mode-btn {
+      border: 1px solid #E2E8F0; background: #fff; color: #64748B;
+      padding: 5px 16px; border-radius: 8px; font-size: 12px; font-weight: 700; cursor: pointer;
+    }
+    .mode-btn:hover { background: #F8FAFC; }
+    .mode-active { background: #EFF6FF; color: #2563EB; border-color: #BFDBFE; }
     /* KPI row */
     .kpi-row {
       display: flex; gap: 0;
@@ -461,6 +480,9 @@ export class AuditComponent implements OnInit {
 
   fromDate = '';
   toDate = '';
+
+  // Options | Futures filter (Agent 4). Options view is unchanged; Futures shows closed futures P&L.
+  mode: 'options' | 'futures' = 'options';
 
   constructor(private svc: AuditService) {}
 

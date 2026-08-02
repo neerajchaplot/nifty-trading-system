@@ -99,9 +99,15 @@ public class ScoringPipeline {
             log.info("agent1.tier_result tier={} signals={} average={} contribution={}",
                     t.tierName(), t.signals(), t.average(), t.contribution()));
 
-        // Resolve per-tier weights from the user profile (falls back to system config weights).
+        // Resolve per-tier weights. A per-request override (e.g. the futures flow's commentary-heavy
+        // weighting) wins when supplied; otherwise the user profile / system config weights apply.
         // These drive the composite ONCE, so bias, strength and confidence all follow the weighting.
-        TierWeightResolver.ResolvedWeights weights = tierWeightResolver.resolve();
+        TierWeightResolver.ResolvedWeights weights =
+                (request.weights() != null && request.weights().complete())
+                        ? tierWeightResolver.resolveOverride(
+                                request.weights().tier1a(), request.weights().tier1b(),
+                                request.weights().tier2(), request.weights().tier3(), request.weights().tier4())
+                        : tierWeightResolver.resolve();
         log.info("agent1.weights source={} weights={}", weights.source(), weights.byTier());
 
         // Step 3: Compose signal using the resolved weights

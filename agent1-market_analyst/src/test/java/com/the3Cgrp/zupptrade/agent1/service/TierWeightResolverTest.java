@@ -77,6 +77,29 @@ class TierWeightResolverTest {
         assertThat(r.source()).isEqualTo(TierWeightResolver.SOURCE_SYSTEM_DEFAULT);
     }
 
+    @Test
+    void validOverride_usesRequestWeights_futuresWeighting() {
+        // Futures weighting: price 30, technical 20, institutional flow 20, volatility 10, commentary 20.
+        TierWeightResolver.ResolvedWeights r = resolver.resolveOverride(
+                new BigDecimal("0.30"), new BigDecimal("0.20"), new BigDecimal("0.20"),
+                new BigDecimal("0.10"), new BigDecimal("0.20"));
+
+        assertThat(r.source()).isEqualTo(TierWeightResolver.SOURCE_REQUEST_OVERRIDE);
+        assertThat(r.byTier().get(TierWeightResolver.T2)).isEqualByComparingTo("0.20");
+        assertThat(r.byTier().get(TierWeightResolver.T4)).isEqualByComparingTo("0.20");
+    }
+
+    @Test
+    void invalidOverride_notSummingToOne_fallsBack() {
+        when(repository.findByUserId("default")).thenReturn(Optional.empty());
+        // Sums to 0.90 — invalid; must fall back to profile/config, not apply the override.
+        TierWeightResolver.ResolvedWeights r = resolver.resolveOverride(
+                new BigDecimal("0.30"), new BigDecimal("0.20"), new BigDecimal("0.20"),
+                new BigDecimal("0.10"), new BigDecimal("0.10"));
+
+        assertThat(r.source()).isEqualTo(TierWeightResolver.SOURCE_SYSTEM_DEFAULT);
+    }
+
     private static UserProfileEntity profile(String w1a, String w1b, String w2, String w3, String w4) {
         UserProfileEntity p = mock(UserProfileEntity.class);
         when(p.getTier1aWeight()).thenReturn(new BigDecimal(w1a));

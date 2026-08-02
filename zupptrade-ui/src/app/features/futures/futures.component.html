@@ -1,0 +1,117 @@
+<div class="futures-panel">
+
+  <!-- Header -->
+  <div class="panel-head">
+    <div>
+      <h2>Futures — intraday plan</h2>
+      <p class="sub">Nifty futures · one trade, hard stop, no hedge</p>
+    </div>
+    <button mat-flat-button color="primary"
+            *ngIf="state === 'awaiting' || state === 'error'"
+            (click)="getPlan()">
+      Get today's plan
+    </button>
+    <button mat-stroked-button
+            *ngIf="state === 'card' || state === 'armed'"
+            (click)="reset()">
+      Start over
+    </button>
+  </div>
+
+  <!-- Awaiting -->
+  <div class="empty" *ngIf="state === 'awaiting'">
+    <p>Build today's futures plan. The signal is generated from today's admin commentary.</p>
+    <p class="hint">Requires today's admin commentary to be submitted.</p>
+  </div>
+
+  <!-- Loading -->
+  <div class="empty" *ngIf="state === 'loading'">
+    <mat-spinner diameter="34"></mat-spinner>
+    <p>Working out the levels and trades…</p>
+  </div>
+
+  <!-- Error -->
+  <div class="error" *ngIf="state === 'error'">
+    <p>{{ errorMessage }}</p>
+    <button mat-stroked-button (click)="reset()">Back</button>
+  </div>
+
+  <!-- Card -->
+  <ng-container *ngIf="(state === 'card' || state === 'submitting' || state === 'armed') && card as c">
+
+    <!-- Armed banner -->
+    <div class="armed-banner" *ngIf="state === 'armed' && armedArm as a">
+      ✓ <strong>{{ a.label }}</strong> is set and waiting.
+      <span class="activation">{{ activationText(a) }}</span>
+    </div>
+
+    <!-- Context strip -->
+    <div class="context">
+      <app-bias-pill [bias]="c.bias"></app-bias-pill>
+      <app-confidence-pill [confidence]="c.confidenceLabel"></app-confidence-pill>
+      <span class="chip">{{ openZoneLabel(c.openZone) }}</span>
+      <span class="chip" [class.chip-warn]="c.compressed">
+        {{ c.compressed ? 'Market coiled (choppy)' : 'Normal range' }}
+      </span>
+      <span class="chip chip-muted" *ngIf="c.noTradeReason">{{ c.noTradeReason }}</span>
+    </div>
+
+    <!-- Key levels -->
+    <div class="levels">
+      <app-metric-box label="Prev close" [value]="fmt(c.priorOhlc.close)"></app-metric-box>
+      <app-metric-box label="Open" [value]="fmt(c.openPx)"></app-metric-box>
+      <app-metric-box label="Pivot" [value]="fmt(c.keyLevels.pivot)"></app-metric-box>
+      <app-metric-box label="Upper trigger (H3)" [value]="fmt(c.keyLevels.h3)"></app-metric-box>
+      <app-metric-box label="Upper target (H4)" [value]="fmt(c.keyLevels.h4)"></app-metric-box>
+      <app-metric-box label="Lower trigger (L3)" [value]="fmt(c.keyLevels.l3)"></app-metric-box>
+      <app-metric-box label="Lower target (L4)" [value]="fmt(c.keyLevels.l4)"></app-metric-box>
+    </div>
+
+    <!-- Arms grid -->
+    <div class="arms">
+      <div *ngFor="let arm of c.arms; trackBy: trackArm" [ngClass]="armCssClass(arm)">
+        <div class="arm-head">
+          <span class="arm-label">{{ arm.label }}</span>
+          <span class="arm-badge" [ngClass]="'badge-' + arm.status.toLowerCase()">
+            {{ statusBadge(arm) }}
+          </span>
+        </div>
+
+        <div class="arm-levels">
+          <div><span>Entry</span><b>{{ fmt(arm.entry) }}</b></div>
+          <div><span>Stop loss</span><b class="neg">{{ fmt(arm.stop) }}</b></div>
+          <div><span>Target</span><b class="pos">{{ fmt(arm.target) }}</b></div>
+        </div>
+
+        <div class="arm-stats">
+          <div><span>Chance</span><b>{{ fmt(arm.probabilityPct) }}%</b></div>
+          <div><span>Risk : Reward</span><b>{{ fmt(arm.rrGross) }}</b></div>
+          <div><span>Lots</span><b>{{ arm.lots }}</b></div>
+          <div><span>Margin needed</span><b>{{ rupees(arm.marginEstimate) }}</b></div>
+        </div>
+
+        <div class="arm-fine">
+          After costs {{ fmt(arm.rrAfterCost) }} · {{ fmt(arm.riskPoints) }} pt risk · ₹{{ fmt(arm.riskTotal) }} at risk
+        </div>
+
+        <div class="arm-action">
+          <button mat-flat-button color="primary"
+                  *ngIf="isSelectable(arm)"
+                  [disabled]="state === 'submitting'"
+                  (click)="chooseArm(arm)">
+            Choose this trade
+          </button>
+          <span class="blocked-reason" *ngIf="arm.status === 'BLOCKED'">{{ arm.blockedReason }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="card-foot" *ngIf="state !== 'armed'">
+      <span class="plan-code">{{ c.planCode }}</span>
+      <button mat-stroked-button color="warn" (click)="rejectPlan()" [disabled]="state === 'submitting'">
+        Skip today
+      </button>
+    </div>
+  </ng-container>
+</div>

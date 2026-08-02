@@ -7,6 +7,7 @@ import com.the3Cgrp.zupptrade.core.upstox.auth.UpstoxTokenHolder;
 import com.the3Cgrp.zupptrade.core.upstox.auth.UpstoxTokenStartupRunner;
 import com.the3Cgrp.zupptrade.core.upstox.crypto.TokenEncryptionService;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxHistoricalDataClient;
+import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxIntradayCandleClient;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxMarketQuoteClient;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxOptionChainClient;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxPositionClient;
@@ -166,6 +167,11 @@ public class UpstoxAutoConfiguration {
     @Bean
     public UpstoxHistoricalDataClient upstoxHistoricalDataClient(RestClient upstoxRestClient) {
         return new UpstoxHistoricalDataClient(upstoxRestClient);
+    }
+
+    @Bean
+    public UpstoxIntradayCandleClient upstoxIntradayCandleClient(RestClient upstoxRestClient) {
+        return new UpstoxIntradayCandleClient(upstoxRestClient);
     }
 
     @Bean

@@ -17,3 +17,13 @@ export type MonitorAction = 'HOLD' | 'WATCH' | 'READJUST' | 'EXIT';
 export type ThresholdHit =
   | 'T1' | 'T2' | 'T3' | 'NONE'
   | 'DEBIT_POP_DISASTER' | 'DEBIT_GIVEBACK_LOCK';
+export type ConfirmAction = 'CONFIRM' | 'REJECT';
+
+// ── Nifty futures engine (ZUPPTRADE_FUTURES_TRADING_SPEC) ──
+export type FutureArmType = 'LONG_ROTATION' | 'SHORT_ROTATION' | 'LONG_BREAKOUT' | 'SHORT_BREAKDOWN';
+export type TradeDirection = 'LONG' | 'SHORT';
+export type OpenZone = 'BREAKOUT' | 'RANGE' | 'BREAKDOWN';
+export type ArmCardStatus = 'RECOMMENDED' | 'ALLOWED' | 'BLOCKED';
+export type FuturePlanStatus =
+  | 'PRIMED' | 'ARMED' | 'BREAK_DETECTED' | 'CONFIRMED' | 'FILLED'
+  | 'CLOSED' | 'NO_TRADE' | 'REJECTED' | 'INVALIDATED' | 'EXPIRED' | 'EXECUTION_FAILED';

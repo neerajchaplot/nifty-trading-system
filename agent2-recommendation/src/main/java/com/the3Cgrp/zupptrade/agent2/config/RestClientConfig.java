@@ -1,5 +1,6 @@
 package com.the3Cgrp.zupptrade.agent2.config;
 
+import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxHistoricalDataClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -9,6 +10,16 @@ import java.time.Duration;
 
 @Configuration
 public class RestClientConfig {
+
+    /**
+     * Reuse core-module's daily-candle client for the futures engine (prior-day OHLC +
+     * compression ranges). core's UpstoxAutoConfiguration is excluded on Agent2Application,
+     * so we wire this one bean explicitly onto agent2's own {@code upstoxRestClient}.
+     */
+    @Bean
+    public UpstoxHistoricalDataClient upstoxHistoricalDataClient(RestClient upstoxRestClient) {
+        return new UpstoxHistoricalDataClient(upstoxRestClient);
+    }
 
     @Bean
     public RestClient upstoxRestClient(TradingConfig config, UpstoxTokenHolder tokenHolder) {

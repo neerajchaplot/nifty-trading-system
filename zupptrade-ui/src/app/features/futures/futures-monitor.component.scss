@@ -1,0 +1,109 @@
+.fm-panel {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.fm-head {
+  h2 { font-size: 15px; font-weight: 800; color: #0f172a; margin: 0; }
+  .sub { font-size: 11px; color: #94a3b8; margin: 2px 0 0; }
+}
+
+.fm-empty {
+  font-size: 12px;
+  color: #94a3b8;
+  text-align: center;
+  padding: 22px 0;
+}
+
+.fm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fm-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+/* Dormant = frozen / greyed until the entry trigger fires */
+.fm-dormant {
+  background: #f8fafc;
+  border-style: dashed;
+  border-color: #cbd5e1;
+  opacity: 0.85;
+}
+
+/* Active = order placed, running */
+.fm-active {
+  background: #fff;
+  border-color: #86efac;
+  box-shadow: 0 0 0 1px #bbf7d0 inset;
+}
+
+.fm-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  .fm-label { font-size: 14px; font-weight: 800; color: #0f172a; }
+  .fm-status {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .3px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: #f1f5f9;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+  }
+  .fm-status-active { background: #f0fdf4; color: #16a34a; border-color: #bbf7d0; }
+}
+
+.fm-levels {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+
+  div { display: flex; flex-direction: column; }
+  span { font-size: 10px; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: .3px; }
+  b { font-size: 14px; color: #0f172a; font-weight: 800; }
+  .pos { color: #16a34a; }
+  .neg { color: #dc2626; }
+}
+
+.fm-activation, .fm-live {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: #64748b;
+
+  .dot {
+    width: 7px; height: 7px; border-radius: 99px;
+    background: #cbd5e1; flex: none;
+  }
+  .dot-live { background: #16a34a; box-shadow: 0 0 0 3px #dcfce7; }
+}
+.fm-live { color: #15803d; }
+
+.fm-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 8px;
+
+  .fm-code { font-size: 11px; color: #94a3b8; font-family: monospace; }
+  .fm-margin { font-size: 11px; color: #64748b; }
+}

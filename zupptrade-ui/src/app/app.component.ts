@@ -13,8 +13,10 @@ import { LiveMonitorComponent } from './features/live-monitor/live-monitor.compo
 import { CriticalAlertsComponent } from './features/critical-alerts/critical-alerts.component';
 import { AuditComponent } from './features/audit/audit.component';
 import { UserProfileComponent } from './features/user-profile/user-profile.component';
+import { FuturesComponent } from './features/futures/futures.component';
+import { FuturesMonitorComponent } from './features/futures/futures-monitor.component';
 
-type TabId = 'trading' | 'audit' | 'profile';
+type TabId = 'trading' | 'futures' | 'audit' | 'profile';
 
 @Component({
   selector: 'app-root',
@@ -28,6 +30,8 @@ type TabId = 'trading' | 'audit' | 'profile';
     CriticalAlertsComponent,
     AuditComponent,
     UserProfileComponent,
+    FuturesComponent,
+    FuturesMonitorComponent,
   ],
   template: `
     <div class="shell">
@@ -37,6 +41,9 @@ type TabId = 'trading' | 'audit' | 'profile';
       <div class="tab-strip">
         <button class="tab-btn" [class.tab-active]="activeTab === 'trading'" (click)="activeTab = 'trading'">
           Trading
+        </button>
+        <button class="tab-btn" [class.tab-active]="activeTab === 'futures'" (click)="activeTab = 'futures'">
+          Futures
         </button>
         <button class="tab-btn" [class.tab-active]="activeTab === 'audit'" (click)="activeTab = 'audit'">
           Audit
@@ -56,6 +63,19 @@ type TabId = 'trading' | 'audit' | 'profile';
           <div class="right-zone">
             <app-critical-alerts></app-critical-alerts>
             <app-live-monitor [trades]="(trades$ | async) ?? []"></app-live-monitor>
+          </div>
+        </div>
+      </ng-container>
+
+      <!-- Futures view -->
+      <ng-container *ngIf="activeTab === 'futures'">
+        <app-market-strip [signal]="signal$ | async"></app-market-strip>
+        <div class="body">
+          <div class="left-zone">
+            <app-futures [signal]="signal$ | async"></app-futures>
+          </div>
+          <div class="right-zone">
+            <app-futures-monitor></app-futures-monitor>
           </div>
         </div>
       </ng-container>

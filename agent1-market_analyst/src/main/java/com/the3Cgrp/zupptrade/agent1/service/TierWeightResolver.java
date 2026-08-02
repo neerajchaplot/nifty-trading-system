@@ -41,6 +41,7 @@ public class TierWeightResolver {
 
     public static final String SOURCE_USER_PROFILE  = "USER_PROFILE";
     public static final String SOURCE_SYSTEM_DEFAULT = "SYSTEM_DEFAULT";
+    public static final String SOURCE_REQUEST_OVERRIDE = "REQUEST_OVERRIDE";
 
     private final UserProfileRepository repository;
     private final TradingProperties props;
@@ -78,6 +79,27 @@ public class TierWeightResolver {
 
         log.info("agent1.weights.resolved source={} weights={}", SOURCE_USER_PROFILE, userWeights);
         return new ResolvedWeights(userWeights, SOURCE_USER_PROFILE);
+    }
+
+    /**
+     * Per-request override (e.g. the futures flow's commentary-heavy weighting). Applied only when
+     * all five weights are present and sum to 1.0000 (± tolerance); otherwise falls back to
+     * {@link #resolve()} so a bad override never breaks or silently skews scoring.
+     */
+    public ResolvedWeights resolveOverride(BigDecimal t1a, BigDecimal t1b, BigDecimal t2,
+                                           BigDecimal t3, BigDecimal t4) {
+        Map<String, BigDecimal> m = new LinkedHashMap<>();
+        m.put(T1A, t1a);
+        m.put(T1B, t1b);
+        m.put(T2, t2);
+        m.put(T3, t3);
+        m.put(T4, t4);
+        if (!isValid(m)) {
+            log.warn("agent1.weights.invalid_override weights={} — falling back to profile/config", m);
+            return resolve();
+        }
+        log.info("agent1.weights.resolved source={} weights={}", SOURCE_REQUEST_OVERRIDE, m);
+        return new ResolvedWeights(m, SOURCE_REQUEST_OVERRIDE);
     }
 
     private Map<String, BigDecimal> configWeights() {
