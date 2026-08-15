@@ -6,6 +6,7 @@ import com.the3Cgrp.zupptrade.core.expiry.ExpiryDateService;
 import com.the3Cgrp.zupptrade.core.security.AuthenticatedUser;
 import com.the3Cgrp.zupptrade.core.security.OwnershipGuard;
 import com.the3Cgrp.zupptrade.core.security.UserContext;
+import com.the3Cgrp.zupptrade.shared.enums.SignalSource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -17,15 +18,12 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 /**
- * Phase 5: /latest scopes to the caller. A normal user reads only their own signal for an expiry;
- * an admin reads the latest across all users; anonymous → 401. Empty results are used so the test
- * asserts which repository method was chosen without needing a full entity.
+ * /latest scoping by channel + user. TRADING: a normal user reads only their own; an admin reads
+ * global; anonymous → 401. FUTURES: always global (admin-driven, shared) — never user-scoped.
+ * Empty results are used so the test asserts which repository method was chosen.
  */
 class Agent1ServiceScopingTest {
 
@@ -50,36 +48,51 @@ class Agent1ServiceScopingTest {
     void clear() { userContext.clear(); }
 
     @Test
-    void latest_normalUser_usesScopedQuery() {
+    void trading_normalUser_usesUserScopedSourceQuery() {
         loginAs(alice, false);
-        when(repository.findTopByExpiryDateAndUserProfileIdAndStatusOrderByTimestampDesc(expiry, alice, "ACTIVE"))
-                .thenReturn(Optional.empty());
+        when(repository.findTopByExpiryDateAndUserProfileIdAndSourceAndStatusOrderByTimestampDesc(
+                expiry, alice, SignalSource.TRADING, "ACTIVE")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.latest(expiry))
+        assertThatThrownBy(() -> service.latest(expiry, SignalSource.TRADING))
                 .isInstanceOf(IllegalArgumentException.class);
 
-        verify(repository).findTopByExpiryDateAndUserProfileIdAndStatusOrderByTimestampDesc(expiry, alice, "ACTIVE");
-        verify(repository, never()).findTopByExpiryDateAndStatusOrderByTimestampDesc(expiry, "ACTIVE");
+        verify(repository).findTopByExpiryDateAndUserProfileIdAndSourceAndStatusOrderByTimestampDesc(
+                expiry, alice, SignalSource.TRADING, "ACTIVE");
     }
 
     @Test
-    void latest_admin_usesUnscopedQuery() {
+    void trading_admin_usesGlobalSourceQuery() {
         loginAs(alice, true);
-        when(repository.findTopByExpiryDateAndStatusOrderByTimestampDesc(expiry, "ACTIVE"))
-                .thenReturn(Optional.empty());
+        when(repository.findTopByExpiryDateAndSourceAndStatusOrderByTimestampDesc(
+                expiry, SignalSource.TRADING, "ACTIVE")).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.latest(expiry))
+        assertThatThrownBy(() -> service.latest(expiry, SignalSource.TRADING))
                 .isInstanceOf(IllegalArgumentException.class);
 
-        verify(repository).findTopByExpiryDateAndStatusOrderByTimestampDesc(expiry, "ACTIVE");
-        verify(repository, never())
-                .findTopByExpiryDateAndUserProfileIdAndStatusOrderByTimestampDesc(expiry, alice, "ACTIVE");
+        verify(repository).findTopByExpiryDateAndSourceAndStatusOrderByTimestampDesc(
+                expiry, SignalSource.TRADING, "ACTIVE");
     }
 
     @Test
-    void latest_anonymous_throws401() {
-        assertThatThrownBy(() -> service.latest(expiry))
+    void trading_anonymous_throws401() {
+        assertThatThrownBy(() -> service.latest(expiry, SignalSource.TRADING))
                 .isInstanceOf(ResponseStatusException.class)
-                .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED));
+                .satisfies(e -> assertThat(((ResponseStatusException) e).getStatusCode())
+                        .isEqualTo(HttpStatus.UNAUTHORIZED));
+    }
+
+    @Test
+    void futures_isGlobal_ignoresUser() {
+        loginAs(alice, false); // even a normal user gets the shared FUTURES signal, not their own
+        when(repository.findTopByExpiryDateAndSourceAndStatusOrderByTimestampDesc(
+                expiry, SignalSource.FUTURES, "ACTIVE")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.latest(expiry, SignalSource.FUTURES))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        verify(repository).findTopByExpiryDateAndSourceAndStatusOrderByTimestampDesc(
+                expiry, SignalSource.FUTURES, "ACTIVE");
+        verify(repository, never()).findTopByExpiryDateAndUserProfileIdAndSourceAndStatusOrderByTimestampDesc(
+                any(), any(), any(), any());
     }
 }

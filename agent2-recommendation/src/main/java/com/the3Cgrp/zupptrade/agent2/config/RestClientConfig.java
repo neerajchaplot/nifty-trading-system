@@ -1,5 +1,6 @@
 package com.the3Cgrp.zupptrade.agent2.config;
 
+import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxFuturesContractClient;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxHistoricalDataClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,6 +20,12 @@ public class RestClientConfig {
     @Bean
     public UpstoxHistoricalDataClient upstoxHistoricalDataClient(RestClient upstoxRestClient) {
         return new UpstoxHistoricalDataClient(upstoxRestClient);
+    }
+
+    /** Current-month Nifty futures instrument_key resolution (Instrument Search API). */
+    @Bean
+    public UpstoxFuturesContractClient upstoxFuturesContractClient(RestClient upstoxRestClient) {
+        return new UpstoxFuturesContractClient(upstoxRestClient);
     }
 
     @Bean

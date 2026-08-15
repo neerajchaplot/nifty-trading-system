@@ -2,6 +2,7 @@ package com.the3Cgrp.zupptrade.agent1.domain.entity;
 
 import com.the3Cgrp.zupptrade.shared.enums.Bias;
 import com.the3Cgrp.zupptrade.shared.enums.Confidence;
+import com.the3Cgrp.zupptrade.shared.enums.SignalSource;
 import com.the3Cgrp.zupptrade.shared.enums.Strength;
 import com.the3Cgrp.zupptrade.shared.enums.VixRegime;
 import jakarta.persistence.*;
@@ -88,6 +89,11 @@ public class Agent1SignalEntity {
     @Column(nullable = false, length = 10)
     private String status = "ACTIVE";
 
+    /** UI channel this signal was generated for — TRADING (per-user) vs FUTURES (global/shared). */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 10)
+    private SignalSource source = SignalSource.TRADING;
+
     /** Owner of this signal (multi-user Phase 5). Null for scheduled/house runs with no acting user. */
     @Column(name = "user_profile_id")
     private UUID userProfileId;
@@ -132,6 +138,8 @@ public class Agent1SignalEntity {
     public void setDataGaps(String v) { this.dataGaps = v; }
     public String getStatus() { return status; }
     public void setStatus(String v) { this.status = v; }
+    public SignalSource getSource() { return source; }
+    public void setSource(SignalSource v) { this.source = v; }
     public UUID getUserProfileId() { return userProfileId; }
     public void setUserProfileId(UUID v) { this.userProfileId = v; }
     public LocalDateTime getCreatedAt() { return createdAt; }

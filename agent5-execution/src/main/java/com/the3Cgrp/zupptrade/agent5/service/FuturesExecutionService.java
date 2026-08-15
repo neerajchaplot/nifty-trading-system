@@ -63,14 +63,27 @@ public class FuturesExecutionService {
             throw new IllegalStateException("Plan " + planId + " not in CONFIRMED status: " + plan.status);
         }
 
-        // Guard rails — each failure is a critical alert + EXECUTION_FAILED.
-        if (plan.instrumentKey == null || plan.instrumentKey.isBlank()) {
-            return fail(planId, "futures_instrument_unresolved",
-                    "Futures instrument not resolved — cannot place GTT for plan " + planId);
-        }
+        // Levels/sizing are needed for a real GTT AND for the simulated replay at EOD.
         if (plan.lots <= 0 || plan.entry == null || plan.stop == null || plan.target == null) {
             return fail(planId, "futures_gtt_failed",
                     "Plan " + planId + " missing sizing/levels — cannot place GTT");
+        }
+
+        // SIMULATION user (account_mode) → paper fill: FILLED at entry, no margin call, no broker.
+        // The EOD close job resolves the exit by replaying the day's 5-min candles.
+        if ("SIMULATION".equalsIgnoreCase(plan.accountMode)) {
+            String simId = "SIM-" + planId.toString().substring(0, 8).toUpperCase();
+            markFilled(planId, simId, plan.entry);
+            alertService.info(planId, "futures_gtt_placed",
+                    "Simulated fill for plan " + planId + " @ " + plan.entry + " (no real order).");
+            log.info("agent5.futures.simulated_fill", kv("planId", planId), kv("simId", simId));
+            return new FuturesGttResponse(planId, simId, "FILLED", "Simulated fill");
+        }
+
+        // ── LIVE path ──
+        if (plan.instrumentKey == null || plan.instrumentKey.isBlank()) {
+            return fail(planId, "futures_instrument_unresolved",
+                    "Futures instrument not resolved — cannot place GTT for plan " + planId);
         }
 
         int lotSize = fetchLotSize();
@@ -126,9 +139,10 @@ public class FuturesExecutionService {
     }
 
     private void markFilled(UUID planId, String gttOrderId, BigDecimal entry) {
+        // activated_at = fill time; the EOD candle-replay walks from here for simulated trades.
         jdbc.update("""
                 UPDATE trade_future_ledger
-                SET status = 'FILLED', gtt_order_id = ?, fill_price = ?, updated_at = NOW()
+                SET status = 'FILLED', gtt_order_id = ?, fill_price = ?, activated_at = NOW(), updated_at = NOW()
                 WHERE id = ?
                 """, gttOrderId, entry, planId);
     }
@@ -145,9 +159,11 @@ public class FuturesExecutionService {
     private PlanRow readPlan(UUID planId) {
         try {
             return jdbc.queryForObject("""
-                    SELECT status, primary_arm, entry_price, stop_price, target_price,
-                           instrument_key, gtt_order_id, (sizing->>'lots')::int AS lots
-                    FROM trade_future_ledger WHERE id = ?
+                    SELECT t.status, t.primary_arm, t.entry_price, t.stop_price, t.target_price,
+                           t.instrument_key, t.gtt_order_id, (t.sizing->>'lots')::int AS lots,
+                           up.account_mode
+                    FROM trade_future_ledger t JOIN user_profiles up ON up.id = t.user_profile_id
+                    WHERE t.id = ?
                     """, (rs, n) -> new PlanRow(
                         FuturePlanStatus.valueOf(rs.getString("status")),
                         rs.getString("primary_arm"),
@@ -156,7 +172,8 @@ public class FuturesExecutionService {
                         rs.getBigDecimal("target_price"),
                         rs.getString("instrument_key"),
                         rs.getString("gtt_order_id"),
-                        rs.getObject("lots") != null ? rs.getInt("lots") : 0),
+                        rs.getObject("lots") != null ? rs.getInt("lots") : 0,
+                        rs.getString("account_mode")),
                     planId);
         } catch (EmptyResultDataAccessException e) {
             return null;
@@ -166,5 +183,5 @@ public class FuturesExecutionService {
     record PlanRow(
             FuturePlanStatus status, String primaryArm,
             BigDecimal entry, BigDecimal stop, BigDecimal target,
-            String instrumentKey, String gttOrderId, int lots) {}
+            String instrumentKey, String gttOrderId, int lots, String accountMode) {}
 }

@@ -4,6 +4,7 @@ import com.the3Cgrp.zupptrade.agent3.client.Agent5FuturesClient;
 import com.the3Cgrp.zupptrade.agent3.config.FuturesEntryProperties;
 import com.the3Cgrp.zupptrade.agent3.engine.FuturesEntryStateMachine;
 import com.the3Cgrp.zupptrade.agent3.service.FuturesPlanReader.FuturesPlanRow;
+import com.the3Cgrp.zupptrade.core.alert.AlertService;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxIntradayCandleClient;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxIntradayCandleClient.IntradayCandle;
 import com.the3Cgrp.zupptrade.shared.enums.FuturePlanStatus;
@@ -18,10 +19,10 @@ import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
@@ -34,6 +35,7 @@ class FuturesEntrySchedulerTest {
     private FuturesPlanReader reader;
     private UpstoxIntradayCandleClient intradayClient;
     private Agent5FuturesClient agent5Client;
+    private AlertService alertService;
     private FuturesEntryScheduler scheduler;
 
     private final Clock clock = Clock.fixed(Instant.parse("2026-08-03T04:00:00Z"), ZoneOffset.UTC); // 09:30 IST
@@ -44,12 +46,13 @@ class FuturesEntrySchedulerTest {
         reader = mock(FuturesPlanReader.class);
         intradayClient = mock(UpstoxIntradayCandleClient.class);
         agent5Client = mock(Agent5FuturesClient.class);
+        alertService = mock(AlertService.class);
 
         Environment env = mock(Environment.class);
         when(env.acceptsProfiles(any(Profiles.class))).thenReturn(false); // not simulation
 
         scheduler = new FuturesEntryScheduler(reader, new FuturesEntryStateMachine(),
-                intradayClient, agent5Client, new FuturesEntryProperties(), clock, env);
+                intradayClient, agent5Client, alertService, new FuturesEntryProperties(), clock, env);
     }
 
     private IntradayCandle candle(int minute, String close) {
@@ -64,17 +67,30 @@ class FuturesEntrySchedulerTest {
     }
 
     @Test
-    void twoClosesBeyond_confirmsAndHandsToAgent5() {
+    void twoClosesBeyond_handsToAgent5_whenReached_noFailure() {
         when(reader.findWatchable()).thenReturn(List.of(armedLong()));
         when(intradayClient.fetchNiftyIntradayCandles(5))
                 .thenReturn(List.of(candle(20, "24285"), candle(25, "24290")));
-        when(agent5Client.placeGtt(planId)).thenReturn(Optional.of("GTT-1"));
+        when(agent5Client.placeGtt(planId)).thenReturn(true); // Agent 5 reached → it owns FILLED
 
         scheduler.runCycleOnce();
 
         verify(agent5Client).placeGtt(planId);
-        verify(reader).markConfirmed(planId, "GTT-1");
-        verify(reader, never()).updateStatus(any(), any());
+        verify(reader, never()).markExecutionFailed(any());
+        verify(alertService, never()).critical(any(), any(), any());
+    }
+
+    @Test
+    void handoffUnreachable_marksExecutionFailed_raisesCriticalAlert_noRetry() {
+        when(reader.findWatchable()).thenReturn(List.of(armedLong()));
+        when(intradayClient.fetchNiftyIntradayCandles(5))
+                .thenReturn(List.of(candle(20, "24285"), candle(25, "24290")));
+        when(agent5Client.placeGtt(planId)).thenReturn(false); // Agent 5 unreachable
+
+        scheduler.runCycleOnce();
+
+        verify(reader).markExecutionFailed(planId);
+        verify(alertService).critical(eq(planId), eq("futures_gtt_handoff_failed"), anyString());
     }
 
     @Test
@@ -87,7 +103,7 @@ class FuturesEntrySchedulerTest {
 
         verify(reader).updateStatus(planId, FuturePlanStatus.INVALIDATED);
         verify(agent5Client, never()).placeGtt(any());
-        verify(reader, never()).markConfirmed(any(), any());
+        verify(reader, never()).markExecutionFailed(any());
     }
 
     @Test
@@ -122,6 +138,6 @@ class FuturesEntrySchedulerTest {
         scheduler.runCycleOnce();
 
         verify(reader, never()).updateStatus(any(), any());
-        verify(reader, never()).markConfirmed(any(), any());
+        verify(reader, never()).markExecutionFailed(any());
     }
 }

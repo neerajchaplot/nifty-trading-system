@@ -5,6 +5,7 @@ import com.the3Cgrp.zupptrade.agent3.config.FuturesEntryProperties;
 import com.the3Cgrp.zupptrade.agent3.engine.EntryDecision;
 import com.the3Cgrp.zupptrade.agent3.engine.FuturesEntryStateMachine;
 import com.the3Cgrp.zupptrade.agent3.service.FuturesPlanReader.FuturesPlanRow;
+import com.the3Cgrp.zupptrade.core.alert.AlertService;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxIntradayCandleClient;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxIntradayCandleClient.IntradayCandle;
 import com.the3Cgrp.zupptrade.shared.enums.FutureArmType;
@@ -21,7 +22,6 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * Watches ARMED futures plans for their entry trigger (spec §3) — separate from the options
@@ -42,6 +42,7 @@ public class FuturesEntryScheduler {
     private final FuturesEntryStateMachine fsm;
     private final UpstoxIntradayCandleClient intradayClient;
     private final Agent5FuturesClient agent5Client;
+    private final AlertService alertService;
     private final FuturesEntryProperties props;
     private final Clock clock;
     private final boolean autoRunScheduler;
@@ -50,6 +51,7 @@ public class FuturesEntryScheduler {
                                  FuturesEntryStateMachine fsm,
                                  UpstoxIntradayCandleClient intradayClient,
                                  Agent5FuturesClient agent5Client,
+                                 AlertService alertService,
                                  FuturesEntryProperties props,
                                  Clock clock,
                                  Environment environment) {
@@ -57,13 +59,14 @@ public class FuturesEntryScheduler {
         this.fsm = fsm;
         this.intradayClient = intradayClient;
         this.agent5Client = agent5Client;
+        this.alertService = alertService;
         this.props = props;
         this.clock = clock;
         // Simulation drives cycles deterministically; disable the wall-clock trigger there.
         this.autoRunScheduler = !environment.acceptsProfiles(Profiles.of("simulation"));
     }
 
-    @Scheduled(cron = "${agent3.futures.scheduler-cron:0 */5 9-11 * * MON-FRI}",
+    @Scheduled(cron = "${agent3.futures.scheduler-cron:0 */5 9-14 * * MON-FRI}",
                zone = "${agent3.futures.scheduler-zone:Asia/Kolkata}")
     @SchedulerLock(name = "agent3_futures_entry_cycle",
                    lockAtMostFor = "PT4M30S", lockAtLeastFor = "PT30S")
@@ -110,10 +113,20 @@ public class FuturesEntryScheduler {
 
         switch (d.state()) {
             case CONFIRMED -> {
-                Optional<String> gtt = agent5Client.placeGtt(row.id());
-                reader.markConfirmed(row.id(), gtt.orElse(null));
-                log.info("agent3.futures.confirmed planCode={} arm={} entry={} gttOrderId={} reason={}",
-                        row.planCode(), arm, row.entryPrice(), gtt.orElse("pending"), d.reason());
+                boolean reached = agent5Client.placeGtt(row.id());
+                if (reached) {
+                    // Agent 5 owns the outcome (FILLED, or its own EXECUTION_FAILED + alert).
+                    log.info("agent3.futures.handed_off planCode={} arm={} entry={} reason={}",
+                            row.planCode(), arm, row.entryPrice(), d.reason());
+                } else {
+                    // Handoff unreachable → fail fast, no retry; the user acts on the critical alert.
+                    reader.markExecutionFailed(row.id());
+                    alertService.critical(row.id(), "futures_gtt_handoff_failed",
+                            "Futures entry confirmed but Agent 5 was unreachable for " + row.planCode()
+                                    + " — no order placed. Manual check required (no retry).");
+                    log.error("agent3.futures.handoff_failed planCode={} — marked EXECUTION_FAILED",
+                            row.planCode());
+                }
             }
             case BREAK_DETECTED, INVALIDATED, EXPIRED -> {
                 reader.updateStatus(row.id(), d.state());

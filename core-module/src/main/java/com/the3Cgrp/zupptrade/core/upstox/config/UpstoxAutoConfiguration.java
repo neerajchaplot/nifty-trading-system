@@ -6,6 +6,7 @@ import com.the3Cgrp.zupptrade.core.upstox.auth.UpstoxTokenFetcher;
 import com.the3Cgrp.zupptrade.core.upstox.auth.UpstoxTokenHolder;
 import com.the3Cgrp.zupptrade.core.upstox.auth.UpstoxTokenStartupRunner;
 import com.the3Cgrp.zupptrade.core.upstox.crypto.TokenEncryptionService;
+import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxFuturesContractClient;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxHistoricalDataClient;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxIntradayCandleClient;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxMarketQuoteClient;
@@ -182,6 +183,11 @@ public class UpstoxAutoConfiguration {
     @Bean
     public UpstoxIntradayCandleClient upstoxIntradayCandleClient(RestClient upstoxRestClient) {
         return new UpstoxIntradayCandleClient(upstoxRestClient);
+    }
+
+    @Bean
+    public UpstoxFuturesContractClient upstoxFuturesContractClient(RestClient upstoxRestClient) {
+        return new UpstoxFuturesContractClient(upstoxRestClient);
     }
 
     @Bean

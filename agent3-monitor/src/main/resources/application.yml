@@ -62,6 +62,21 @@ agent5:
   url: http://localhost:8085
 
 agent3:
+  # ── Nifty FUTURES intraday engine (entry watcher + EOD settlement) ──
+  futures:
+    enabled: true
+    zone: "Asia/Kolkata"                       # FSM cutoff timezone (IST)
+    scheduler-zone: "Asia/Kolkata"             # @Scheduled cron zone (IST)
+    # Entry watcher — every 5 min, 09:00–14:59 IST. The cutoff below stops NEW entries at 14:30.
+    scheduler-cron: "0 */5 9-14 * * MON-FRI"
+    # No-confirm cutoff: entries allowed until here; unconfirmed plans then EXPIRE.
+    # Levels hold all day and the position is intraday (auto-squared before close), so 14:30 is safe.
+    cutoff-time: "14:30"
+    # EOD settlement — 15:45 IST (after intraday square-off) books realized P&L for FILLED plans.
+    eod-close-cron: "0 45 15 * * MON-FRI"
+    candle-interval-minutes: 5
+    required-consecutive-closes: 2
+
   monitoring:
     # Timezone the cron expressions are interpreted in — MUST be IST, because the container
     # runs UTC and isMarketHours() checks IST. Without this the cron fires in UTC and only

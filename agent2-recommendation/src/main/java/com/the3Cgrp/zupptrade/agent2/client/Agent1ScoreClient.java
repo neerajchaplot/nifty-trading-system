@@ -50,7 +50,7 @@ public class Agent1ScoreClient {
             // into a String fails. We only need id/bias/strength/confidence, so ignore the rest.
             ScoreResponse r = agent1RestClient.post()
                     .uri("/api/v1/agent1/score")
-                    .body(new ScoreRequest(null, commentary, true, FUTURES_WEIGHTS))
+                    .body(new ScoreRequest(null, commentary, true, FUTURES_WEIGHTS, "FUTURES"))
                     .retrieve()
                     .body(ScoreResponse.class);
             if (r == null || r.id() == null) {
@@ -74,9 +74,9 @@ public class Agent1ScoreClient {
     private record ScoreResponse(UUID id, Bias bias, Strength strength,
                                  BigDecimal confidenceScore, Confidence confidence) {}
 
-    /** Matches agent1 ScoreRequestDto JSON shape (expiryDate, commentary, fetchMarketaux, weights). */
+    /** Matches agent1 ScoreRequestDto JSON shape. source=FUTURES keeps this signal off the Trading tab. */
     private record ScoreRequest(LocalDate expiryDate, String commentary, boolean fetchMarketaux,
-                                TierWeights weights) {}
+                                TierWeights weights, String source) {}
 
     /** Matches agent1 ScoreRequestDto.TierWeights JSON shape. */
     private record TierWeights(BigDecimal tier1a, BigDecimal tier1b, BigDecimal tier2,

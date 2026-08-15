@@ -51,7 +51,7 @@ class FuturesExecutionServiceTest {
     private PlanRow confirmedLong(String instrument) {
         return new PlanRow(FuturePlanStatus.CONFIRMED, "LONG_ROTATION",
                 new BigDecimal("24280"), new BigDecimal("24237"), new BigDecimal("24357"),
-                instrument, null, 1);
+                instrument, null, 1, "LIVE");
     }
 
     private void stubFunds(String available) {
@@ -116,7 +116,7 @@ class FuturesExecutionServiceTest {
     void alreadyFilled_isIdempotent_noPlacement() {
         stubPlan(new PlanRow(FuturePlanStatus.FILLED, "LONG_ROTATION",
                 new BigDecimal("24280"), new BigDecimal("24237"), new BigDecimal("24357"),
-                "NSE_FO|63812", "GTT-old", 1));
+                "NSE_FO|63812", "GTT-old", 1, "LIVE"));
 
         FuturesGttResponse res = service.placeGtt(planId);
 
@@ -124,5 +124,22 @@ class FuturesExecutionServiceTest {
         assertThat(res.gttOrderId()).isEqualTo("GTT-old");
         verify(gttClient, never()).placeGtt(any());
         verify(jdbc, never()).update(anyString(), any(), any(), any());
+    }
+
+    @Test
+    void simulationUser_paperFills_noBrokerNoMargin() {
+        // instrument null is fine for a simulated fill (no real order is placed).
+        stubPlan(new PlanRow(FuturePlanStatus.CONFIRMED, "LONG_ROTATION",
+                new BigDecimal("24280"), new BigDecimal("24237"), new BigDecimal("24357"),
+                null, null, 1, "SIMULATION"));
+
+        FuturesGttResponse res = service.placeGtt(planId);
+
+        assertThat(res.status()).isEqualTo("FILLED");
+        assertThat(res.gttOrderId()).startsWith("SIM-");
+        verify(jdbc).update(contains("status = 'FILLED'"), startsWith("SIM-"), any(BigDecimal.class), eq(planId));
+        verify(gttClient, never()).placeGtt(any());          // no real order
+        verify(marginCheckService, never()).utilization();   // no margin call
+        verify(alertService, never()).critical(any(), any(), any());
     }
 }

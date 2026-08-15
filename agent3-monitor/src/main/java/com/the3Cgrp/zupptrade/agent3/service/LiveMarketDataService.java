@@ -57,6 +57,7 @@ public class LiveMarketDataService implements MarketDataService {
      * Makes its own Upstox calls. Never throws — returns partial snapshot on API failure.
      */
     public LiveMarketSnapshot fetchSnapshot(TradeLegDto shortLeg, TradeLegDto longLeg,
+                                             TradeLegDto shortLeg2, TradeLegDto longLeg2,
                                              LocalDate expiryDate) {
         BigDecimal vix = fetchVix();
 
@@ -66,15 +67,7 @@ public class LiveMarketDataService implements MarketDataService {
             return new LiveMarketSnapshot(null, vix, null, null, null);
         }
 
-        BigDecimal spot = extractSpot(chain);
-        BigDecimal shortLegLtp = extractLtp(chain, shortLeg.strike(), shortLeg.optionType());
-        BigDecimal longLegLtp  = extractLtp(chain, longLeg.strike(),  longLeg.optionType());
-        BigDecimal shortLegIv  = extractIv(chain, shortLeg.strike(), shortLeg.optionType());
-
-        log.debug("agent3.market.snapshot spot={} vix={} shortLtp={} longLtp={} shortIv={}",
-                spot, vix, shortLegLtp, longLegLtp, shortLegIv);
-
-        return new LiveMarketSnapshot(spot, vix, shortLegLtp, longLegLtp, shortLegIv);
+        return snapshotFrom(chain, vix, shortLeg, longLeg, shortLeg2, longLeg2, "snapshot");
     }
 
     /**
@@ -98,21 +91,35 @@ public class LiveMarketDataService implements MarketDataService {
     public LiveMarketSnapshot buildSnapshotFromChain(List<UpstoxOptionChainRow> chain,
                                                       BigDecimal vix,
                                                       TradeLegDto shortLeg,
-                                                      TradeLegDto longLeg) {
+                                                      TradeLegDto longLeg,
+                                                      TradeLegDto shortLeg2,
+                                                      TradeLegDto longLeg2) {
         if (chain.isEmpty()) {
             log.warn("agent3.market.chain_empty_batch — snapshot will be incomplete");
             return new LiveMarketSnapshot(null, vix, null, null, null);
         }
+        return snapshotFrom(chain, vix, shortLeg, longLeg, shortLeg2, longLeg2, "snapshot_from_chain");
+    }
 
+    /**
+     * Extracts spot, the PE-side (or 2-leg) LTPs + IV, and — when present — the Iron Condor CE-side LTPs
+     * (shortLeg2/longLeg2). CE legs are null for 2-leg spreads, leaving the snapshot's CE slots null.
+     */
+    private LiveMarketSnapshot snapshotFrom(List<UpstoxOptionChainRow> chain, BigDecimal vix,
+                                            TradeLegDto shortLeg, TradeLegDto longLeg,
+                                            TradeLegDto shortLeg2, TradeLegDto longLeg2, String tag) {
         BigDecimal spot        = extractSpot(chain);
         BigDecimal shortLegLtp = extractLtp(chain, shortLeg.strike(), shortLeg.optionType());
         BigDecimal longLegLtp  = extractLtp(chain, longLeg.strike(),  longLeg.optionType());
         BigDecimal shortLegIv  = extractIv(chain, shortLeg.strike(), shortLeg.optionType());
 
-        log.debug("agent3.market.snapshot_from_chain spot={} vix={} shortLtp={} longLtp={} shortIv={}",
-                spot, vix, shortLegLtp, longLegLtp, shortLegIv);
+        BigDecimal shortLeg2Ltp = shortLeg2 != null ? extractLtp(chain, shortLeg2.strike(), shortLeg2.optionType()) : null;
+        BigDecimal longLeg2Ltp  = longLeg2  != null ? extractLtp(chain, longLeg2.strike(),  longLeg2.optionType())  : null;
 
-        return new LiveMarketSnapshot(spot, vix, shortLegLtp, longLegLtp, shortLegIv);
+        log.debug("agent3.market.{} spot={} vix={} shortLtp={} longLtp={} shortIv={} shortLtp2={} longLtp2={}",
+                tag, spot, vix, shortLegLtp, longLegLtp, shortLegIv, shortLeg2Ltp, longLeg2Ltp);
+
+        return new LiveMarketSnapshot(spot, vix, shortLegLtp, longLegLtp, shortLegIv, shortLeg2Ltp, longLeg2Ltp);
     }
 
     /**

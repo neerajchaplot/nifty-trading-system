@@ -19,12 +19,16 @@ import java.util.Set;
  */
 public interface MarketDataService {
 
-    LiveMarketSnapshot fetchSnapshot(TradeLegDto shortLeg, TradeLegDto longLeg, LocalDate expiryDate);
+    /** shortLeg2/longLeg2 are the Iron Condor CE-side legs — pass null for 2-leg spreads. */
+    LiveMarketSnapshot fetchSnapshot(TradeLegDto shortLeg, TradeLegDto longLeg,
+                                     TradeLegDto shortLeg2, TradeLegDto longLeg2, LocalDate expiryDate);
 
     Map<LocalDate, List<UpstoxOptionChainRow>> batchFetchChains(Set<LocalDate> expiryDates);
 
+    /** shortLeg2/longLeg2 are the Iron Condor CE-side legs — pass null for 2-leg spreads. */
     LiveMarketSnapshot buildSnapshotFromChain(List<UpstoxOptionChainRow> chain, BigDecimal vix,
-                                              TradeLegDto shortLeg, TradeLegDto longLeg);
+                                              TradeLegDto shortLeg, TradeLegDto longLeg,
+                                              TradeLegDto shortLeg2, TradeLegDto longLeg2);
 
     BigDecimal fetchVix();
 }

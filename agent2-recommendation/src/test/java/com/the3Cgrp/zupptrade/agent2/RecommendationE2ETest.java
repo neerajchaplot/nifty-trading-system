@@ -483,6 +483,23 @@ class RecommendationE2ETest {
         assertThat(config.thresholds())
                 .as(scenario + ": monitor thresholds must be set")
                 .isNotNull();
+        // Iron Condor monitor config must preserve the credit-ladder guarantees: T3 ≥75 pts from each
+        // short strike and entryPop on both sides (so Agent 3 recomputes the ladder live). Regression guard
+        // for the bug where the IC monitor config placed T3 on the short strike and dropped entryPop.
+        if (config.shortLeg2() != null) {
+            assertThat(config.thresholds().t3ExitNiftyDown()
+                            .subtract(BigDecimal.valueOf(config.shortLeg().strike())))
+                    .as(scenario + ": IC PE-side T3 must sit ≥75 pts from the PE short strike")
+                    .isGreaterThanOrEqualTo(BigDecimal.valueOf(75));
+            assertThat(BigDecimal.valueOf(config.shortLeg2().strike())
+                            .subtract(config.thresholds().t3ExitNiftyUp()))
+                    .as(scenario + ": IC CE-side T3 must sit ≥75 pts from the CE short strike")
+                    .isGreaterThanOrEqualTo(BigDecimal.valueOf(75));
+            assertThat(config.thresholds().entryPopDown())
+                    .as(scenario + ": IC entryPopDown must be set for live ladder recompute").isNotNull();
+            assertThat(config.thresholds().entryPopUp())
+                    .as(scenario + ": IC entryPopUp must be set for live ladder recompute").isNotNull();
+        }
         assertThat(config.expiryDate()).isEqualTo(EXPIRY);
         assertThat(config.dte())
                 .as(scenario + ": DTE must be > 0")

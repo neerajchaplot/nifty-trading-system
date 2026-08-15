@@ -4,6 +4,7 @@ import com.the3Cgrp.zupptrade.agent1.dto.HealthDto;
 import com.the3Cgrp.zupptrade.agent1.dto.ScoreRequestDto;
 import com.the3Cgrp.zupptrade.agent1.service.Agent1Service;
 import com.the3Cgrp.zupptrade.shared.dto.Agent1SignalDto;
+import com.the3Cgrp.zupptrade.shared.enums.SignalSource;
 import jakarta.validation.Valid;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -28,8 +29,9 @@ public class Agent1Controller {
 
     @GetMapping("/latest")
     public ResponseEntity<Agent1SignalDto> latest(
-            @RequestParam("expiry_date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate expiryDate) {
-        return ResponseEntity.ok(agent1Service.latest(expiryDate));
+            @RequestParam("expiry_date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate expiryDate,
+            @RequestParam(value = "source", defaultValue = "TRADING") SignalSource source) {
+        return ResponseEntity.ok(agent1Service.latest(expiryDate, source));
     }
 
     /**

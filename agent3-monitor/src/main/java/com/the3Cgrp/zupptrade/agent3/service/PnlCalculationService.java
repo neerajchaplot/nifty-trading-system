@@ -48,6 +48,27 @@ public class PnlCalculationService {
     }
 
     /**
+     * Mark-to-market P&L for an Iron Condor (4 legs). The entry premium is the COMBINED PE+CE credit;
+     * the current close cost is the sum of both spreads' close costs:
+     *   closeCost = (peShortLtp - peLongLtp) + (ceShortLtp - ceLongLtp)
+     *   P&L = (actualNetPremiumReceived - closeCost) × lots × lotSize
+     * Returns null if any of the four leg LTPs is missing (CE side not fetched → cannot value the position).
+     */
+    public BigDecimal calculateIronCondorMtmPnl(MonitorConfigDto config,
+                                                 BigDecimal peShortLtp, BigDecimal peLongLtp,
+                                                 BigDecimal ceShortLtp, BigDecimal ceLongLtp) {
+        if (peShortLtp == null || peLongLtp == null || ceShortLtp == null || ceLongLtp == null) {
+            return null;
+        }
+        BigDecimal closeCost = peShortLtp.subtract(peLongLtp).add(ceShortLtp.subtract(ceLongLtp));
+        BigDecimal positionSize = BigDecimal.valueOf((long) config.lots() * config.lotSize());
+        return config.actualNetPremiumPerUnit()
+                     .subtract(closeCost)
+                     .multiply(positionSize)
+                     .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    /**
      * Current net premium of the spread (cost to close for credit, value to capture for debit).
      */
     public BigDecimal currentNetPremium(SpreadDirection direction,

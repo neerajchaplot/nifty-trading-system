@@ -101,15 +101,34 @@
             </div>
             <div class="lt-metric">
               <div class="lt-metric-label">Short Strike</div>
-              <div class="lt-metric-val">{{ trade.monitorConfig?.shortLeg?.strike | number }}</div>
+              <ng-container *ngIf="isIronCondor(trade); else singleStrike">
+                <div class="lt-metric-val">{{ peShortStrike(trade) | number }} <small>PE</small></div>
+                <div class="lt-metric-val">{{ ceShortStrike(trade) | number }} <small>CE</small></div>
+              </ng-container>
+              <ng-template #singleStrike>
+                <div class="lt-metric-val">{{ trade.monitorConfig?.shortLeg?.strike | number }}</div>
+              </ng-template>
             </div>
             <div class="lt-metric">
               <div class="lt-metric-label">Distance</div>
-              <div class="lt-metric-val"
-                   [style.color]="(distance(trade) ?? 0) < 0 ? '#DC2626' : '#16A34A'">
-                {{ (distance(trade) ?? 0) > 0 ? '+' : '' }}{{ distance(trade) | number:'1.0-0' }}
-              </div>
-              <div class="lt-metric-sub">pts</div>
+              <ng-container *ngIf="isIronCondor(trade); else singleDist">
+                <div class="lt-metric-val"
+                     [style.color]="(icDistancePe(trade) ?? 0) < 0 ? '#DC2626' : '#16A34A'">
+                  <small>PE</small> {{ (icDistancePe(trade) ?? 0) > 0 ? '+' : '' }}{{ icDistancePe(trade) | number:'1.0-0' }}
+                </div>
+                <div class="lt-metric-val"
+                     [style.color]="(icDistanceCe(trade) ?? 0) < 0 ? '#DC2626' : '#16A34A'">
+                  <small>CE</small> {{ (icDistanceCe(trade) ?? 0) > 0 ? '+' : '' }}{{ icDistanceCe(trade) | number:'1.0-0' }}
+                </div>
+                <div class="lt-metric-sub">pts to each short</div>
+              </ng-container>
+              <ng-template #singleDist>
+                <div class="lt-metric-val"
+                     [style.color]="(distance(trade) ?? 0) < 0 ? '#DC2626' : '#16A34A'">
+                  {{ (distance(trade) ?? 0) > 0 ? '+' : '' }}{{ distance(trade) | number:'1.0-0' }}
+                </div>
+                <div class="lt-metric-sub">pts</div>
+              </ng-template>
             </div>
             <div class="lt-metric">
               <div class="lt-metric-label">Net Prem.</div>

@@ -165,7 +165,8 @@ public class MonitorSchedulerService {
                         trade.expiryDate(), List.of());
 
                 LiveMarketSnapshot snapshot = marketDataService.buildSnapshotFromChain(
-                        chain, vix, config.shortLeg(), config.longLeg());
+                        chain, vix, config.shortLeg(), config.longLeg(),
+                        config.shortLeg2(), config.longLeg2());   // CE legs non-null only for Iron Condor
 
                 EvaluationResponse response = evaluationService.evaluate(trade, config, snapshot);
 

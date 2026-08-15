@@ -42,8 +42,9 @@ public class SimulatedMarketDataService implements MarketDataService {
     }
 
     @Override
-    public LiveMarketSnapshot fetchSnapshot(TradeLegDto shortLeg, TradeLegDto longLeg, LocalDate expiryDate) {
-        return snapshot(shortLeg, longLeg);
+    public LiveMarketSnapshot fetchSnapshot(TradeLegDto shortLeg, TradeLegDto longLeg,
+                                            TradeLegDto shortLeg2, TradeLegDto longLeg2, LocalDate expiryDate) {
+        return snapshot(shortLeg, longLeg, shortLeg2, longLeg2);
     }
 
     @Override
@@ -54,8 +55,9 @@ public class SimulatedMarketDataService implements MarketDataService {
 
     @Override
     public LiveMarketSnapshot buildSnapshotFromChain(List<UpstoxOptionChainRow> chain, BigDecimal vix,
-                                                     TradeLegDto shortLeg, TradeLegDto longLeg) {
-        return snapshot(shortLeg, longLeg);   // chain + vix args ignored — the folder is the source
+                                                     TradeLegDto shortLeg, TradeLegDto longLeg,
+                                                     TradeLegDto shortLeg2, TradeLegDto longLeg2) {
+        return snapshot(shortLeg, longLeg, shortLeg2, longLeg2);   // chain + vix ignored — folder is the source
     }
 
     @Override
@@ -63,8 +65,12 @@ public class SimulatedMarketDataService implements MarketDataService {
         return scenario.spotVixAt(clock.instant()).map(ScenarioData.SpotVix::vix).orElse(null);
     }
 
-    /** Builds a snapshot for the PE (or 2-leg) short/long legs from the scenario at the sim-clock time. */
-    private LiveMarketSnapshot snapshot(TradeLegDto shortLeg, TradeLegDto longLeg) {
+    /**
+     * Builds a snapshot for the PE (or 2-leg) legs — and, for an Iron Condor, the CE-side legs
+     * (shortLeg2/longLeg2) — from the scenario at the sim-clock time. CE legs null → CE slots null.
+     */
+    private LiveMarketSnapshot snapshot(TradeLegDto shortLeg, TradeLegDto longLeg,
+                                        TradeLegDto shortLeg2, TradeLegDto longLeg2) {
         Instant now = clock.instant();
 
         Optional<ScenarioData.SpotVix> sv = scenario.spotVixAt(now);
@@ -78,8 +84,13 @@ public class SimulatedMarketDataService implements MarketDataService {
         BigDecimal longLtp  = longRow.map(ScenarioData.Strike::ltp).orElse(null);
         BigDecimal shortIv  = shortRow.map(ScenarioData.Strike::iv).orElse(null);
 
-        log.debug("sim.market.snapshot at={} spot={} vix={} shortLtp={} longLtp={} shortIv={}",
-                now, spot, vix, shortLtp, longLtp, shortIv);
-        return new LiveMarketSnapshot(spot, vix, shortLtp, longLtp, shortIv);
+        BigDecimal shortLtp2 = shortLeg2 != null
+                ? scenario.strikeAt(now, shortLeg2.strike(), shortLeg2.optionType()).map(ScenarioData.Strike::ltp).orElse(null) : null;
+        BigDecimal longLtp2  = longLeg2 != null
+                ? scenario.strikeAt(now, longLeg2.strike(),  longLeg2.optionType()).map(ScenarioData.Strike::ltp).orElse(null) : null;
+
+        log.debug("sim.market.snapshot at={} spot={} vix={} shortLtp={} longLtp={} shortIv={} shortLtp2={} longLtp2={}",
+                now, spot, vix, shortLtp, longLtp, shortIv, shortLtp2, longLtp2);
+        return new LiveMarketSnapshot(spot, vix, shortLtp, longLtp, shortIv, shortLtp2, longLtp2);
     }
 }

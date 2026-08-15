@@ -1,10 +1,25 @@
 package com.the3Cgrp.zupptrade.agent3.engine;
 
+import com.the3Cgrp.zupptrade.agent3.config.MonitoringProperties;
 import com.the3Cgrp.zupptrade.agent3.engine.DebitSpreadMonitorStrategy.DebitAction;
+import com.the3Cgrp.zupptrade.agent3.math.BlackScholesCalculator;
+import com.the3Cgrp.zupptrade.agent3.model.EvaluationResult;
+import com.the3Cgrp.zupptrade.agent3.model.LiveMarketSnapshot;
+import com.the3Cgrp.zupptrade.agent3.model.MonitorEvaluationContext;
+import com.the3Cgrp.zupptrade.agent3.service.PnlCalculationService;
+import com.the3Cgrp.zupptrade.shared.dto.MonitorConfigDto;
+import com.the3Cgrp.zupptrade.shared.dto.MonitorThresholdsDto;
+import com.the3Cgrp.zupptrade.shared.dto.TradeLegDto;
+import com.the3Cgrp.zupptrade.shared.enums.LegAction;
+import com.the3Cgrp.zupptrade.shared.enums.OptionType;
+import com.the3Cgrp.zupptrade.shared.enums.SpreadDirection;
+import com.the3Cgrp.zupptrade.shared.enums.Strategy;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -120,5 +135,42 @@ class DebitSpreadMonitorStrategyTest {
         assertThat(DebitSpreadMonitorStrategy.decideDebit(
                 new BigDecimal("0.451"), null, new BigDecimal("0.440"), null, DROP, GAP))
                 .isEqualTo(DebitAction.HOLD);
+    }
+
+    // ── Observability: the detail must carry shortLegIv (the input that drives the loss-cut) ──
+
+    @Test
+    @DisplayName("evaluate() records shortLegIv in the detail so the loss-cut driver is auditable")
+    void evaluate_recordsShortLegIvInDetail() {
+        DebitSpreadMonitorStrategy strategy = new DebitSpreadMonitorStrategy(
+                new PnlCalculationService(), new BlackScholesCalculator(), new MonitoringProperties());
+
+        // Bear put: BUY 24450 PE, SELL 24250 PE. netDebit=74.30, breakeven=24375.70.
+        TradeLegDto shortLeg = new TradeLegDto(OptionType.PE, 24250, new BigDecimal("50.10"),
+                LegAction.SELL, new BigDecimal("-0.35"), new BigDecimal("0.35"), "PE_SHORT");
+        TradeLegDto longLeg = new TradeLegDto(OptionType.PE, 24450, new BigDecimal("124.40"),
+                LegAction.BUY, new BigDecimal("-0.55"), new BigDecimal("0.55"), "PE_LONG");
+        MonitorThresholdsDto thr = MonitorThresholdsDto.debitSpread(
+                new BigDecimal("24375.70"), new BigDecimal("24250"), new BigDecimal("24450"),
+                new BigDecimal("2400"), new BigDecimal("4830"),
+                new BigDecimal("0.396"), new BigDecimal("0.256"));
+        MonitorConfigDto config = MonitorConfigDto.twoLeg(
+                UUID.randomUUID(), Strategy.BEAR_PUT_SPREAD, SpreadDirection.DEBIT,
+                shortLeg, longLeg, new BigDecimal("74.30"), 1, 65,
+                new BigDecimal("8255"), new BigDecimal("4830"), false, null,
+                thr, LocalDate.now().plusDays(5), 5);
+
+        BigDecimal iv = new BigDecimal("0.10");
+        LiveMarketSnapshot live = new LiveMarketSnapshot(
+                new BigDecimal("24343.90"), new BigDecimal("12.0"),
+                new BigDecimal("50.10"), new BigDecimal("124.40"), iv);
+        MonitorEvaluationContext ctx = new MonitorEvaluationContext(config, live, 5, null, null);
+
+        EvaluationResult result = strategy.evaluate(ctx);
+
+        // IV was present (else action would be WATCH) AND it is now persisted in the detail for audit.
+        assertThat(result.detail()).containsKey("shortLegIv");
+        assertThat((BigDecimal) result.detail().get("shortLegIv")).isEqualByComparingTo(iv);
+        assertThat(result.detail()).containsKey("liveLossCutLevel");   // loss-cut computed this cycle
     }
 }

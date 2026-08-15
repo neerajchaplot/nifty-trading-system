@@ -14,8 +14,9 @@ export class Agent1Service {
     return this.http.post<Agent1Signal>(`${this.base}/score`, request);
   }
 
-  latest(expiryDate: string): Observable<Agent1Signal> {
-    const params = new HttpParams().set('expiry_date', expiryDate);
+  latest(expiryDate: string, source?: 'TRADING' | 'FUTURES'): Observable<Agent1Signal> {
+    let params = new HttpParams().set('expiry_date', expiryDate);
+    if (source) params = params.set('source', source);
     return this.http.get<Agent1Signal>(`${this.base}/latest`, { params });
   }
 

@@ -129,6 +129,9 @@ public class ScoringPipeline {
         // Plain-English explanation (deterministic, best-effort — never blocks the pipeline).
         signal.setExplanation(explanationService.build(signal, tierScores, dataGaps));
 
+        // Channel (TRADING vs FUTURES) so /latest keeps the two tabs' signals separate.
+        signal.setSource(request.effectiveSource());
+
         // Multi-user (Phase 5): stamp the acting user so /latest can scope to them. Scheduled/house
         // runs have no UserContext → null owner (admins still see it; per-user reads do not).
         userContext.current().ifPresent(u -> signal.setUserProfileId(u.profileId()));

@@ -43,6 +43,7 @@ class Agent1ScoreClientTest {
               .andExpect(jsonPath("$.weights.tier2").value(0.20))
               .andExpect(jsonPath("$.weights.tier3").value(0.10))
               .andExpect(jsonPath("$.weights.tier4").value(0.20))
+              .andExpect(jsonPath("$.source").value("FUTURES"))
               .andRespond(withSuccess(
                       "{\"id\":\"" + id + "\",\"bias\":\"BULLISH\",\"confidence\":\"HIGH\",\"confidenceScore\":0.80}",
                       MediaType.APPLICATION_JSON));

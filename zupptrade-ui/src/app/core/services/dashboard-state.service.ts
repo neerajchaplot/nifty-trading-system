@@ -17,10 +17,13 @@ import { environment } from '../../../environments/environment';
 @Injectable({ providedIn: 'root' })
 export class DashboardStateService implements OnDestroy {
   private readonly _signal$ = new BehaviorSubject<Agent1Signal | null>(null);
+  private readonly _futuresSignal$ = new BehaviorSubject<Agent1Signal | null>(null);
   private readonly _activeTrades$ = new BehaviorSubject<ActiveTrade[]>([]);
   private readonly _expiryDate$ = new BehaviorSubject<string>(currentExpiryTuesdayIso());
 
   readonly signal$ = this._signal$.asObservable();
+  // Separate FUTURES-channel signal so the Futures tab's strip never shows the Trading signal.
+  readonly futuresSignal$ = this._futuresSignal$.asObservable();
   readonly activeTrades$ = this._activeTrades$.asObservable();
   readonly expiryDate$ = this._expiryDate$.asObservable();
 
@@ -28,6 +31,7 @@ export class DashboardStateService implements OnDestroy {
 
   constructor(private agent1: Agent1Service, private agent3: Agent3Service) {
     this.startSignalPolling();
+    this.startFuturesSignalPolling();
     this.startTradesPolling();
   }
 
@@ -66,6 +70,20 @@ export class DashboardStateService implements OnDestroy {
         this.agent1.latest(this._expiryDate$.value).pipe(catchError(() => EMPTY))
       )
     ).subscribe(sig => this._signal$.next(sig));
+
+    this.subs.add(sub);
+  }
+
+  /** FUTURES channel — global/shared signal for the Futures tab (may be empty until a plan is built). */
+  private startFuturesSignalPolling(): void {
+    this.agent1.latest(this._expiryDate$.value, 'FUTURES').pipe(catchError(() => EMPTY))
+      .subscribe(sig => this._futuresSignal$.next(sig));
+
+    const sub = interval(environment.marketPollIntervalMs).pipe(
+      switchMap(() =>
+        this.agent1.latest(this._expiryDate$.value, 'FUTURES').pipe(catchError(() => EMPTY))
+      )
+    ).subscribe(sig => this._futuresSignal$.next(sig));
 
     this.subs.add(sub);
   }

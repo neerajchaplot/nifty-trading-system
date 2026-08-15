@@ -19,8 +19,13 @@ public class FuturesEntryProperties {
     /** Consecutive closes beyond the trigger required to confirm entry. */
     private int requiredConsecutiveCloses = 2;
 
-    /** No-confirm cutoff — plans still unconfirmed at/after this time EXPIRE. */
-    private LocalTime cutoffTime = LocalTime.of(11, 0);
+    /**
+     * No-confirm cutoff — plans still unconfirmed at/after this time EXPIRE, i.e. new entries are
+     * allowed until here. Default 14:30 IST (1h before close): the Camarilla levels hold for the
+     * whole session, so a confirmed break up to ~14:30 is still tradeable, and the intraday (product
+     * "I") position is auto-squared before close anyway.
+     */
+    private LocalTime cutoffTime = LocalTime.of(14, 30);
 
     /** IST — the container runs UTC but the trading window is Asia/Kolkata. */
     private String zone = "Asia/Kolkata";

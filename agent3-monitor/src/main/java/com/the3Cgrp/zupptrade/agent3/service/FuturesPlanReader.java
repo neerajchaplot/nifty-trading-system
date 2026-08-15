@@ -62,13 +62,17 @@ public class FuturesPlanReader {
                 status.name(), id);
     }
 
-    /** Entry confirmed and handed to Agent 5: stamp CONFIRMED + fire time (+ GTT id when available). */
-    public void markConfirmed(UUID id, String gttOrderId) {
+    /**
+     * Handoff to Agent 5 was unreachable — fail the plan fast (no retry). The user acts on the
+     * critical alert. On a successful handoff Agent 5 itself advances the plan to FILLED, so Agent 3
+     * never writes the status in that case.
+     */
+    public void markExecutionFailed(UUID id) {
         jdbc.update("""
                 UPDATE trade_future_ledger
-                SET status = 'CONFIRMED', activated_at = NOW(), gtt_order_id = ?, updated_at = NOW()
+                SET status = 'EXECUTION_FAILED', activated_at = NOW(), updated_at = NOW()
                 WHERE id = ?
-                """, gttOrderId, id);
+                """, id);
     }
 
     /** Minimal projection needed to run the entry FSM for one plan. */

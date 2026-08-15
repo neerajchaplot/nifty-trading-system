@@ -69,14 +69,20 @@ public class IronCondorMonitorStrategy implements MonitorStrategy {
         MonitorThresholdsDto thr    = config.thresholds();
         BigDecimal spot             = context.liveData().spot();
         BigDecimal vix              = context.liveData().vix();
-        BigDecimal shortLegLtp      = context.liveData().shortLegLtp();  // PE SELL live LTP
-        BigDecimal longLegLtp       = context.liveData().longLegLtp();   // PE BUY  live LTP
+        BigDecimal shortLegLtp      = context.liveData().shortLegLtp();   // PE SELL live LTP
+        BigDecimal longLegLtp       = context.liveData().longLegLtp();    // PE BUY  live LTP
+        BigDecimal shortLeg2Ltp     = context.liveData().shortLeg2Ltp();  // CE SELL live LTP
+        BigDecimal longLeg2Ltp      = context.liveData().longLeg2Ltp();   // CE BUY  live LTP
         int currentDte              = context.currentDte();
 
         Map<String, Object> detail = new HashMap<>();
         detail.put("spot", spot);
         detail.put("vix", vix);
         detail.put("currentDte", currentDte);
+        detail.put("shortLegLtp", shortLegLtp);     // PE SELL — audit for the 4-leg P&L
+        detail.put("longLegLtp", longLegLtp);       // PE BUY
+        detail.put("shortLeg2Ltp", shortLeg2Ltp);   // CE SELL — null here means CE not fetched → P&L null
+        detail.put("longLeg2Ltp", longLeg2Ltp);     // CE BUY
         detail.put("strategy", "IRON_CONDOR");
         if (config.shortLeg()  != null) detail.put("peShortStrike", config.shortLeg().strike());
         if (config.shortLeg2() != null) detail.put("ceShortStrike", config.shortLeg2().strike());
@@ -94,16 +100,20 @@ public class IronCondorMonitorStrategy implements MonitorStrategy {
                     "Market data unavailable — holding conservatively at WATCH.", null, null, null, detail);
         }
 
+        // Full 4-leg MTM P&L (combined PE + CE close cost). Null if any leg LTP is missing (e.g. CE not
+        // fetched). Computed once and carried on EVERY return path so the card always shows Unrealised P&L.
+        BigDecimal mtmPnl = pnlService.calculateIronCondorMtmPnl(
+                config, shortLegLtp, longLegLtp, shortLeg2Ltp, longLeg2Ltp);
+        if (mtmPnl != null) detail.put("markToMarketPnl", mtmPnl);
+
         // ── 2. Short strike breach (either side) ───────────────────────────────
         if (config.shortLeg() != null && spot.compareTo(BigDecimal.valueOf(config.shortLeg().strike())) <= 0) {
-            BigDecimal mtmPnl = calcMtmSafe(config, shortLegLtp, longLegLtp);
             return result(MonitorAction.EXIT, ThresholdHit.T3_SHORT_STRIKE_BREACH,
                     String.format("IC PE SHORT BREACHED. Spot=%.2f ≤ PE short=%d. Closing all 4 legs. MTM P&L=%s",
                             spot, config.shortLeg().strike(), fmtOrUnknown(mtmPnl)),
                     null, mtmPnl, null, detail);
         }
         if (config.shortLeg2() != null && spot.compareTo(BigDecimal.valueOf(config.shortLeg2().strike())) >= 0) {
-            BigDecimal mtmPnl = calcMtmSafe(config, shortLegLtp, longLegLtp);
             return result(MonitorAction.EXIT, ThresholdHit.T3_SHORT_STRIKE_BREACH,
                     String.format("IC CE SHORT BREACHED. Spot=%.2f ≥ CE short=%d. Closing all 4 legs. MTM P&L=%s",
                             spot, config.shortLeg2().strike(), fmtOrUnknown(mtmPnl)),
@@ -111,10 +121,7 @@ public class IronCondorMonitorStrategy implements MonitorStrategy {
         }
 
         // ── 3 & 4. P&L thresholds ─────────────────────────────────────────────
-        if (shortLegLtp != null && longLegLtp != null) {
-            BigDecimal mtmPnl = pnlService.calculateMtmPnl(config, shortLegLtp, longLegLtp);
-            detail.put("markToMarketPnl", mtmPnl);
-
+        if (mtmPnl != null) {
             if (thr.t3LossThreshold() != null
                     && pnlService.hasBreachedLossThreshold(mtmPnl, thr.t3LossThreshold())) {
                 return result(MonitorAction.EXIT, ThresholdHit.T3_EXIT_PNL,
@@ -167,7 +174,7 @@ public class IronCondorMonitorStrategy implements MonitorStrategy {
             ThresholdHit hit    = isT2 ? ThresholdHit.T2_READJUST_PNL : ThresholdHit.POP_WATCH;
             return result(action, hit,
                     String.format("IC Nifty proximity: %s. Spot=%.2f", pressureSide, spot),
-                    null, null, null, detail);
+                    null, mtmPnl, null, detail);
         }
 
         // ── 7. HOLD ────────────────────────────────────────────────────────────
@@ -177,7 +184,7 @@ public class IronCondorMonitorStrategy implements MonitorStrategy {
                         config.shortLeg()  != null ? config.shortLeg().strike()  : "n/a",
                         config.shortLeg2() != null ? config.shortLeg2().strike() : "n/a",
                         currentDte),
-                null, null, null, detail);
+                null, mtmPnl, null, detail);
     }
 
     /**
@@ -196,11 +203,6 @@ public class IronCondorMonitorStrategy implements MonitorStrategy {
         if (peT1) return String.format("T1_DOWN: Spot=%.0f ≤ T1=%.0f (watch PE short)",   spot, thr.t1WatchNiftyDown());
         if (ceT1) return String.format("T1_UP: Spot=%.0f ≥ T1=%.0f (watch CE short)",     spot, thr.t1WatchNiftyUp());
         return null;
-    }
-
-    private BigDecimal calcMtmSafe(MonitorConfigDto config, BigDecimal shortLtp, BigDecimal longLtp) {
-        return (shortLtp != null && longLtp != null)
-                ? pnlService.calculateMtmPnl(config, shortLtp, longLtp) : null;
     }
 
     private String fmtOrUnknown(BigDecimal value) {

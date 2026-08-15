@@ -1,5 +1,7 @@
 package com.the3Cgrp.zupptrade.agent1.dto;
 
+import com.the3Cgrp.zupptrade.shared.enums.SignalSource;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
@@ -15,15 +17,26 @@ public record ScoreRequestDto(
         LocalDate expiryDate,
         String commentary,
         Boolean fetchMarketaux,
-        TierWeights weights
+        TierWeights weights,
+        SignalSource source
 ) {
-    /** Backward-compatible 3-arg form (no weight override). */
+    /** Backward-compatible 3-arg form (no weight override, TRADING source). */
     public ScoreRequestDto(LocalDate expiryDate, String commentary, Boolean fetchMarketaux) {
-        this(expiryDate, commentary, fetchMarketaux, null);
+        this(expiryDate, commentary, fetchMarketaux, null, null);
+    }
+
+    /** 4-arg form (weights, TRADING source) — keeps existing callers compiling. */
+    public ScoreRequestDto(LocalDate expiryDate, String commentary, Boolean fetchMarketaux, TierWeights weights) {
+        this(expiryDate, commentary, fetchMarketaux, weights, null);
     }
 
     public boolean shouldFetchMarketaux() {
         return !Boolean.FALSE.equals(fetchMarketaux); // true unless explicitly set to false
+    }
+
+    /** Channel this run belongs to — defaults to TRADING when the caller doesn't specify. */
+    public SignalSource effectiveSource() {
+        return source != null ? source : SignalSource.TRADING;
     }
 
     /** Per-request tier weights (fractions summing to 1.0). All five must be present to apply. */

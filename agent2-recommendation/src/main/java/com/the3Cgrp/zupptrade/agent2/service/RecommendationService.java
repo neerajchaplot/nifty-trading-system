@@ -566,23 +566,17 @@ public class RecommendationService {
                     .multiply(BigDecimal.valueOf(summary.lotSize()))
                     .multiply(BigDecimal.valueOf(summary.lots())).setScale(2, RoundingMode.HALF_UP);
 
-            // Compute IC thresholds from the actual strikes — trade.thresholds can be stale
-            // (all-zeros) when the trade was generated via override from a gate-failed recommendation.
-            // No live option chain here, so use spec-defined fixed buffers (§9: T1=150, T2=75).
-            BigDecimal peShortBd = BigDecimal.valueOf(peShort.strike());
-            BigDecimal ceShortBd = BigDecimal.valueOf(ceShort.strike());
+            // Prefer the recommend-time credit ladder (CreditLadderCalculator ±125/100/75 floors +
+            // entryPopDown/Up): it guarantees T3 sits ≥75 pts from each short strike AND carries entryPop
+            // so Agent 3 recomputes the ladder live every cycle. Only fall back to fixed buffers when the
+            // stored ladder is stale/zero (override from a gate-failed recommendation) — and even then keep
+            // a 75-pt T3 floor + entryPop, never T3 on the short strike.
             BigDecimal icMaxLoss = summary.theoreticalMaxLossTotal() != null
                     && summary.theoreticalMaxLossTotal().compareTo(BigDecimal.ZERO) > 0
                     ? summary.theoreticalMaxLossTotal() : actualMaxLoss;
-            MonitorThresholdsDto icThresholds = MonitorThresholdsDto.ironCondor(
-                    peShortBd.add(BigDecimal.valueOf(150)),      // T1 watch: Nifty 150 above PE short
-                    peShortBd.add(BigDecimal.valueOf(75)),       // T2 readjust: Nifty 75 above PE short
-                    peShortBd,
-                    ceShortBd.subtract(BigDecimal.valueOf(150)), // T1 watch: Nifty 150 below CE short
-                    ceShortBd.subtract(BigDecimal.valueOf(75)),  // T2 readjust: Nifty 75 below CE short
-                    ceShortBd,
-                    icMaxLoss.multiply(new BigDecimal("0.30")).setScale(2, RoundingMode.HALF_UP),
-                    icMaxLoss);
+            MonitorThresholdsDto icThresholds = isValidIcLadder(storedThresholds)
+                    ? storedThresholds
+                    : fallbackIcThresholds(peShort.strike(), ceShort.strike(), icMaxLoss);
 
             monitorConfig = MonitorConfigDto.ironCondor(
                     trade.getId(), trade.getStrategy(), direction,
@@ -644,6 +638,35 @@ public class RecommendationService {
                 kv("isIronCondor", isIronCondor));
 
         return monitorConfig;
+    }
+
+    /**
+     * True when stored Iron Condor thresholds are a real credit ladder — floored levels AND entry PoP on
+     * both sides — rather than the stale all-zeros an override from a gate-failed recommendation leaves.
+     */
+    private static boolean isValidIcLadder(MonitorThresholdsDto t) {
+        return t != null
+                && t.entryPopDown() != null && t.entryPopDown().signum() > 0
+                && t.entryPopUp()   != null && t.entryPopUp().signum()   > 0
+                && t.t3ExitNiftyDown() != null && t.t3ExitNiftyDown().signum() > 0
+                && t.t3ExitNiftyUp()   != null && t.t3ExitNiftyUp().signum()   > 0;
+    }
+
+    /**
+     * Fallback IC thresholds when the stored ladder is stale (override path). Uses the same ±125/100/75
+     * distance floors as {@link com.the3Cgrp.zupptrade.shared.calc.CreditLadderCalculator} so T3 keeps a
+     * ≥75-pt gap from each short strike (PE side above, CE side below), and carries a default entry PoP so
+     * Agent 3 can still recompute the ladder live. Never places T3 on the short strike.
+     */
+    private static MonitorThresholdsDto fallbackIcThresholds(int peStrike, int ceStrike, BigDecimal icMaxLoss) {
+        BigDecimal pe = BigDecimal.valueOf(peStrike);
+        BigDecimal ce = BigDecimal.valueOf(ceStrike);
+        BigDecimal t2Loss = icMaxLoss.multiply(new BigDecimal("0.30")).setScale(2, RoundingMode.HALF_UP);
+        return MonitorThresholdsDto.ironCondorCredit(
+                pe.add(BigDecimal.valueOf(125)), pe.add(BigDecimal.valueOf(100)), pe.add(BigDecimal.valueOf(75)),
+                ce.subtract(BigDecimal.valueOf(125)), ce.subtract(BigDecimal.valueOf(100)), ce.subtract(BigDecimal.valueOf(75)),
+                t2Loss, icMaxLoss,
+                DEFAULT_ENTRY_POP, DEFAULT_ENTRY_POP);
     }
 
     private static TradeLegDto withFill(TradeLegDto leg, BigDecimal fillPrice) {

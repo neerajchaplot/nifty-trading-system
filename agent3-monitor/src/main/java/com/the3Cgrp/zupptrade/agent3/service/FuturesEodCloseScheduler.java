@@ -38,7 +38,7 @@ public class FuturesEodCloseScheduler {
         this.autoRunScheduler = !environment.acceptsProfiles(Profiles.of("simulation"));
     }
 
-    @Scheduled(cron = "${agent3.futures.eod-close-cron:0 30 15 * * MON-FRI}",
+    @Scheduled(cron = "${agent3.futures.eod-close-cron:0 45 15 * * MON-FRI}",
                zone = "${agent3.futures.scheduler-zone:Asia/Kolkata}")
     @SchedulerLock(name = "agent3_futures_eod_close",
                    lockAtMostFor = "PT9M", lockAtLeastFor = "PT1M")

@@ -73,10 +73,10 @@ type TabId = 'trading' | 'futures' | 'audit' | 'profile';
 
       <!-- Futures view -->
       <ng-container *ngIf="activeTab === 'futures'">
-        <app-market-strip [signal]="signal$ | async"></app-market-strip>
+        <app-market-strip [signal]="futuresSignal$ | async"></app-market-strip>
         <div class="body">
           <div class="left-zone">
-            <app-futures [signal]="signal$ | async"></app-futures>
+            <app-futures [signal]="futuresSignal$ | async"></app-futures>
           </div>
           <div class="right-zone">
             <app-futures-monitor></app-futures-monitor>
@@ -159,6 +159,7 @@ type TabId = 'trading' | 'futures' | 'audit' | 'profile';
 })
 export class ShellComponent implements OnInit {
   signal$!: Observable<Agent1Signal | null>;
+  futuresSignal$!: Observable<Agent1Signal | null>;
   trades$!: Observable<ActiveTrade[]>;
   activeTab: TabId = 'trading';
 
@@ -170,6 +171,7 @@ export class ShellComponent implements OnInit {
 
   ngOnInit(): void {
     this.signal$ = this.state.signal$;
+    this.futuresSignal$ = this.state.futuresSignal$;
     this.trades$ = this.state.activeTrades$;
     this.agentUser.me().subscribe({
       next: profile => this.userState.setProfile(profile),

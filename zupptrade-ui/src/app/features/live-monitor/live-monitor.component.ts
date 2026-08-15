@@ -220,6 +220,21 @@ export class LiveMonitorComponent implements OnInit {
     return shortStrike - spot;
   }
 
+  // Iron Condor is two-sided: show both short strikes and the buffer (room) to each short.
+  peShortStrike(trade: ActiveTrade): number | null { return trade.monitorConfig?.shortLeg?.strike ?? null; }
+  ceShortStrike(trade: ActiveTrade): number | null { return trade.monitorConfig?.shortLeg2?.strike ?? null; }
+
+  /** Room above the PE short (positive = spot inside the condor, safe; negative = PE short breached). */
+  icDistancePe(trade: ActiveTrade): number | null {
+    const s = trade.spotPrice, k = this.peShortStrike(trade);
+    return s == null || k == null ? null : s - k;
+  }
+  /** Room below the CE short (positive = spot inside the condor, safe; negative = CE short breached). */
+  icDistanceCe(trade: ActiveTrade): number | null {
+    const s = trade.spotPrice, k = this.ceShortStrike(trade);
+    return s == null || k == null ? null : k - s;
+  }
+
   formatInr(val: number | null | undefined): string {
     if (val == null) return '—';
     const sign = val >= 0 ? '+ ₹ ' : '− ₹ ';

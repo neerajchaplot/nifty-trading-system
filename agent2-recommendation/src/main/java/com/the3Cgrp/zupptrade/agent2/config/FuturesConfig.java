@@ -36,9 +36,6 @@ public class FuturesConfig {
     /** §6.6 kill-switch — max futures plans a user may commit (ARMED+) per day. */
     private int maxTradesPerDay = 3;
 
-    /** reference_data key holding the resolved current-month Nifty futures instrument_key. */
-    private String futInstrumentRefKey = "nifty.fut.current";
-
     public BigDecimal getMinConfidence() { return minConfidence; }
     public void setMinConfidence(BigDecimal v) { this.minConfidence = v; }
     public BigDecimal getCompressionThreshold() { return compressionThreshold; }
@@ -57,6 +54,4 @@ public class FuturesConfig {
     public void setCompressionLookbackDays(int v) { this.compressionLookbackDays = v; }
     public int getMaxTradesPerDay() { return maxTradesPerDay; }
     public void setMaxTradesPerDay(int v) { this.maxTradesPerDay = v; }
-    public String getFutInstrumentRefKey() { return futInstrumentRefKey; }
-    public void setFutInstrumentRefKey(String v) { this.futInstrumentRefKey = v; }
 }

@@ -8,6 +8,7 @@ import com.the3Cgrp.zupptrade.agent1.repository.Agent1SignalRepository;
 import com.the3Cgrp.zupptrade.core.expiry.ExpiryDateService;
 import com.the3Cgrp.zupptrade.core.security.OwnershipGuard;
 import com.the3Cgrp.zupptrade.shared.dto.Agent1SignalDto;
+import com.the3Cgrp.zupptrade.shared.enums.SignalSource;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -40,17 +41,26 @@ public class Agent1Service {
         return toDto(entity);
     }
 
-    public Agent1SignalDto latest(LocalDate expiryDate) {
-        // Phase 5 scope: admin (null) sees the latest across all users; a normal user sees only their
-        // own latest signal for the expiry; anonymous → 401.
-        UUID scope = guard.scopeProfileId();
-        Optional<Agent1SignalEntity> signal = (scope == null)
-                ? repository.findTopByExpiryDateAndStatusOrderByTimestampDesc(expiryDate, "ACTIVE")
-                : repository.findTopByExpiryDateAndUserProfileIdAndStatusOrderByTimestampDesc(expiryDate, scope, "ACTIVE");
+    public Agent1SignalDto latest(LocalDate expiryDate, SignalSource source) {
+        Optional<Agent1SignalEntity> signal;
+        if (source == SignalSource.FUTURES) {
+            // FUTURES is a shared, admin-driven signal — global latest, not scoped to any user.
+            signal = repository.findTopByExpiryDateAndSourceAndStatusOrderByTimestampDesc(
+                    expiryDate, SignalSource.FUTURES, "ACTIVE");
+        } else {
+            // TRADING: admin (null scope) sees the latest across all users; a normal user sees only
+            // their own; anonymous → 401 (via OwnershipGuard).
+            UUID scope = guard.scopeProfileId();
+            signal = (scope == null)
+                    ? repository.findTopByExpiryDateAndSourceAndStatusOrderByTimestampDesc(
+                            expiryDate, SignalSource.TRADING, "ACTIVE")
+                    : repository.findTopByExpiryDateAndUserProfileIdAndSourceAndStatusOrderByTimestampDesc(
+                            expiryDate, scope, SignalSource.TRADING, "ACTIVE");
+        }
         return signal
                 .map(this::toDto)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "No active signal found for expiry: " + expiryDate));
+                        "No active " + source + " signal found for expiry: " + expiryDate));
     }
 
     /** Returns the next upcoming Nifty expiry date from the DB cache (or Upstox if cache is stale). */

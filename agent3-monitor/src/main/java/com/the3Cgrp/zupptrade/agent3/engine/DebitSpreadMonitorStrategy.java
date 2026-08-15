@@ -102,6 +102,7 @@ public class DebitSpreadMonitorStrategy implements MonitorStrategy {
         detail.put("currentDte", currentDte);
         detail.put("shortLegLtp", shortLegLtp);
         detail.put("longLegLtp", longLegLtp);
+        detail.put("shortLegIv", iv);   // audit — the input that drives livePop/PoPP and the loss-cut level
         if (breakeven != null)   detail.put("liveBreakevenLevel", breakeven);
         if (shortStrike != null) detail.put("liveProfitBookLevel", shortStrike);  // max-profit = short strike
 

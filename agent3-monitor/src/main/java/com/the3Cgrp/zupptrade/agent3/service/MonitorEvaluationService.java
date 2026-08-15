@@ -104,7 +104,8 @@ public class MonitorEvaluationService {
                     overrides.shortLegIv());
         } else {
             liveData = marketDataService.fetchSnapshot(
-                    config.shortLeg(), config.longLeg(), config.expiryDate());
+                    config.shortLeg(), config.longLeg(),
+                    config.shortLeg2(), config.longLeg2(), config.expiryDate());   // CE legs: Iron Condor only
         }
         return doEvaluate(trade, config, liveData);
     }

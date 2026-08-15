@@ -230,6 +230,25 @@ class IronCondorMonitorStrategyTest {
         EvaluationResult result = strategy.evaluate(ctx);
         assertThat(result.action()).isEqualTo(MonitorAction.HOLD);
         assertThat(result.thresholdHit()).isEqualTo(ThresholdHit.NONE);
+        // Regression: HOLD must carry the full 4-leg MTM P&L (was null → blank Unrealised P&L on the card).
+        // closeCost = (15-5) + (12-4) = 18; P&L = (25 - 18) × 10 × 65 = +4550.
+        assertThat(result.markToMarketPnl())
+                .as("IC HOLD must carry combined 4-leg MTM P&L")
+                .isNotNull()
+                .isEqualByComparingTo("4550.00");
+        assertThat(result.detail()).containsEntry("markToMarketPnl", new BigDecimal("4550.00"));
+    }
+
+    @Test
+    void evaluate_ceLtpMissing_holdsWithNullPnl_noCrash() {
+        // CE-side LTPs unavailable (2-leg snapshot) → 4-leg P&L cannot be computed → null, but no crash.
+        MonitorConfigDto config = buildIcConfig();
+        LiveMarketSnapshot live = new LiveMarketSnapshot(
+                new BigDecimal("23750"), new BigDecimal("17.0"),
+                new BigDecimal("15"), new BigDecimal("5"), null);   // 5-arg → CE legs null
+        EvaluationResult result = strategy.evaluate(new MonitorEvaluationContext(config, live, 5, null, null));
+        assertThat(result.action()).isEqualTo(MonitorAction.HOLD);
+        assertThat(result.markToMarketPnl()).isNull();
     }
 
     @Test
@@ -265,8 +284,8 @@ class IronCondorMonitorStrategyTest {
      *
      * @param peLtp    live LTP for PE short leg (shortLeg)
      * @param peLong   live LTP for PE long leg  (longLeg)
-     * @param ceLtp    live LTP for CE short leg (shortLeg2) — passed in shortLegLtp field
-     * @param ceLong   live LTP for CE long leg  (longLeg2)  — not directly used by strategy
+     * @param ceLtp    live LTP for CE short leg (shortLeg2)
+     * @param ceLong   live LTP for CE long leg  (longLeg2)
      */
     private MonitorEvaluationContext buildContext(double spot, double vix,
                                                    double peLtp, double peLong,
@@ -275,7 +294,8 @@ class IronCondorMonitorStrategyTest {
         MonitorConfigDto config = buildIcConfig();
         LiveMarketSnapshot liveData = new LiveMarketSnapshot(
                 new BigDecimal(spot), new BigDecimal(vix),
-                new BigDecimal(peLtp), new BigDecimal(peLong), null);
+                new BigDecimal(peLtp), new BigDecimal(peLong), null,
+                new BigDecimal(ceLtp), new BigDecimal(ceLong));   // CE-side LTPs → full 4-leg P&L
         return new MonitorEvaluationContext(config, liveData, dte, null, null);
     }
 
@@ -286,7 +306,8 @@ class IronCondorMonitorStrategyTest {
         MonitorConfigDto config = buildIcConfig();
         LiveMarketSnapshot liveData = new LiveMarketSnapshot(
                 null, new BigDecimal(vix),
-                new BigDecimal(peLtp), new BigDecimal(peLong), null);
+                new BigDecimal(peLtp), new BigDecimal(peLong), null,
+                new BigDecimal(ceLtp), new BigDecimal(ceLong));
         return new MonitorEvaluationContext(config, liveData, dte, null, null);
     }
 
