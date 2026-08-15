@@ -4,12 +4,14 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { routes } from './app.routes';
 import { apiKeyInterceptor } from './core/interceptors/api-key.interceptor';
+import { authInterceptor } from './core/interceptors/auth.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     provideZoneChangeDetection({ eventCoalescing: true }),
     provideRouter(routes),
     provideAnimationsAsync(),
-    provideHttpClient(withInterceptors([apiKeyInterceptor])),
+    // authInterceptor attaches the Bearer token; apiKeyInterceptor adds X-API-Key for the agents.
+    provideHttpClient(withInterceptors([authInterceptor, apiKeyInterceptor])),
   ],
 };

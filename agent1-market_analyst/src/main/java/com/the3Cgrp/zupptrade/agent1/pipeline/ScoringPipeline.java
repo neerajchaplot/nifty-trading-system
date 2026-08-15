@@ -13,6 +13,7 @@ import com.the3Cgrp.zupptrade.agent1.repository.Agent1SignalRepository;
 import com.the3Cgrp.zupptrade.agent1.scoring.TierScorer;
 import com.the3Cgrp.zupptrade.agent1.service.TierWeightResolver;
 import com.the3Cgrp.zupptrade.core.expiry.ExpiryDateService;
+import com.the3Cgrp.zupptrade.core.security.UserContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -53,6 +54,7 @@ public class ScoringPipeline {
     private final ExpiryDateService expiryDateService;
     private final TierWeightResolver tierWeightResolver;
     private final SignalExplanationService explanationService;
+    private final UserContext userContext;
 
     public ScoringPipeline(List<TierScorer> tierScorers,
                            SignalComposer composer,
@@ -60,7 +62,8 @@ public class ScoringPipeline {
                            MarketInputsProvider marketInputsProvider,
                            ExpiryDateService expiryDateService,
                            TierWeightResolver tierWeightResolver,
-                           SignalExplanationService explanationService) {
+                           SignalExplanationService explanationService,
+                           UserContext userContext) {
         this.tierScorers = tierScorers;
         this.composer = composer;
         this.repository = repository;
@@ -68,6 +71,7 @@ public class ScoringPipeline {
         this.expiryDateService = expiryDateService;
         this.tierWeightResolver = tierWeightResolver;
         this.explanationService = explanationService;
+        this.userContext = userContext;
     }
 
     /** Step 1-4 outside transaction (no DB writes during external API calls). Step 5 in transaction. */
@@ -124,6 +128,10 @@ public class ScoringPipeline {
 
         // Plain-English explanation (deterministic, best-effort — never blocks the pipeline).
         signal.setExplanation(explanationService.build(signal, tierScores, dataGaps));
+
+        // Multi-user (Phase 5): stamp the acting user so /latest can scope to them. Scheduled/house
+        // runs have no UserContext → null owner (admins still see it; per-user reads do not).
+        userContext.current().ifPresent(u -> signal.setUserProfileId(u.profileId()));
 
         // Step 5: Persist
         return persist(signal);

@@ -7,6 +7,8 @@ import com.the3Cgrp.zupptrade.agent5.client.response.MarginCheckResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.MarginCheckResponse.MarginData;
 import com.the3Cgrp.zupptrade.agent5.config.Agent5ExecutionProperties;
 import com.the3Cgrp.zupptrade.agent5.service.MarginCheckService.MarginCheckException;
+import com.the3Cgrp.zupptrade.core.security.BrokerTokenResolver;
+import com.the3Cgrp.zupptrade.core.security.UserContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -39,6 +41,10 @@ class MarginCheckServiceTest {
     @Mock private UpstoxOrderClient        orderClient;
     @Mock private Agent5ExecutionProperties props;
     @Mock private JdbcTemplate             jdbc;
+    @Mock private BrokerTokenResolver      brokerTokenResolver;
+
+    // Real (empty) UserContext — anonymous caller → system-token session (legacy behaviour).
+    private final UserContext userContext = new UserContext();
 
     private MarginCheckService service;
 
@@ -53,7 +59,10 @@ class MarginCheckServiceTest {
         // lenient: the utilisation tests never touch props (no DB/legs path),
         // so a strict stub here would trip UnnecessaryStubbingException.
         lenient().when(props.getProduct()).thenReturn("D");
-        service = new MarginCheckService(orderClient, props, jdbc);
+        // session(null) → real OrderSession bound to the mock; its no-token calls delegate back to
+        // the mock's stubbed base methods (checkMargin / getAvailableFunds).
+        lenient().when(orderClient.session(any())).thenCallRealMethod();
+        service = new MarginCheckService(orderClient, props, jdbc, brokerTokenResolver, userContext);
     }
 
     // ── Happy path — stored lots ──────────────────────────────────────────────

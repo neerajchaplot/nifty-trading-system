@@ -1,6 +1,7 @@
 package com.the3Cgrp.zupptrade.agent4;
 
 import com.jayway.jsonpath.JsonPath;
+import com.the3Cgrp.zupptrade.shared.constants.TradingConstants;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -54,7 +55,13 @@ class AnalyticsControllerIT {
 
     @BeforeAll
     void setUp() {
-        restClient = RestClient.create("http://localhost:" + port);
+        // Phase 5: reads are per-user scoped and reject anonymous callers (401). Authenticate as the
+        // seeded profile via X-User-Id (UserIdentityFilter trusts it behind the agent boundary) so
+        // every request acts as the owner of the seeded signal/trade.
+        restClient = RestClient.builder()
+                .baseUrl("http://localhost:" + port)
+                .defaultHeader(TradingConstants.USER_ID_HEADER, profileId.toString())
+                .build();
         cleanData(); // guard against stale rows from a prior interrupted run
         seedData();
     }
@@ -389,18 +396,22 @@ class AnalyticsControllerIT {
             """, profileId);
 
         // 2. Agent 1 signal — spot set so the price-based accuracy metric is measurable.
+        //    user_profile_id set (Phase 5) so the signal is owned by the seeded profile and appears
+        //    under scoped signal-quality/summary reads.
         jdbc.update("""
             INSERT INTO zupptrade_dev.agent1_signals
               (id, timestamp, expiry_date, bias, strength, composite_score,
                confidence, confidence_label, vix_level, vix_regime, vix_direction,
-               spot, score_breakdown, data_gaps, commentary_divergence, status, created_at)
+               spot, score_breakdown, data_gaps, commentary_divergence, status, created_at,
+               user_profile_id)
             VALUES (?, NOW(), '2026-06-17', 'BULLISH', 'MILD', 0.3100,
                     0.68, 'MEDIUM', 18.50, 'HIGH', 'FALLING',
                     23412.60,
                     '{"tier1a":0.40,"tier1b":0.30,"tier2":0.45,"tier3":0.20,"tier4":0.10}'::jsonb,
-                    '[]'::jsonb, false, 'EXPIRED', NOW())
+                    '[]'::jsonb, false, 'EXPIRED', NOW(),
+                    ?)
             ON CONFLICT DO NOTHING
-            """, signalId);
+            """, signalId, profileId);
 
         // 2b. Expiry-day Nifty close so the signal resolves to a verdict.
         //     23412.60 → 23550.00 = +137.4 pts; BULLISH MILD (>= +100) → ACCURATE.

@@ -57,3 +57,9 @@ logging:
   level:
     com.the3Cgrp.zupptrade.agent5: INFO
     org.springframework.web.client: WARN
+
+# Multi-user identity (Phase 3): shared HS256 key — MUST match agent-user (JWT_SIGNING_KEY).
+# Absent key -> JwtService boots but validation yields anonymous (no behaviour change).
+zupptrade:
+  jwt:
+    signing-key: ${JWT_SIGNING_KEY:}

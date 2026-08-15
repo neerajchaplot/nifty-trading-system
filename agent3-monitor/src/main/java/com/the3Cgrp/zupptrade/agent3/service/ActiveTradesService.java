@@ -5,6 +5,7 @@ import com.the3Cgrp.zupptrade.agent3.dto.ActiveTradeDto;
 import com.the3Cgrp.zupptrade.agent3.model.TradeMonitorData;
 import com.the3Cgrp.zupptrade.agent3.repository.MonitoringEvaluationRepository;
 import com.the3Cgrp.zupptrade.agent3.util.JsonUtil;
+import com.the3Cgrp.zupptrade.core.security.OwnershipGuard;
 import com.the3Cgrp.zupptrade.shared.dto.MonitorConfigDto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,17 +27,24 @@ public class ActiveTradesService {
     private final TradeMonitorReader tradeMonitorReader;
     private final MonitoringEvaluationRepository evaluationRepository;
     private final JsonUtil jsonUtil;
+    private final OwnershipGuard guard;
 
     public ActiveTradesService(TradeMonitorReader tradeMonitorReader,
                                MonitoringEvaluationRepository evaluationRepository,
-                               JsonUtil jsonUtil) {
+                               JsonUtil jsonUtil,
+                               OwnershipGuard guard) {
         this.tradeMonitorReader = tradeMonitorReader;
         this.evaluationRepository = evaluationRepository;
         this.jsonUtil = jsonUtil;
+        this.guard = guard;
     }
 
-    public List<ActiveTradeDto> findAllActive() {
-        return tradeMonitorReader.findAllActive().stream()
+    /**
+     * Active trades visible to the current user for the UI monitor. Scoped: caller's own trades,
+     * or all for an admin; 401 if anonymous. The scheduler's global sweep is unaffected.
+     */
+    public List<ActiveTradeDto> findActiveForCurrentUser() {
+        return tradeMonitorReader.findActiveForUser(guard.scopeProfileId()).stream()
                 .map(this::toActiveTradeDto)
                 .toList();
     }

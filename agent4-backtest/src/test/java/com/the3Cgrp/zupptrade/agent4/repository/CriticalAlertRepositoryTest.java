@@ -6,7 +6,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+
+import org.mockito.ArgumentMatchers;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -28,17 +31,74 @@ class CriticalAlertRepositoryTest {
         return c;
     }
 
+    /** HashMap-backed single entry — Map.of rejects null values, which we need for a null owner. */
+    private static Map<String, Object> mapWith(String key, Object value) {
+        Map<String, Object> m = new java.util.HashMap<>();
+        m.put(key, value);
+        return m;
+    }
+
     @Test
-    void findLive_queriesLiveRowsNewestFirstFromSchemaQualifiedTable() {
-        when(jdbc.queryForList(anyString()))
+    void findLive_scopedQueryJoinsTradesAndFiltersOnOwner() {
+        UUID scope = UUID.randomUUID();
+        // <Object> witnesses force the queryForList(String, Object...) overload — otherwise the bare
+        // matcher's inferred type collides with queryForList(String, Class, Object...).
+        when(jdbc.queryForList(anyString(), ArgumentMatchers.<Object>any(), ArgumentMatchers.<Object>any()))
                 .thenReturn(List.of(Map.of("alert_id", UUID.randomUUID())));
 
-        List<Map<String, Object>> rows = repo.findLive();
+        List<Map<String, Object>> rows = repo.findLive(scope);
 
         assertThat(rows).hasSize(1);
-        verify(jdbc).queryForList(contains("zupptrade_dev.critical_alerts"));
-        verify(jdbc).queryForList(contains("status = 'LIVE'"));
-        verify(jdbc).queryForList(contains("ORDER BY created_at DESC"));
+        // Scope bound twice as text for CAST(? AS UUID)
+        verify(jdbc).queryForList(contains("zupptrade_dev.critical_alerts"),
+                eq(scope.toString()), eq(scope.toString()));
+        verify(jdbc).queryForList(contains("LEFT JOIN zupptrade_dev.trades"),
+                ArgumentMatchers.<Object>any(), ArgumentMatchers.<Object>any());
+        verify(jdbc).queryForList(contains("t.user_profile_id = CAST(? AS UUID)"),
+                ArgumentMatchers.<Object>any(), ArgumentMatchers.<Object>any());
+        verify(jdbc).queryForList(contains("ca.status = 'LIVE'"),
+                ArgumentMatchers.<Object>any(), ArgumentMatchers.<Object>any());
+        verify(jdbc).queryForList(contains("ORDER BY ca.created_at DESC"),
+                ArgumentMatchers.<Object>any(), ArgumentMatchers.<Object>any());
+    }
+
+    @Test
+    void findLive_adminScopeNull_boundAsNull() {
+        when(jdbc.queryForList(anyString(), ArgumentMatchers.<Object>any(), ArgumentMatchers.<Object>any()))
+                .thenReturn(List.of());
+
+        repo.findLive(null);
+
+        // null scope → CAST(NULL AS UUID) IS NULL → all rows (admin)
+        verify(jdbc).queryForList(anyString(), ArgumentMatchers.<Object>isNull(), ArgumentMatchers.<Object>isNull());
+    }
+
+    @Test
+    void findAlertOwner_absentAlert_returnsEmpty() {
+        UUID alertId = UUID.randomUUID();
+        when(jdbc.queryForList(anyString(), eq(alertId))).thenReturn(List.of());
+
+        assertThat(repo.findAlertOwner(alertId)).isEmpty();
+    }
+
+    @Test
+    void findAlertOwner_presentAlert_returnsOwnershipEvenWhenOwnerNull() {
+        UUID alertId = UUID.randomUUID();
+        UUID owner   = UUID.randomUUID();
+
+        // Owner present
+        when(jdbc.queryForList(anyString(), eq(alertId)))
+                .thenReturn(List.of(mapWith("owner", owner)));
+        Optional<CriticalAlertRepository.AlertOwnership> withOwner = repo.findAlertOwner(alertId);
+        assertThat(withOwner).isPresent();
+        assertThat(withOwner.get().ownerProfileId()).isEqualTo(owner);
+
+        // Alert present but unattributed (null owner) — must still be present, not empty
+        when(jdbc.queryForList(anyString(), eq(alertId)))
+                .thenReturn(List.of(mapWith("owner", null)));
+        Optional<CriticalAlertRepository.AlertOwnership> nullOwner = repo.findAlertOwner(alertId);
+        assertThat(nullOwner).isPresent();
+        assertThat(nullOwner.get().ownerProfileId()).isNull();
     }
 
     @Test

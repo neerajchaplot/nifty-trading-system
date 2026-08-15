@@ -17,5 +17,12 @@ public record UserProfileResponseDto(
         BigDecimal tier1bWeight,
         BigDecimal tier2Weight,
         BigDecimal tier3Weight,
-        BigDecimal tier4Weight
+        BigDecimal tier4Weight,
+        // Multi-user identity/mode (Phase 2) — nullable on legacy rows until backfilled.
+        String authProvider,
+        String accountMode,
+        boolean isAdmin,
+        // Human-friendly identity for the UI (nullable on legacy rows).
+        String email,
+        String displayName
 ) {}

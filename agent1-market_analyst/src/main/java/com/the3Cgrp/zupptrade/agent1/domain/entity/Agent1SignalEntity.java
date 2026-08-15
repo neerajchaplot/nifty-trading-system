@@ -88,6 +88,10 @@ public class Agent1SignalEntity {
     @Column(nullable = false, length = 10)
     private String status = "ACTIVE";
 
+    /** Owner of this signal (multi-user Phase 5). Null for scheduled/house runs with no acting user. */
+    @Column(name = "user_profile_id")
+    private UUID userProfileId;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now(ZoneOffset.UTC);
 
@@ -128,5 +132,7 @@ public class Agent1SignalEntity {
     public void setDataGaps(String v) { this.dataGaps = v; }
     public String getStatus() { return status; }
     public void setStatus(String v) { this.status = v; }
+    public UUID getUserProfileId() { return userProfileId; }
+    public void setUserProfileId(UUID v) { this.userProfileId = v; }
     public LocalDateTime getCreatedAt() { return createdAt; }
 }

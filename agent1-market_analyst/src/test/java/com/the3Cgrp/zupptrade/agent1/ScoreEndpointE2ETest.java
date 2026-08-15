@@ -1,11 +1,14 @@
 package com.the3Cgrp.zupptrade.agent1;
 
 import com.the3Cgrp.zupptrade.agent1.dto.ScoreRequestDto;
+import com.the3Cgrp.zupptrade.shared.constants.TradingConstants;
 import com.the3Cgrp.zupptrade.shared.dto.Agent1SignalDto;
 import org.junit.jupiter.api.*;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.*;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.client.RestClient;
 
@@ -48,10 +51,28 @@ class ScoreEndpointE2ETest {
     @Value("${local.server.port}")
     private int port;
 
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    private UUID actingProfileId;
+
+    /**
+     * Phase 5: reads are per-user scoped. Act as an existing user_profiles row (FK-safe) so /score
+     * stamps a valid owner and /latest — scoped to the same user — reads it back.
+     */
+    private UUID actingProfileId() {
+        if (actingProfileId == null) {
+            actingProfileId = jdbc.queryForObject(
+                    "SELECT id FROM zupptrade_dev.user_profiles ORDER BY created_at ASC LIMIT 1", UUID.class);
+        }
+        return actingProfileId;
+    }
+
     // RestClient built lazily once the random port is known
     private RestClient restClient() {
         return RestClient.builder()
                 .baseUrl("http://localhost:" + port)
+                .defaultHeader(TradingConstants.USER_ID_HEADER, actingProfileId().toString())
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, org.springframework.http.MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader(HttpHeaders.ACCEPT,       org.springframework.http.MediaType.APPLICATION_JSON_VALUE)
                 .build();

@@ -6,6 +6,7 @@ import org.springframework.stereotype.Repository;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Reads v_agent4_signal_quality for the signal quality report API.
@@ -28,7 +29,7 @@ public class SignalQualityRepository {
      * {@code Agent1AccuracyCalculator} can grade each signal; there is no accuracy_verdict
      * column (verdict moved out of SQL into config-driven Java).
      */
-    public List<Map<String, Object>> findSignals(LocalDate from, LocalDate to) {
+    public List<Map<String, Object>> findSignals(LocalDate from, LocalDate to, UUID scope) {
         String sql = "SELECT signal_id, scored_at, bias, strength, composite_score, "
                 + "confidence_label, vix_regime, commentary_divergence, data_gaps_json, "
                 + "signal_spot, expiry_date, expiry_close, "
@@ -36,9 +37,12 @@ public class SignalQualityRepository {
                 + "FROM " + VIEW
                 + " WHERE (CAST(? AS DATE) IS NULL OR scored_at >= CAST(? AS DATE)) "
                 + "   AND (CAST(? AS DATE) IS NULL OR scored_at <= CAST(? AS DATE) + INTERVAL '1 day') "
+                // Per-user scope (Phase 5): NULL scope = admin (all signals); else this owner only.
+                + "   AND (CAST(? AS UUID) IS NULL OR user_profile_id = CAST(? AS UUID)) "
                 + " ORDER BY scored_at DESC";
-        Object fromVal = from != null ? java.sql.Date.valueOf(from) : null;
-        Object toVal   = to   != null ? java.sql.Date.valueOf(to)   : null;
-        return jdbc.queryForList(sql, fromVal, fromVal, toVal, toVal);
+        Object fromVal  = from  != null ? java.sql.Date.valueOf(from) : null;
+        Object toVal    = to    != null ? java.sql.Date.valueOf(to)   : null;
+        Object scopeVal = scope != null ? scope.toString()           : null;
+        return jdbc.queryForList(sql, fromVal, fromVal, toVal, toVal, scopeVal, scopeVal);
     }
 }

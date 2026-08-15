@@ -27,8 +27,12 @@ public class ApiTokenDbLoader implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ApiTokenDbLoader.class);
 
+    // Phase 4: multiple UPSTOX rows can exist (admin + per-user). Market data uses the ADMIN row
+    // (the shared, daily-refreshed token) — never a random user's.
     private static final String SQL =
         "SELECT encrypted_token FROM api_tokens WHERE service = 'UPSTOX' " +
+        "AND user_profile_id = (SELECT id FROM user_profiles WHERE is_admin = true " +
+        "                       ORDER BY created_at ASC LIMIT 1) " +
         "ORDER BY fetched_at DESC LIMIT 1";
 
     private final JdbcTemplate           jdbc;

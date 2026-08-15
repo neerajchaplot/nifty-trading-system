@@ -71,9 +71,13 @@ public class UpstoxAutoConfiguration {
                 .requestFactory(factory)
                 .baseUrl(props.getBaseUrl())
                 .requestInterceptor((request, body, execution) -> {
-                    String token = tokenHolder.getToken();
-                    if (token != null && !token.isBlank()) {
-                        request.getHeaders().setBearerAuth(token);
+                    // Set the system token only if the caller hasn't already supplied a per-user
+                    // token (Phase 4: agent5 passes the trade owner's token for account-specific calls).
+                    if (request.getHeaders().getFirst(org.springframework.http.HttpHeaders.AUTHORIZATION) == null) {
+                        String token = tokenHolder.getToken();
+                        if (token != null && !token.isBlank()) {
+                            request.getHeaders().setBearerAuth(token);
+                        }
                     }
                     request.getHeaders().set("Accept", "application/json");
                     request.getHeaders().set("Api-Version", "2.0");
@@ -106,13 +110,16 @@ public class UpstoxAutoConfiguration {
                 .requestFactory(factory)
                 .baseUrl(props.getOrderBaseUrl())
                 .requestInterceptor((request, body, execution) -> {
-                    // Use orderAccessToken when set (sandbox); fall back to accessToken (production)
-                    String orderToken = props.getOrderAccessToken();
-                    String token = (orderToken != null && !orderToken.isBlank())
-                            ? orderToken
-                            : tokenHolder.getToken();
-                    if (token != null && !token.isBlank()) {
-                        request.getHeaders().setBearerAuth(token);
+                    // Per-user token wins (agent5 passes the trade owner's token). Otherwise use
+                    // orderAccessToken when set (sandbox); fall back to accessToken (production).
+                    if (request.getHeaders().getFirst(org.springframework.http.HttpHeaders.AUTHORIZATION) == null) {
+                        String orderToken = props.getOrderAccessToken();
+                        String token = (orderToken != null && !orderToken.isBlank())
+                                ? orderToken
+                                : tokenHolder.getToken();
+                        if (token != null && !token.isBlank()) {
+                            request.getHeaders().setBearerAuth(token);
+                        }
                     }
                     request.getHeaders().set("Accept", "application/json");
                     request.getHeaders().set("Api-Version", "2.0");
@@ -144,13 +151,16 @@ public class UpstoxAutoConfiguration {
                 .requestFactory(factory)
                 .baseUrl(props.getOrderReadBaseUrl())
                 .requestInterceptor((request, body, execution) -> {
-                    // Same token as the order client: sandbox token if set, else production token.
-                    String orderToken = props.getOrderAccessToken();
-                    String token = (orderToken != null && !orderToken.isBlank())
-                            ? orderToken
-                            : tokenHolder.getToken();
-                    if (token != null && !token.isBlank()) {
-                        request.getHeaders().setBearerAuth(token);
+                    // Per-user token wins (agent5 passes the trade owner's token). Otherwise same as
+                    // the order client: sandbox token if set, else production token.
+                    if (request.getHeaders().getFirst(org.springframework.http.HttpHeaders.AUTHORIZATION) == null) {
+                        String orderToken = props.getOrderAccessToken();
+                        String token = (orderToken != null && !orderToken.isBlank())
+                                ? orderToken
+                                : tokenHolder.getToken();
+                        if (token != null && !token.isBlank()) {
+                            request.getHeaders().setBearerAuth(token);
+                        }
                     }
                     request.getHeaders().set("Accept", "application/json");
                     request.getHeaders().set("Api-Version", "2.0");

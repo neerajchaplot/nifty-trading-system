@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 
@@ -45,6 +46,23 @@ public class GlobalExceptionHandler {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
         problem.setType(URI.create("urn:zupptrade:error:market-data-unavailable"));
         problem.setTitle("Market Data Unavailable");
+        return problem;
+    }
+
+    /**
+     * Preserves the status of a {@link ResponseStatusException} — OwnershipGuard's 401 (anonymous)
+     * / 403 (cross-user) for per-user write ownership. agent2 excludes core's handler, so this is
+     * declared locally.
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ProblemDetail handleResponseStatus(ResponseStatusException ex) {
+        var status = ex.getStatusCode();
+        log.warn("request.denied", kv("status", status.value()), kv("reason", ex.getReason()));
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, ex.getReason());
+        problem.setType(URI.create("urn:zupptrade:error:access-denied"));
+        problem.setTitle(status.value() == 401 ? "Unauthorized"
+                       : status.value() == 403 ? "Forbidden"
+                       : "Request Failed");
         return problem;
     }
 }

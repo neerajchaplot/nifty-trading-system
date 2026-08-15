@@ -1,5 +1,6 @@
 package com.the3Cgrp.zupptrade.agent3.config;
 
+import com.the3Cgrp.zupptrade.core.security.ForwardUserIdInterceptor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,7 +24,8 @@ public class AgentClientsConfig {
 
     @Bean("agent1RestClient")
     public RestClient agent1RestClient(
-            @Value("${agent1.url:http://localhost:8081}") String agent1BaseUrl) {
+            @Value("${agent1.url:http://localhost:8081}") String agent1BaseUrl,
+            ForwardUserIdInterceptor forwardUserId) {
 
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(10));
@@ -33,6 +35,9 @@ public class AgentClientsConfig {
         return RestClient.builder()
                 .requestFactory(factory)
                 .baseUrl(agent1BaseUrl)
+                // Forwards X-User-Id when this call runs on a UI-originated thread; no-op when
+                // scheduled (readjustment). Trade-owner resolution for scheduled calls is Phase 4/5.
+                .requestInterceptor(forwardUserId)
                 .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader("Accept",       MediaType.APPLICATION_JSON_VALUE)
                 .build();
@@ -40,7 +45,8 @@ public class AgentClientsConfig {
 
     @Bean("agent2RestClient")
     public RestClient agent2RestClient(
-            @Value("${agent2.url:http://localhost:8082}") String agent2BaseUrl) {
+            @Value("${agent2.url:http://localhost:8082}") String agent2BaseUrl,
+            ForwardUserIdInterceptor forwardUserId) {
 
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(Duration.ofSeconds(10));
@@ -50,6 +56,7 @@ public class AgentClientsConfig {
         return RestClient.builder()
                 .requestFactory(factory)
                 .baseUrl(agent2BaseUrl)
+                .requestInterceptor(forwardUserId)
                 .defaultHeader("Content-Type", MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader("Accept",       MediaType.APPLICATION_JSON_VALUE)
                 .build();

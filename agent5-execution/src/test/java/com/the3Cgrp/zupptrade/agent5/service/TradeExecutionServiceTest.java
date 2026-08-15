@@ -18,6 +18,8 @@ import com.the3Cgrp.zupptrade.agent5.dto.LegOrderRequest;
 import com.the3Cgrp.zupptrade.shared.dto.ExitTradeRequest;
 import com.the3Cgrp.zupptrade.core.alert.AlertService;
 import com.the3Cgrp.zupptrade.core.alert.CriticalAlertService;
+import com.the3Cgrp.zupptrade.core.security.BrokerTokenResolver;
+import com.the3Cgrp.zupptrade.core.security.UserContext;
 import com.the3Cgrp.zupptrade.ledger.TradeLedgerService;
 import com.the3Cgrp.zupptrade.shared.enums.LegAction;
 import com.the3Cgrp.zupptrade.shared.enums.OptionType;
@@ -36,6 +38,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -54,6 +57,10 @@ class TradeExecutionServiceTest {
     @Mock private AlertService           alertService;
     @Mock private CriticalAlertService   criticalAlertService;
     @Mock private TradeLedgerService     ledger;
+    @Mock private BrokerTokenResolver    brokerTokenResolver;
+
+    // Real (empty) UserContext — no authenticated user, so ownership checks pass (legacy behaviour).
+    private final UserContext userContext = new UserContext();
 
     private Agent5ExecutionProperties props;
     private TradeExecutionService     service;
@@ -86,8 +93,12 @@ class TradeExecutionServiceTest {
         props.setReconcileDelayMs(5);
         props.setMaxOrderQuantity(1755);
 
+        // session(null) must return a REAL OrderSession bound to the mock, so its no-token calls
+        // delegate straight back to the mock's stubbed base methods (placeOrder, checkMargin, …).
+        lenient().when(orderClient.session(any())).thenCallRealMethod();
+
         service = new TradeExecutionService(orderClient, props, jdbc, JsonMapper.builder().build(),
-                alertService, criticalAlertService, ledger);
+                alertService, criticalAlertService, ledger, brokerTokenResolver, userContext);
     }
 
     // ── Happy path ────────────────────────────────────────────────────────────
@@ -556,6 +567,97 @@ class TradeExecutionServiceTest {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    // ── Phase 4: per-user token, ownership guard, sim gate ────────────────────
+
+    @org.junit.jupiter.api.AfterEach
+    void clearIdentity() {
+        userContext.clear(); // ThreadLocal — never leak an identity into the next test
+    }
+
+    /** Stubs the trade-owner query (RowMapper overload) to return the given owner + mode. */
+    private void givenTradeOwner(UUID ownerId, String accountMode) {
+        doAnswer(invocation -> {
+            org.springframework.jdbc.core.RowMapper<Object> mapper = invocation.getArgument(1);
+            java.sql.ResultSet rs = mock(java.sql.ResultSet.class);
+            when(rs.getObject("user_profile_id")).thenReturn(ownerId);
+            when(rs.getString("account_mode")).thenReturn(accountMode);
+            return mapper.mapRow(rs, 0);
+        }).when(jdbc).queryForObject(contains("user_profile_id"),
+                any(org.springframework.jdbc.core.RowMapper.class), any());
+    }
+
+    @Test
+    void execute_liveOwner_bindsSessionToOwnersToken() {
+        UUID ownerId = UUID.randomUUID();
+        givenConfirmedTrade(EXPECTED_NET);
+        givenTradeOwner(ownerId, "LIVE");
+        when(brokerTokenResolver.resolveTokenForProfile(ownerId)).thenReturn("owner-token");
+        // Margin check on the OWNER's token fails → clean MARGIN_CHECK rejection. This proves the
+        // owner token (not the system token) is what the execution acts with.
+        when(orderClient.checkMargin(any(), eq("owner-token")))
+                .thenThrow(new UpstoxOrderException("margin down"));
+
+        ExecuteTradeResponse response = service.execute(buildRequest());
+
+        assertThat(response.executionStatus()).isEqualTo(TradeStatus.REJECTED);
+        verify(brokerTokenResolver).resolveTokenForProfile(ownerId);
+        verify(orderClient).session("owner-token");
+        verify(orderClient, never()).placeOrder(any());              // system-token variant
+        verify(orderClient, never()).placeOrder(any(), anyString()); // owner-token variant
+    }
+
+    @Test
+    void execute_actingUserIsNotOwner_forbidden() {
+        UUID ownerId  = UUID.randomUUID();
+        UUID intruder = UUID.randomUUID();
+        givenConfirmedTrade(EXPECTED_NET);
+        givenTradeOwner(ownerId, "LIVE");
+        userContext.set(new com.the3Cgrp.zupptrade.core.security.AuthenticatedUser(
+                intruder, "LIVE", false, "UPSTOX"));
+
+        assertThatThrownBy(() -> service.execute(buildRequest()))
+                .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+                .hasMessageContaining("does not belong");
+
+        verify(orderClient, never()).session(any());
+        verify(orderClient, never()).placeOrder(any());
+        verify(orderClient, never()).placeOrder(any(), anyString());
+    }
+
+    @Test
+    void execute_simulationOwner_neverPlacesRealOrders() {
+        UUID googleUser = UUID.randomUUID();
+        givenConfirmedTrade(EXPECTED_NET);
+        givenTradeOwner(googleUser, "SIMULATION");
+
+        ExecuteTradeResponse response = service.execute(buildRequest());
+
+        // Routed to the simulated-fills path: trade goes ACTIVE with synthetic fills, but Upstox
+        // is NEVER touched — no session, no margin call, no order.
+        assertThat(response.executionStatus()).isEqualTo(TradeStatus.ACTIVE);
+        verify(orderClient, never()).session(any());
+        verify(orderClient, never()).checkMargin(any());
+        verify(orderClient, never()).checkMargin(any(), anyString());
+        verify(orderClient, never()).placeOrder(any());
+        verify(orderClient, never()).placeOrder(any(), anyString());
+    }
+
+    @Test
+    void exit_simulationOwner_neverPlacesRealOrders() {
+        UUID googleUser = UUID.randomUUID();
+        givenCurrentTradeStatus("ACTIVE");
+        givenTradeOwner(googleUser, "SIMULATION");
+
+        ExitTradeResponse response = service.exit(buildExitRequest());
+
+        assertThat(response.status()).isEqualTo(TradeStatus.CLOSED);
+        verify(orderClient, never()).session(any());
+        verify(orderClient, never()).placeOrder(any());
+        verify(orderClient, never()).placeOrder(any(), anyString());
+    }
+
+    // ── Shared givens ─────────────────────────────────────────────────────────
 
     private void givenConfirmedTrade(BigDecimal netPremium) {
         when(jdbc.queryForObject(anyString(), eq(BigDecimal.class), any())).thenReturn(netPremium);

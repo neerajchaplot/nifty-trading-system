@@ -81,7 +81,7 @@ public class MonitorEvaluationController {
      */
     @GetMapping("/active-trades")
     public ResponseEntity<List<ActiveTradeDto>> activeTrades() {
-        return ResponseEntity.ok(activeTradesService.findAllActive());
+        return ResponseEntity.ok(activeTradesService.findActiveForCurrentUser());
     }
 
     /** Health check endpoint. */

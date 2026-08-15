@@ -1,7 +1,10 @@
 import { Component, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { AuthService } from '../../core/services/auth.service';
+import { UserStateService } from '../../core/services/user-state.service';
 
 @Component({
   selector: 'app-nav',
@@ -17,6 +20,15 @@ import { MatIconModule } from '@angular/material/icon';
           <span class="live-dot"></span> LIVE
         </span>
         <button class="btn-icon" (click)="refresh.emit()">↻ Refresh</button>
+        <div class="user-box" *ngIf="userName">
+          <span class="user-line">
+            <span class="user-ic" aria-hidden="true">👤</span>
+            <span class="user-name" [title]="userName">{{ userName }}</span>
+            <span class="user-mode" [class.mode-sim]="isSimulation">{{ modeLabel }}</span>
+          </span>
+          <button class="btn-icon logout-btn" (click)="logout()">⇥ Logout</button>
+        </div>
+        <button class="btn-icon" *ngIf="!userName" (click)="logout()">⇥ Logout</button>
       </div>
     </nav>
   `,
@@ -92,6 +104,48 @@ import { MatIconModule } from '@angular/material/icon';
       gap: 5px;
     }
     .btn-icon:hover { background: #F8FAFC; border-color: #CBD5E1; }
+
+    /* Signed-in user: name on top, Logout beneath it */
+    .user-box {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 3px;
+      padding-left: 14px;
+      border-left: 1px solid #E2E8F0;
+    }
+    .user-line {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      line-height: 1;
+    }
+    .user-ic { font-size: 12px; opacity: .75; }
+    .user-name {
+      font-size: 12px;
+      font-weight: 600;
+      color: #334155;
+      max-width: 180px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .user-mode {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      padding: 1px 6px;
+      border-radius: 99px;
+      background: #F0FDF4;
+      color: #16A34A;
+      border: 1px solid #BBF7D0;
+    }
+    .user-mode.mode-sim {
+      background: #FEF3C7;
+      color: #92400E;
+      border-color: #FDE68A;
+    }
+    .logout-btn { padding: 3px 10px; }
   `],
 })
 export class NavComponent implements OnInit, OnDestroy {
@@ -99,6 +153,32 @@ export class NavComponent implements OnInit, OnDestroy {
 
   clock = '';
   private timer?: ReturnType<typeof setInterval>;
+
+  constructor(
+    private auth: AuthService,
+    private router: Router,
+    private userState: UserStateService,
+  ) {}
+
+  /** Friendly name for the signed-in user: display name → email → user id. */
+  get userName(): string | null {
+    const p = this.userState.profile;
+    if (!p) return null;
+    return p.displayName || p.email || p.userId || null;
+  }
+
+  get isSimulation(): boolean {
+    return this.userState.profile?.accountMode === 'SIMULATION';
+  }
+
+  get modeLabel(): string {
+    return this.isSimulation ? 'SIM' : 'LIVE';
+  }
+
+  logout(): void {
+    this.auth.logout();
+    this.router.navigate(['/login']);
+  }
 
   ngOnInit(): void {
     this.updateClock();

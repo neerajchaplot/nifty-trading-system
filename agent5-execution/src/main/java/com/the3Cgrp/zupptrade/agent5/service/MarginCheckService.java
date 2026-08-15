@@ -6,6 +6,8 @@ import com.the3Cgrp.zupptrade.agent5.client.request.MarginCheckRequest;
 import com.the3Cgrp.zupptrade.agent5.client.response.FundsAndMarginResponse;
 import com.the3Cgrp.zupptrade.agent5.client.response.MarginCheckResponse;
 import com.the3Cgrp.zupptrade.agent5.config.Agent5ExecutionProperties;
+import com.the3Cgrp.zupptrade.core.security.BrokerTokenResolver;
+import com.the3Cgrp.zupptrade.core.security.UserContext;
 import jakarta.validation.constraints.NotNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,13 +38,32 @@ public class MarginCheckService {
     private final UpstoxOrderClient        orderClient;
     private final Agent5ExecutionProperties props;
     private final JdbcTemplate             jdbc;
+    private final BrokerTokenResolver      brokerTokenResolver;
+    private final UserContext              userContext;
 
     public MarginCheckService(UpstoxOrderClient orderClient,
                               Agent5ExecutionProperties props,
-                              JdbcTemplate jdbc) {
-        this.orderClient = orderClient;
-        this.props       = props;
-        this.jdbc        = jdbc;
+                              JdbcTemplate jdbc,
+                              BrokerTokenResolver brokerTokenResolver,
+                              UserContext userContext) {
+        this.orderClient         = orderClient;
+        this.props               = props;
+        this.jdbc                = jdbc;
+        this.brokerTokenResolver = brokerTokenResolver;
+        this.userContext         = userContext;
+    }
+
+    /**
+     * Session bound to the acting user's token: a signed-in LIVE user sees THEIR margin/funds
+     * (503 if their Upstox session isn't connected). Anonymous or SIMULATION → system/admin token
+     * (legacy behaviour — a sim user has no real margin account).
+     */
+    private UpstoxOrderClient.OrderSession session() {
+        String token = userContext.current()
+                .filter(u -> "LIVE".equals(u.accountMode()))
+                .map(u -> brokerTokenResolver.resolveTokenForProfile(u.profileId()))
+                .orElse(null);
+        return orderClient.session(token);
     }
 
     // ── Request / Response DTOs ─────────────────────────────────────────────────
@@ -112,7 +133,7 @@ public class MarginCheckService {
 
         FundsAndMarginResponse resp;
         try {
-            resp = orderClient.getAvailableFunds();
+            resp = session().getAvailableFunds();
         } catch (UpstoxOrderException e) {
             log.error("margin.utilization.funds.error", kv("error", e.getMessage()));
             throw new MarginCheckException("Upstox funds check failed: " + e.getMessage(), e);
@@ -172,7 +193,7 @@ public class MarginCheckService {
     private BigDecimal fetchRequiredMargin(UUID tradeId, List<MarginCheckRequest.Instrument> instruments) {
         MarginCheckResponse resp;
         try {
-            resp = orderClient.checkMargin(new MarginCheckRequest(instruments));
+            resp = session().checkMargin(new MarginCheckRequest(instruments));
         } catch (UpstoxOrderException e) {
             log.error("margin.check.upstox.error",
                     kv("tradeId", tradeId), kv("error", e.getMessage()));
@@ -184,7 +205,7 @@ public class MarginCheckService {
     private BigDecimal fetchAvailableMargin(UUID tradeId) {
         FundsAndMarginResponse resp;
         try {
-            resp = orderClient.getAvailableFunds();
+            resp = session().getAvailableFunds();
         } catch (UpstoxOrderException e) {
             log.error("margin.check.funds.error",
                     kv("tradeId", tradeId), kv("error", e.getMessage()));

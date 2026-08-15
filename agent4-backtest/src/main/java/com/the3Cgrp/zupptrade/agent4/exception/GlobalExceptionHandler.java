@@ -1,10 +1,12 @@
 package com.the3Cgrp.zupptrade.agent4.exception;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 
@@ -41,6 +43,21 @@ public class GlobalExceptionHandler {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, detail);
         pd.setType(URI.create("urn:agent4:bad-request"));
         pd.setTitle("Bad Request");
+        return pd;
+    }
+
+    /**
+     * Preserves the status of a {@link ResponseStatusException} (e.g. OwnershipGuard's 401/403 for
+     * per-user read scoping). Without this the catch-all below would mask them as 500.
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ProblemDetail handleResponseStatus(ResponseStatusException ex) {
+        HttpStatusCode status = ex.getStatusCode();
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, ex.getReason());
+        pd.setType(URI.create("urn:agent4:access-denied"));
+        pd.setTitle(status.value() == 401 ? "Unauthorized"
+                  : status.value() == 403 ? "Forbidden"
+                  : "Request Failed");
         return pd;
     }
 

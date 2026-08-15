@@ -80,6 +80,7 @@ public class RecommendationService {
     private final TradeLedgerService ledger;
     private final TradingConfig config;
     private final Clock clock;
+    private final com.the3Cgrp.zupptrade.core.security.OwnershipGuard guard;
 
     public RecommendationService(Agent1SignalRepository signalRepository,
                                   UserProfileRepository userProfileRepository,
@@ -93,7 +94,8 @@ public class RecommendationService {
                                   JsonUtil jsonUtil,
                                   TradeLedgerService ledger,
                                   TradingConfig config,
-                                  Clock clock) {
+                                  Clock clock,
+                                  com.the3Cgrp.zupptrade.core.security.OwnershipGuard guard) {
         this.signalRepository = signalRepository;
         this.userProfileRepository = userProfileRepository;
         this.tradeRepository = tradeRepository;
@@ -107,10 +109,14 @@ public class RecommendationService {
         this.ledger = ledger;
         this.config = config;
         this.clock = clock;
+        this.guard = guard;
     }
 
     @Transactional
     public TradeCardDto recommend(RecommendRequestDto request) {
+        // Phase 5: a user may only create a trade under their own profile (admin may act for any). 401/403.
+        guard.requireOwner(request.userProfileId());
+
         Agent1SignalEntity signal = signalRepository.findById(request.agent1SignalId())
                 .orElseThrow(() -> new IllegalArgumentException("Agent1 signal not found: " + request.agent1SignalId()));
 
@@ -222,6 +228,9 @@ public class RecommendationService {
     public TradeCardDto confirm(TradeConfirmRequestDto request) {
         TradeEntity trade = tradeRepository.findById(request.tradeId())
                 .orElseThrow(() -> new TradeNotFoundException(request.tradeId()));
+
+        // Phase 5: a user may only confirm their own trade (admin may confirm any). 401/403.
+        guard.requireOwner(trade.getUserProfile() != null ? trade.getUserProfile().getId() : null);
 
         boolean isManualOverride = request.overrideParams() != null
                 && request.action() == com.the3Cgrp.zupptrade.shared.enums.ConfirmAction.CONFIRM;

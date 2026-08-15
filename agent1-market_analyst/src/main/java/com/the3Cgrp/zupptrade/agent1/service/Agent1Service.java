@@ -6,6 +6,7 @@ import com.the3Cgrp.zupptrade.agent1.dto.ScoreRequestDto;
 import com.the3Cgrp.zupptrade.agent1.pipeline.ScoringPipeline;
 import com.the3Cgrp.zupptrade.agent1.repository.Agent1SignalRepository;
 import com.the3Cgrp.zupptrade.core.expiry.ExpiryDateService;
+import com.the3Cgrp.zupptrade.core.security.OwnershipGuard;
 import com.the3Cgrp.zupptrade.shared.dto.Agent1SignalDto;
 import org.springframework.stereotype.Service;
 
@@ -13,6 +14,8 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class Agent1Service {
@@ -20,13 +23,16 @@ public class Agent1Service {
     private final ScoringPipeline pipeline;
     private final Agent1SignalRepository repository;
     private final ExpiryDateService expiryDateService;
+    private final OwnershipGuard guard;
 
     public Agent1Service(ScoringPipeline pipeline,
                          Agent1SignalRepository repository,
-                         ExpiryDateService expiryDateService) {
+                         ExpiryDateService expiryDateService,
+                         OwnershipGuard guard) {
         this.pipeline = pipeline;
         this.repository = repository;
         this.expiryDateService = expiryDateService;
+        this.guard = guard;
     }
 
     public Agent1SignalDto score(ScoreRequestDto request) {
@@ -35,8 +41,13 @@ public class Agent1Service {
     }
 
     public Agent1SignalDto latest(LocalDate expiryDate) {
-        return repository
-                .findTopByExpiryDateAndStatusOrderByTimestampDesc(expiryDate, "ACTIVE")
+        // Phase 5 scope: admin (null) sees the latest across all users; a normal user sees only their
+        // own latest signal for the expiry; anonymous → 401.
+        UUID scope = guard.scopeProfileId();
+        Optional<Agent1SignalEntity> signal = (scope == null)
+                ? repository.findTopByExpiryDateAndStatusOrderByTimestampDesc(expiryDate, "ACTIVE")
+                : repository.findTopByExpiryDateAndUserProfileIdAndStatusOrderByTimestampDesc(expiryDate, scope, "ACTIVE");
+        return signal
                 .map(this::toDto)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "No active signal found for expiry: " + expiryDate));

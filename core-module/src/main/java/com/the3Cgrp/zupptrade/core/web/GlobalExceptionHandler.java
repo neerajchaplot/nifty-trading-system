@@ -11,6 +11,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.net.URI;
@@ -98,6 +99,23 @@ public class GlobalExceptionHandler {
         ProblemDetail pd = ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
         pd.setType(URI.create("urn:zupptrade:error:internal"));
         pd.setTitle("Internal Error");
+        return pd;
+    }
+
+    /**
+     * Preserves the status carried by a {@link ResponseStatusException} — notably OwnershipGuard's
+     * 401 (anonymous) / 403 (cross-user) for per-user read scoping. Without this the catch-all below
+     * would mask them as 500.
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ProblemDetail handleResponseStatus(ResponseStatusException ex) {
+        var status = ex.getStatusCode();
+        log.warn("request.denied", kv("status", status.value()), kv("reason", ex.getReason()));
+        ProblemDetail pd = ProblemDetail.forStatusAndDetail(status, ex.getReason());
+        pd.setType(URI.create("urn:zupptrade:error:access-denied"));
+        pd.setTitle(status.value() == 401 ? "Unauthorized"
+                  : status.value() == 403 ? "Forbidden"
+                  : "Request Failed");
         return pd;
     }
 

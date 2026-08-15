@@ -72,17 +72,25 @@ class ConfirmThresholdOverrideTest {
 
     private RecommendationService service;
 
+    // Real guard backed by an admin identity — ownership always passes, so these tests exercise
+    // confirm/override behaviour without wiring per-trade owners.
+    private final com.the3Cgrp.zupptrade.core.security.UserContext userContext =
+            new com.the3Cgrp.zupptrade.core.security.UserContext();
+
     private static final int PE_SHORT_STRIKE = 23700;
     private static final int CE_SHORT_STRIKE = 23800;
 
     @BeforeEach
     void setUp() {
         when(tradingConfig.isHardGateEnabled()).thenReturn(true);
+        userContext.set(new com.the3Cgrp.zupptrade.core.security.AuthenticatedUser(
+                UUID.randomUUID(), "LIVE", true, "UPSTOX"));   // admin
         service = new RecommendationService(
                 signalRepository, userProfileRepository, tradeRepository,
                 referenceDataRepository, optionChainClient, marketDataClient,
                 engine, volatilityService, blackScholes, jsonUtil, ledger, tradingConfig,
-                java.time.Clock.systemDefaultZone());
+                java.time.Clock.systemDefaultZone(),
+                new com.the3Cgrp.zupptrade.core.security.OwnershipGuard(userContext));
     }
 
     @Test

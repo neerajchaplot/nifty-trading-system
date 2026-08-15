@@ -1,6 +1,12 @@
 export interface UserProfile {
   id: string;
   userId: string;
+  // Identity/mode from /me (nullable on legacy rows).
+  authProvider?: string;
+  accountMode?: string;   // LIVE | SIMULATION
+  isAdmin?: boolean;
+  email?: string;
+  displayName?: string;
   capital: number;
   minPop: number;
   maxLossPct: number;

@@ -40,6 +40,23 @@ upstox:
     access-token: ${UPSTOX_ACCESS_TOKEN:}
     token-encryption-key: ${TOKEN_ENCRYPTION_KEY:}
 
+# Multi-user auth (Phase 2). Secrets are env-only — never commit real values.
+zupptrade:
+  jwt:
+    signing-key: ${JWT_SIGNING_KEY:}      # HS256 secret, >= 32 bytes
+    access-ttl-minutes: 30
+    refresh-ttl-days: 7
+    issuer: zupptrade
+  auth:
+    ui-redirect-uri: ${AUTH_UI_REDIRECT:http://localhost:4200/auth/callback}
+    google:
+      client-id: ${GOOGLE_CLIENT_ID:}
+      client-secret: ${GOOGLE_CLIENT_SECRET:}
+      redirect-uri: ${GOOGLE_REDIRECT_URI:http://localhost:8086/api/v1/agent-user/auth/google/callback}
+    upstox:
+      # Upstox client-id/secret come from upstox.api.api-key/api-secret; only the callback lives here.
+      redirect-uri: ${UPSTOX_AUTH_REDIRECT:http://localhost:8086/api/v1/agent-user/auth/upstox/callback}
+
 logging:
   level:
     com.the3Cgrp.zupptrade.agentUser: INFO

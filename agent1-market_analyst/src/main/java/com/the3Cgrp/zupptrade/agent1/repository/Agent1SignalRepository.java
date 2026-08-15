@@ -11,6 +11,10 @@ public interface Agent1SignalRepository extends JpaRepository<Agent1SignalEntity
 
     Optional<Agent1SignalEntity> findTopByExpiryDateAndStatusOrderByTimestampDesc(LocalDate expiryDate, String status);
 
+    /** Per-user scoped variant (Phase 5) — the latest ACTIVE signal this user generated for an expiry. */
+    Optional<Agent1SignalEntity> findTopByExpiryDateAndUserProfileIdAndStatusOrderByTimestampDesc(
+            LocalDate expiryDate, UUID userProfileId, String status);
+
     /**
      * Returns the single most recently recorded ACTIVE signal across all expiry dates.
      * Used by ScoringPipeline to retrieve the previous session's VIX level for

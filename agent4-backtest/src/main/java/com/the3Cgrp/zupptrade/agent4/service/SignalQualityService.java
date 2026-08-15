@@ -5,6 +5,7 @@ import com.the3Cgrp.zupptrade.agent4.calculator.Agent1AccuracyCalculator.Thresho
 import com.the3Cgrp.zupptrade.agent4.domain.dto.response.SignalQualityResponse;
 import com.the3Cgrp.zupptrade.agent4.repository.AccuracyThresholdsRepository;
 import com.the3Cgrp.zupptrade.agent4.repository.SignalQualityRepository;
+import com.the3Cgrp.zupptrade.core.security.OwnershipGuard;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -22,17 +23,21 @@ public class SignalQualityService {
 
     private final SignalQualityRepository repository;
     private final AccuracyThresholdsRepository thresholdsRepository;
+    private final OwnershipGuard guard;
     // Jackson 2 ObjectMapper — not a Spring Boot 4 bean (it uses Jackson 3), so created directly.
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public SignalQualityService(SignalQualityRepository repository,
-                                AccuracyThresholdsRepository thresholdsRepository) {
+                                AccuracyThresholdsRepository thresholdsRepository,
+                                OwnershipGuard guard) {
         this.repository = repository;
         this.thresholdsRepository = thresholdsRepository;
+        this.guard = guard;
     }
 
     public SignalQualityResponse getSignalQuality(LocalDate from, LocalDate to) {
-        List<Map<String, Object>> rows = repository.findSignals(from, to);
+        // Phase 5 scope: caller's profile id, or null for admin (all users). 401 if anonymous.
+        List<Map<String, Object>> rows = repository.findSignals(from, to, guard.scopeProfileId());
 
         // Price-based accuracy: grade each signal on bias+strength vs its expiry-day move.
         LocalDate today = LocalDate.now();

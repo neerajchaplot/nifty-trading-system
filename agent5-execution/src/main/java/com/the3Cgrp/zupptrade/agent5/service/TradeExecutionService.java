@@ -2,6 +2,7 @@ package com.the3Cgrp.zupptrade.agent5.service;
 
 import tools.jackson.databind.json.JsonMapper;
 import com.the3Cgrp.zupptrade.agent5.client.UpstoxOrderClient;
+import com.the3Cgrp.zupptrade.agent5.client.UpstoxOrderClient.OrderSession;
 import com.the3Cgrp.zupptrade.agent5.client.UpstoxOrderClient.UpstoxOrderException;
 import com.the3Cgrp.zupptrade.agent5.client.request.MarginCheckRequest;
 import com.the3Cgrp.zupptrade.agent5.client.request.PlaceOrderV3Request;
@@ -14,6 +15,8 @@ import com.the3Cgrp.zupptrade.agent5.config.Agent5ExecutionProperties;
 import com.the3Cgrp.zupptrade.agent5.dto.*;
 import com.the3Cgrp.zupptrade.core.alert.AlertService;
 import com.the3Cgrp.zupptrade.core.alert.CriticalAlertService;
+import com.the3Cgrp.zupptrade.core.security.BrokerTokenResolver;
+import com.the3Cgrp.zupptrade.core.security.UserContext;
 import com.the3Cgrp.zupptrade.ledger.LedgerEventType;
 import com.the3Cgrp.zupptrade.ledger.TradeLedgerService;
 import com.the3Cgrp.zupptrade.ledger.payload.*;
@@ -22,8 +25,10 @@ import com.the3Cgrp.zupptrade.shared.enums.LegAction;
 import com.the3Cgrp.zupptrade.shared.enums.TradeStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -61,6 +66,14 @@ public class TradeExecutionService {
     private final AlertService              alertService;
     private final CriticalAlertService      criticalAlertService;
     private final TradeLedgerService        ledger;
+    private final BrokerTokenResolver       brokerTokenResolver;
+    private final UserContext               userContext;
+
+    // Resolves the trade owner + their account mode (Phase 4). LEFT JOIN so a null owner still
+    // returns a row (falls back to the system token, backward-compatible).
+    private static final String OWNER_SQL =
+            "SELECT t.user_profile_id, up.account_mode FROM trades t " +
+            "LEFT JOIN user_profiles up ON up.id = t.user_profile_id WHERE t.id = ?";
 
     public TradeExecutionService(UpstoxOrderClient orderClient,
                                  Agent5ExecutionProperties props,
@@ -68,7 +81,9 @@ public class TradeExecutionService {
                                  JsonMapper mapper,
                                  AlertService alertService,
                                  CriticalAlertService criticalAlertService,
-                                 TradeLedgerService ledger) {
+                                 TradeLedgerService ledger,
+                                 BrokerTokenResolver brokerTokenResolver,
+                                 UserContext userContext) {
         this.orderClient          = orderClient;
         this.props                = props;
         this.jdbc                 = jdbc;
@@ -76,6 +91,43 @@ public class TradeExecutionService {
         this.alertService         = alertService;
         this.criticalAlertService = criticalAlertService;
         this.ledger               = ledger;
+        this.brokerTokenResolver  = brokerTokenResolver;
+        this.userContext          = userContext;
+    }
+
+    // ── Phase 4: trade owner + per-user token / gates ────────────────────────
+
+    /** The owner of a trade and their account mode (LIVE / SIMULATION), for token + gating. */
+    private record TradeOwner(UUID profileId, String accountMode) {
+        boolean isSimulation() { return "SIMULATION".equals(accountMode); }
+    }
+
+    private TradeOwner readTradeOwner(UUID tradeId) {
+        try {
+            TradeOwner owner = jdbc.queryForObject(OWNER_SQL,
+                    (rs, n) -> new TradeOwner((UUID) rs.getObject("user_profile_id"), rs.getString("account_mode")),
+                    tradeId);
+            return owner != null ? owner : new TradeOwner(null, null);
+        } catch (org.springframework.dao.EmptyResultDataAccessException e) {
+            return new TradeOwner(null, null);
+        }
+    }
+
+    /** The acting user (if authenticated) must own the trade; else 403. Anonymous callers pass. */
+    private void authorizeOwnership(UUID tradeId, TradeOwner owner) {
+        userContext.current().ifPresent(u -> {
+            if (owner.profileId() != null && !owner.profileId().equals(u.profileId())) {
+                log.warn("execution.ownership.denied tradeId={} actingUser={} owner={}",
+                        tradeId, u.profileId(), owner.profileId());
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "Trade does not belong to the signed-in user");
+            }
+        });
+    }
+
+    /** The owner's own Upstox token for this execution — null owner falls back to the system token. */
+    private String resolveOwnerToken(TradeOwner owner) {
+        return owner.profileId() != null ? brokerTokenResolver.resolveTokenForProfile(owner.profileId()) : null;
     }
 
     // ── Entry ───────────────────────────────────────────────────────────────
@@ -117,16 +169,23 @@ public class TradeExecutionService {
             }
         }
 
-        // Simulate path (offline) — bypasses Upstox margin AND order calls. All fault modes
-        // (including MARGIN_REJECT) are produced synthetically inside executeSimulated.
-        if (props.isSimulateFills()) {
+        // Phase 4: resolve the trade owner; the acting user (if authenticated) must own it.
+        TradeOwner owner = readTradeOwner(tradeId);
+        authorizeOwnership(tradeId, owner);
+
+        // Simulate path — the sandbox profile OR a SIMULATION (Google) user never places real orders.
+        if (props.isSimulateFills() || owner.isSimulation()) {
             return executeSimulated(tradeId, request, expectedNet, simMode);
         }
+
+        // LIVE: bind an order session to the OWNER's Upstox token for the whole execution, so every
+        // call below acts on the right account. Null owner → falls back to the system token.
+        OrderSession upstox = orderClient.session(resolveOwnerToken(owner));
 
         // ── Step 2: Margin check — required margin from /v2/charges/margin ────
         MarginCheckResponse margin;
         try {
-            margin = orderClient.checkMargin(buildMarginRequest(request));
+            margin = upstox.checkMargin(buildMarginRequest(request));
         } catch (UpstoxOrderException e) {
             log.error("execution.margin.failed", kv("tradeId", tradeId), kv("error", e.getMessage()));
             return rejected(tradeId, expectedNet, "MARGIN_CHECK", "Margin check failed: " + e.getMessage());
@@ -141,7 +200,7 @@ public class TradeExecutionService {
         } else {
             FundsAndMarginResponse funds;
             try {
-                funds = orderClient.getAvailableFunds();
+                funds = upstox.getAvailableFunds();
             } catch (UpstoxOrderException e) {
                 log.error("execution.funds.failed", kv("tradeId", tradeId), kv("error", e.getMessage()));
                 return rejected(tradeId, expectedNet, "MARGIN_CHECK", "Fund check failed: " + e.getMessage());
@@ -173,20 +232,20 @@ public class TradeExecutionService {
                                 props.getProduct(), leg.quantity(), legTag)
                         : PlaceOrderV3Request.limit(leg.instrumentKey(), leg.action().name(),
                                 props.getProduct(), leg.quantity(), leg.limitPrice(), legTag);
-                placed = orderClient.placeOrder(order);
+                placed = upstox.placeOrder(order);
             } catch (UpstoxOrderException e) {
                 if (e.isAmbiguous()) {
                     // 5xx/timeout — the order may or may not have reached the exchange. We do NOT
                     // retry (would risk a duplicate). Reconcile by tag and drive to flat.
                     log.error("execution.place.ambiguous_failure",
                             kv("tradeId", tradeId), kv("legIndex", legIndex), kv("error", e.getMessage()));
-                    return reconcileAndFlatten(tradeId, request, filledInPlacementOrder,
+                    return reconcileAndFlatten(upstox, tradeId, request, filledInPlacementOrder,
                             legIndex, e.getMessage(), expectedNet);
                 }
                 // Deterministic 4xx — nothing was placed for this leg. Roll back prior fills, reject.
                 log.warn("execution.leg.rejected",
                         kv("tradeId", tradeId), kv("legIndex", legIndex), kv("error", e.getMessage()));
-                rollback(filledInPlacementOrder, tradeId);
+                rollback(upstox, filledInPlacementOrder, tradeId);
                 return rejected(tradeId, expectedNet, "ORDER_PLACEMENT",
                         "Leg " + legIndex + " rejected: " + e.getMessage() + ". Filled legs rolled back.");
             }
@@ -197,7 +256,7 @@ public class TradeExecutionService {
             if (orderId == null) {
                 log.error("execution.order.id.unexpected",
                         kv("tradeId", tradeId), kv("legIndex", legIndex), kv("orderIds", placed.orderIds()));
-                return reconcileAndFlatten(tradeId, request, filledInPlacementOrder,
+                return reconcileAndFlatten(upstox, tradeId, request, filledInPlacementOrder,
                         legIndex, "unexpected order_ids: " + placed.orderIds(), expectedNet);
             }
 
@@ -208,7 +267,7 @@ public class TradeExecutionService {
                     "AGENT5:SYSTEM");
 
             // Poll this leg to a fill before placing the next
-            PollResult poll = pollToCompletion(orderId, leg, legTag, tradeId);
+            PollResult poll = pollToCompletion(upstox, orderId, leg, legTag, tradeId);
             if (!poll.fullyFilled()) {
                 // If it PARTIALLY filled, that position is real and must be compensated too —
                 // include it so rollback reverses exactly the filled qty, not the ordered qty.
@@ -220,7 +279,7 @@ public class TradeExecutionService {
                 }
                 log.warn("execution.leg.failed",
                         kv("tradeId", tradeId), kv("legIndex", legIndex), kv("orderId", orderId));
-                rollback(filledInPlacementOrder, tradeId);
+                rollback(upstox, filledInPlacementOrder, tradeId);
                 return rejected(tradeId, expectedNet, "FILL_TIMEOUT",
                         "Leg " + legIndex + " (orderId=" + orderId + ") did not fully fill. "
                                 + "Filled legs (including partial fills) rolled back.");
@@ -279,8 +338,12 @@ public class TradeExecutionService {
                     "Trade not in exit-eligible status: " + current, null);
         }
 
-        // ── Simulate exit (sandbox only) — skip Upstox entirely ──
-        if (props.isSimulateExit()) {
+        // Phase 4: resolve the trade owner; the acting user (if authenticated) must own it.
+        TradeOwner owner = readTradeOwner(tradeId);
+        authorizeOwnership(tradeId, owner);
+
+        // ── Simulate exit — sandbox profile OR a SIMULATION user never places real orders ──
+        if (props.isSimulateExit() || owner.isSimulation()) {
             // Fault modes on exit → simulate a failed exit (Agent 3 retries on its next cycle).
             if (simMode != SimFillMode.FILL && simMode != SimFillMode.SLIPPAGE) {
                 String failReason = "Simulated exit failure (fault mode: " + simMode + ")";
@@ -306,13 +369,16 @@ public class TradeExecutionService {
         // Ensure EXIT_IN_PROGRESS is set (idempotent if Agent 3 already set it).
         setTradeStatus(tradeId, TradeStatus.EXIT_IN_PROGRESS, null);
 
+        // LIVE: bind the reverse orders to the OWNER's Upstox token.
+        OrderSession upstox = orderClient.session(resolveOwnerToken(owner));
+
         // ── Place a reverse MARKET order per leg (one call each) ─────────────
         List<String> failures = new ArrayList<>();
         for (int i = 0; i < request.exitLegs().size(); i++) {
             ExitTradeRequest.ExitLeg leg = request.exitLegs().get(i);
             String reverse = leg.originalAction() == LegAction.SELL ? "BUY" : "SELL";
             try {
-                orderClient.placeOrder(PlaceOrderV3Request.market(
+                upstox.placeOrder(PlaceOrderV3Request.market(
                         leg.instrumentKey(), reverse, props.getProduct(),
                         leg.quantity(), OrderTagBuilder.exitTag(tradeId, i)));
                 log.info("exit.leg.placed", kv("tradeId", tradeId), kv("legIndex", i),
@@ -388,7 +454,7 @@ public class TradeExecutionService {
         static PollResult none()                { return new PollResult(false, null); }
     }
 
-    private PollResult pollToCompletion(String orderId, LegOrderRequest leg,
+    private PollResult pollToCompletion(OrderSession upstox, String orderId, LegOrderRequest leg,
                                         String legTag, UUID tradeId) {
         long start         = System.currentTimeMillis();
         long timeout       = props.getFillTimeoutMs();
@@ -398,7 +464,7 @@ public class TradeExecutionService {
         while (true) {
             OrderStatusResponse status;
             try {
-                status = orderClient.getOrderStatus(orderId);
+                status = upstox.getOrderStatus(orderId);
             } catch (UpstoxOrderException e) {
                 log.error("execution.poll.error", kv("orderId", orderId), kv("error", e.getMessage()));
                 return PollResult.none();
@@ -429,15 +495,15 @@ public class TradeExecutionService {
             long elapsed = System.currentTimeMillis() - start;
             if (elapsed >= timeout && !marketSent) {
                 if (props.isCancelOnTimeoutInsteadOfMarket()) {
-                    try { orderClient.cancelOrder(orderId); } catch (UpstoxOrderException ignore) {}
-                    return partialOrNone(orderId, legTag, leg, safeStatus(orderId));
+                    try { upstox.cancelOrder(orderId); } catch (UpstoxOrderException ignore) {}
+                    return partialOrNone(orderId, legTag, leg, safeStatus(upstox, orderId));
                 } else {
                     try {
-                        orderClient.modifyToMarket(orderId, leg.quantity());
+                        upstox.modifyToMarket(orderId, leg.quantity());
                         marketSent = true;
                     } catch (UpstoxOrderException e) {
                         log.error("execution.modify.market.failed", kv("orderId", orderId));
-                        return partialOrNone(orderId, legTag, leg, safeStatus(orderId));
+                        return partialOrNone(orderId, legTag, leg, safeStatus(upstox, orderId));
                     }
                 }
             }
@@ -461,9 +527,9 @@ public class TradeExecutionService {
     }
 
     /** Best-effort final status read — returns null if Upstox is unreachable. */
-    private OrderStatusResponse safeStatus(String orderId) {
+    private OrderStatusResponse safeStatus(OrderSession upstox, String orderId) {
         try {
-            return orderClient.getOrderStatus(orderId);
+            return upstox.getOrderStatus(orderId);
         } catch (UpstoxOrderException e) {
             log.error("execution.final_status.read.failed",
                     kv("orderId", orderId), kv("error", e.getMessage()));
@@ -472,7 +538,7 @@ public class TradeExecutionService {
     }
 
     /** Reverses each already-filled leg with a MARKET order at its actual filled quantity. */
-    private void rollback(List<LegFillDto> filledLegs, UUID tradeId) {
+    private void rollback(OrderSession upstox, List<LegFillDto> filledLegs, UUID tradeId) {
         if (filledLegs.isEmpty()) return;
         log.warn("execution.rollback.start", kv("tradeId", tradeId), kv("filledLegs", filledLegs.size()));
 
@@ -480,7 +546,7 @@ public class TradeExecutionService {
             LegFillDto fill = filledLegs.get(i);
             String reverse  = fill.action() == LegAction.SELL ? "BUY" : "SELL";
             try {
-                orderClient.placeOrder(PlaceOrderV3Request.market(
+                upstox.placeOrder(PlaceOrderV3Request.market(
                         fill.instrumentKey(), reverse, props.getProduct(),
                         fill.quantityFilled(), OrderTagBuilder.rollbackTag(tradeId, i)));
                 log.info("execution.rollback.leg.placed",
@@ -514,7 +580,7 @@ public class TradeExecutionService {
      * Every reconciliation records a critical_alert with a transparent JSON snapshot. Status becomes
      * REJECTED only when we are confident the position is flat; otherwise RECONCILE_REQUIRED.
      */
-    private ExecuteTradeResponse reconcileAndFlatten(UUID tradeId, ExecuteTradeRequest request,
+    private ExecuteTradeResponse reconcileAndFlatten(OrderSession upstox, UUID tradeId, ExecuteTradeRequest request,
                                                      List<LegFillDto> knownFills, int failedLegIndex,
                                                      String triggerError, BigDecimal expectedNet) {
         sleep(props.getReconcileDelayMs());
@@ -523,7 +589,7 @@ public class TradeExecutionService {
         // 1. Query the order book by the failed leg's tag (idempotent GET — retried in the client).
         TaggedOrdersResponse book;
         try {
-            book = orderClient.getOrderDetailsByTag(failedTag);
+            book = upstox.getOrderDetailsByTag(failedTag);
         } catch (UpstoxOrderException e) {
             String reason = "Order placement failed AND reconciliation query failed for tag " + failedTag +
                     " — position state UNKNOWN. Check the Upstox order book for tag " + failedTag +
@@ -580,16 +646,16 @@ public class TradeExecutionService {
             a.put("instrumentKey", item.instrumentKey());
             try {
                 if (item.openInBook()) {
-                    orderClient.cancelOrder(item.orderId());
+                    upstox.cancelOrder(item.orderId());
                     a.put("cancelled", true);
                 }
                 int filled = item.knownFilledQty();
-                OrderStatusResponse fs = safeStatus(item.orderId());
+                OrderStatusResponse fs = safeStatus(upstox, item.orderId());
                 if (fs != null && fs.data() != null) filled = fs.data().filledQuantity();
                 a.put("filledQty", filled);
                 if (filled > 0) {
                     String reverse = item.action() == LegAction.SELL ? "BUY" : "SELL";
-                    orderClient.placeOrder(PlaceOrderV3Request.market(
+                    upstox.placeOrder(PlaceOrderV3Request.market(
                             item.instrumentKey(), reverse, props.getProduct(),
                             filled, OrderTagBuilder.rollbackTag(tradeId, rbSeq++)));
                     a.put("reversed", true);

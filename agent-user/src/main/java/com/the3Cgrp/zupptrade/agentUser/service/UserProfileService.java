@@ -213,6 +213,44 @@ public class UserProfileService {
         return e;
     }
 
+    /**
+     * Finds the profile for a provider identity, creating a new one (with default risk params) on
+     * first login. Google → SIMULATION, Upstox → LIVE. Google and Upstox are distinct identities.
+     */
+    @Transactional
+    public UserProfileEntity findOrCreateForProvider(String provider, String providerUserId,
+                                                     String email, String displayName, String accountMode) {
+        return repository.findByAuthProviderAndUserId(provider, providerUserId)
+                .map(existing -> {
+                    boolean changed = false;
+                    if (email != null && !email.equals(existing.getEmail())) { existing.setEmail(email); changed = true; }
+                    if (displayName != null && !displayName.equals(existing.getDisplayName())) { existing.setDisplayName(displayName); changed = true; }
+                    return changed ? repository.save(existing) : existing;
+                })
+                .orElseGet(() -> {
+                    UserProfileEntity e = buildDefault(providerUserId);
+                    e.setAuthProvider(provider);
+                    e.setEmail(email);
+                    e.setDisplayName(displayName);
+                    e.setAccountMode(accountMode);
+                    e.setStatus("ACTIVE");
+                    UserProfileEntity saved = repository.save(e);
+                    log.info("agent-user.created provider={} userId={} mode={} profileId={}",
+                            provider, providerUserId, accountMode, saved.getId());
+                    return saved;
+                });
+    }
+
+    public UserProfileResponseDto getByProfileId(UUID id) {
+        return repository.findById(id).map(this::toDto)
+                .orElseThrow(() -> new IllegalArgumentException("No user profile: " + id));
+    }
+
+    public UserProfileEntity requireById(UUID id) {
+        return repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("No user profile: " + id));
+    }
+
     private UserProfileResponseDto toDto(UserProfileEntity e) {
         return new UserProfileResponseDto(
                 e.getId(),
@@ -228,7 +266,12 @@ public class UserProfileService {
                 e.getTier1bWeight(),
                 e.getTier2Weight(),
                 e.getTier3Weight(),
-                e.getTier4Weight()
+                e.getTier4Weight(),
+                e.getAuthProvider(),
+                e.getAccountMode(),
+                e.isAdmin(),
+                e.getEmail(),
+                e.getDisplayName()
         );
     }
 }

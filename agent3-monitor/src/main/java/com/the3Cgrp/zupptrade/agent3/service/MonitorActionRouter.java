@@ -5,6 +5,8 @@ import com.the3Cgrp.zupptrade.agent3.dto.EvaluationResponse;
 import com.the3Cgrp.zupptrade.agent3.model.TradeMonitorData;
 import com.the3Cgrp.zupptrade.agent3.util.JsonUtil;
 import com.the3Cgrp.zupptrade.core.alert.AlertService;
+import com.the3Cgrp.zupptrade.core.security.AuthenticatedUser;
+import com.the3Cgrp.zupptrade.core.security.UserContext;
 import com.the3Cgrp.zupptrade.ledger.LedgerEventType;
 import com.the3Cgrp.zupptrade.ledger.TradeLedgerService;
 import com.the3Cgrp.zupptrade.ledger.payload.TradeCloseInitiatedPayload;
@@ -43,6 +45,7 @@ public class MonitorActionRouter {
     private final TradeLedgerService  ledger;
     private final TradeMonitorReader  tradeReader;
     private final JsonUtil            jsonUtil;
+    private final UserContext         userContext;
 
     public MonitorActionRouter(ReadjustmentService readjustmentService,
                                Agent5ExitClient agent5ExitClient,
@@ -50,7 +53,8 @@ public class MonitorActionRouter {
                                JdbcTemplate jdbc,
                                TradeLedgerService ledger,
                                TradeMonitorReader tradeReader,
-                               JsonUtil jsonUtil) {
+                               JsonUtil jsonUtil,
+                               UserContext userContext) {
         this.readjustmentService = readjustmentService;
         this.agent5ExitClient    = agent5ExitClient;
         this.alertService        = alertService;
@@ -58,6 +62,7 @@ public class MonitorActionRouter {
         this.ledger              = ledger;
         this.tradeReader         = tradeReader;
         this.jsonUtil            = jsonUtil;
+        this.userContext         = userContext;
     }
 
     /**
@@ -82,20 +87,34 @@ public class MonitorActionRouter {
 
     /** Routes a decision to its side effect (HOLD/WATCH = no-op; READJUST/EXIT/PAUSE act). */
     public void apply(TradeMonitorData trade, MonitorConfigDto config, EvaluationResponse response) {
-        switch (response.action()) {
-            case HOLD, WATCH -> { /* normal — already logged by evaluation service */ }
+        // Bind the trade owner as the acting identity for the duration of this routing so that any
+        // agent→agent call (Agent5 exit, readjustment) forwards X-User-Id and Agent5's ownership
+        // guard is actively satisfied (not merely bypassed) + the action is attributed in audit.
+        // Only when NO user is already acting: on the on-demand /evaluate?act=true seam a real user
+        // may be present — leave their identity so Agent5 verifies THEY own the trade (403 if not).
+        boolean bound = false;
+        if (!userContext.isAuthenticated() && trade.userProfileId() != null) {
+            userContext.set(new AuthenticatedUser(trade.userProfileId(), null, false, null));
+            bound = true;
+        }
+        try {
+            switch (response.action()) {
+                case HOLD, WATCH -> { /* normal — already logged by evaluation service */ }
 
-            case READJUST -> readjustmentService.handle(trade, config, response);
+                case READJUST -> readjustmentService.handle(trade, config, response);
 
-            case EXIT -> triggerExit(trade, config, response);
+                case EXIT -> triggerExit(trade, config, response);
 
-            case PAUSE -> {
-                log.warn("agent3.scheduler.vix_extreme_pause tradeId={} tradeCode={}",
-                        trade.tradeId(), trade.tradeCode());
-                alertService.warning(trade.tradeId(), "vix_extreme_pause",
-                        "Trade " + trade.tradeCode() + " monitoring PAUSED — VIX is in Extreme territory (>24). " +
-                        "Auto-exit suppressed. Monitor manually. Trade remains ACTIVE.");
+                case PAUSE -> {
+                    log.warn("agent3.scheduler.vix_extreme_pause tradeId={} tradeCode={}",
+                            trade.tradeId(), trade.tradeCode());
+                    alertService.warning(trade.tradeId(), "vix_extreme_pause",
+                            "Trade " + trade.tradeCode() + " monitoring PAUSED — VIX is in Extreme territory (>24). " +
+                            "Auto-exit suppressed. Monitor manually. Trade remains ACTIVE.");
+                }
             }
+        } finally {
+            if (bound) userContext.clear();   // never leak the owner identity onto the pooled thread
         }
     }
 

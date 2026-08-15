@@ -70,13 +70,20 @@ class RecommendExpiryDayTest {
     private static final UUID PROFILE_ID  = UUID.randomUUID();
     private static final LocalDate TODAY  = LocalDate.now();   // DTE = 0
 
+    // Real guard backed by an admin identity — ownership always passes.
+    private final com.the3Cgrp.zupptrade.core.security.UserContext userContext =
+            new com.the3Cgrp.zupptrade.core.security.UserContext();
+
     @BeforeEach
     void setUp() {
+        userContext.set(new com.the3Cgrp.zupptrade.core.security.AuthenticatedUser(
+                UUID.randomUUID(), "LIVE", true, "UPSTOX"));   // admin
         service = new RecommendationService(
                 signalRepository, userProfileRepository, tradeRepository,
                 referenceDataRepository, optionChainClient, marketDataClient,
                 engine, volatilityService, blackScholes, jsonUtil, ledger, tradingConfig,
-                java.time.Clock.systemDefaultZone());
+                java.time.Clock.systemDefaultZone(),
+                new com.the3Cgrp.zupptrade.core.security.OwnershipGuard(userContext));
     }
 
     @Test

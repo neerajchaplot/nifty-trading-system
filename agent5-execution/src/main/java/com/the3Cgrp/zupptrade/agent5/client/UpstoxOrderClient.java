@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
@@ -64,14 +65,68 @@ public class UpstoxOrderClient {
         this.retryDelayMs        = retryDelayMs;
     }
 
+    // ── Per-user token (Phase 4) ────────────────────────────────────────────
+
+    /**
+     * A view of this client bound to one Upstox token — created once per execution with the trade
+     * OWNER's token so every call in that flow acts on the right account. When {@code bearerToken}
+     * is null the calls fall through to the system/order token via the RestClient interceptors
+     * (unchanged behaviour). Since the token is baked into the session, no call site can forget it.
+     */
+    public OrderSession session(String bearerToken) {
+        return new OrderSession(bearerToken);
+    }
+
+    /** Sets the per-call Bearer only when a token is supplied; otherwise the interceptor decides. */
+    private static void applyBearer(HttpHeaders headers, String bearerToken) {
+        if (bearerToken != null && !bearerToken.isBlank()) {
+            headers.setBearerAuth(bearerToken);
+        }
+    }
+
+    public final class OrderSession {
+        private final String token;
+        private OrderSession(String token) { this.token = token; }
+
+        // token == null → use the base method (system token via interceptor); otherwise pass the
+        // per-user token. Both are behaviourally identical (applyBearer no-ops on null), but routing
+        // the no-token case through the base method keeps existing single-token callers/tests intact.
+        public MarginCheckResponse checkMargin(MarginCheckRequest r) {
+            return token == null ? UpstoxOrderClient.this.checkMargin(r) : UpstoxOrderClient.this.checkMargin(r, token);
+        }
+        public FundsAndMarginResponse getAvailableFunds() {
+            return token == null ? UpstoxOrderClient.this.getAvailableFunds() : UpstoxOrderClient.this.getAvailableFunds(token);
+        }
+        public PlaceOrderV3Response placeOrder(PlaceOrderV3Request r) {
+            return token == null ? UpstoxOrderClient.this.placeOrder(r) : UpstoxOrderClient.this.placeOrder(r, token);
+        }
+        public OrderStatusResponse getOrderStatus(String orderId) {
+            return token == null ? UpstoxOrderClient.this.getOrderStatus(orderId) : UpstoxOrderClient.this.getOrderStatus(orderId, token);
+        }
+        public TaggedOrdersResponse getOrderDetailsByTag(String tag) {
+            return token == null ? UpstoxOrderClient.this.getOrderDetailsByTag(tag) : UpstoxOrderClient.this.getOrderDetailsByTag(tag, token);
+        }
+        public void modifyToMarket(String orderId, int qty) {
+            if (token == null) UpstoxOrderClient.this.modifyToMarket(orderId, qty);
+            else UpstoxOrderClient.this.modifyToMarket(orderId, qty, token);
+        }
+        public void cancelOrder(String orderId) {
+            if (token == null) UpstoxOrderClient.this.cancelOrder(orderId);
+            else UpstoxOrderClient.this.cancelOrder(orderId, token);
+        }
+    }
+
     // ── Margin check (api.upstox.com) ──────────────────────────────────────
 
-    public MarginCheckResponse checkMargin(MarginCheckRequest request) {
+    public MarginCheckResponse checkMargin(MarginCheckRequest request) { return checkMargin(request, null); }
+
+    public MarginCheckResponse checkMargin(MarginCheckRequest request, String bearerToken) {
         log.info("upstox.margin.check", kv("legCount", request.instruments().size()));
 
         MarginCheckResponse response = withRetry("checkMargin",
                 () -> marketRestClient.post()
                         .uri(MARGIN_CHECK_URI)
+                        .headers(h -> applyBearer(h, bearerToken))
                         .body(request)
                         .retrieve()
                         .body(MarginCheckResponse.class));
@@ -89,12 +144,15 @@ public class UpstoxOrderClient {
 
     // ── Available funds check (api.upstox.com) ─────────────────────────────
 
-    public FundsAndMarginResponse getAvailableFunds() {
+    public FundsAndMarginResponse getAvailableFunds() { return getAvailableFunds(null); }
+
+    public FundsAndMarginResponse getAvailableFunds(String bearerToken) {
         log.info("upstox.funds.check");
 
         FundsAndMarginResponse response = withRetry("getAvailableFunds",
                 () -> marketRestClient.get()
                         .uri(FUNDS_MARGIN_URI + "?segment=SEC")
+                        .headers(h -> applyBearer(h, bearerToken))
                         .retrieve()
                         .body(FundsAndMarginResponse.class));
 
@@ -108,13 +166,15 @@ public class UpstoxOrderClient {
 
     // ── Place single order — V3 (upstoxOrderRestClient) ─────────────────────
 
+    public PlaceOrderV3Response placeOrder(PlaceOrderV3Request request) { return placeOrder(request, null); }
+
     /**
      * Places ONE order (one leg). We never slice, so a successful response carries exactly one
      * order_id. NEVER retried: a 5xx/timeout does not prove the order failed to reach the exchange,
      * so a retry could duplicate it — the caller reconciles by tag instead (an ambiguous failure
      * throws UpstoxOrderException with ambiguous=true).
      */
-    public PlaceOrderV3Response placeOrder(PlaceOrderV3Request request) {
+    public PlaceOrderV3Response placeOrder(PlaceOrderV3Request request, String bearerToken) {
         log.info("upstox.order.place",
                 kv("instrument", request.instrumentToken()), kv("txn", request.transactionType()),
                 kv("qty", request.quantity()), kv("tag", request.tag()));
@@ -122,6 +182,7 @@ public class UpstoxOrderClient {
         PlaceOrderV3Response response = withRetry("placeOrder", 1,
                 () -> orderRestClient.post()
                         .uri(PLACE_ORDER_URI)
+                        .headers(h -> applyBearer(h, bearerToken))
                         .body(request)
                         .retrieve()
                         .body(PlaceOrderV3Response.class));
@@ -136,12 +197,15 @@ public class UpstoxOrderClient {
 
     // ── Order status by order_id — v2 read (upstoxOrderRestClient) ───────────
 
-    public OrderStatusResponse getOrderStatus(String orderId) {
+    public OrderStatusResponse getOrderStatus(String orderId) { return getOrderStatus(orderId, null); }
+
+    public OrderStatusResponse getOrderStatus(String orderId, String bearerToken) {
         log.debug("upstox.order.status", kv("orderId", orderId));
 
         OrderStatusResponse response = withRetry("getOrderStatus",
                 () -> orderReadRestClient.get()
                         .uri(ORDER_STATUS_URI + "?order_id={id}", orderId)
+                        .headers(h -> applyBearer(h, bearerToken))
                         .retrieve()
                         .body(OrderStatusResponse.class));
 
@@ -153,6 +217,8 @@ public class UpstoxOrderClient {
 
     // ── Order lookup by tag — v2 read (upstoxOrderRestClient) ────────────────
 
+    public TaggedOrdersResponse getOrderDetailsByTag(String tag) { return getOrderDetailsByTag(tag, null); }
+
     /**
      * Fetches orders placed under one (unique per-leg) tag via the Order History API — by-tag
      * lookup lives on /v2/order/history, NOT /v2/order/details (which keys on order_id only).
@@ -160,12 +226,13 @@ public class UpstoxOrderClient {
      * discover what actually landed. History may return multiple rows per order (state
      * progression); the reconciler dedups by order_id and re-reads each by order_id.
      */
-    public TaggedOrdersResponse getOrderDetailsByTag(String tag) {
+    public TaggedOrdersResponse getOrderDetailsByTag(String tag, String bearerToken) {
         log.info("upstox.order.by_tag", kv("tag", tag));
 
         TaggedOrdersResponse response = withRetry("getOrderDetailsByTag",
                 () -> orderReadRestClient.get()
                         .uri(ORDER_HISTORY_URI + "?tag={tag}", tag)
+                        .headers(h -> applyBearer(h, bearerToken))
                         .retrieve()
                         .body(TaggedOrdersResponse.class));
 
@@ -177,12 +244,15 @@ public class UpstoxOrderClient {
 
     // ── Modify LIMIT → MARKET — V3 (upstoxOrderRestClient) ──────────────────
 
-    public void modifyToMarket(String orderId, int quantity) {
+    public void modifyToMarket(String orderId, int quantity) { modifyToMarket(orderId, quantity, null); }
+
+    public void modifyToMarket(String orderId, int quantity, String bearerToken) {
         log.info("upstox.order.modify.market", kv("orderId", orderId), kv("quantity", quantity));
 
         withRetry("modifyToMarket",
                 () -> orderRestClient.put()
                         .uri(MODIFY_ORDER_URI)
+                        .headers(h -> applyBearer(h, bearerToken))
                         .body(new ModifyV3Request(orderId, "MARKET", "DAY", 0.0, quantity, 0, 0.0))
                         .retrieve()
                         .body(String.class));
@@ -190,12 +260,15 @@ public class UpstoxOrderClient {
 
     // ── Cancel order — V3 (upstoxOrderRestClient) ───────────────────────────
 
-    public void cancelOrder(String orderId) {
+    public void cancelOrder(String orderId) { cancelOrder(orderId, null); }
+
+    public void cancelOrder(String orderId, String bearerToken) {
         log.info("upstox.order.cancel", kv("orderId", orderId));
 
         withRetry("cancelOrder",
                 () -> orderRestClient.delete()
                         .uri(CANCEL_ORDER_URI + "?order_id={id}", orderId)
+                        .headers(h -> applyBearer(h, bearerToken))
                         .retrieve()
                         .body(String.class));
     }

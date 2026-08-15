@@ -48,6 +48,15 @@
             <artifactId>shared-domain</artifactId>
         </dependency>
 
+        <!-- core-module: used ONLY for the identity/security beans (UserContext, UserIdentityFilter,
+             OwnershipGuard) so agent4 reads can scope to the acting user. The other four
+             auto-configurations (Upstox / alert / expiry / web-exception) are EXCLUDED on
+             Agent4Application so agent4 keeps its own exception handling and never wires Upstox. -->
+        <dependency>
+            <groupId>com.the3Cgrp.zupptrade</groupId>
+            <artifactId>core-module</artifactId>
+        </dependency>
+
         <!-- Structured JSON logging -->
         <dependency>
             <groupId>net.logstash.logback</groupId>

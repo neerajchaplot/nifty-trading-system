@@ -28,6 +28,13 @@ public class TradeMonitorReader {
             "SELECT id, user_profile_id, status, monitor_config, entry_fills, market_context, trade_code, expiry_date " +
             "FROM trades WHERE status IN ('ACTIVE', 'EXIT_FAILED')";
 
+    // UI-facing variant (Phase 5): same rows, scoped to the caller. Null-tolerant scope —
+    // NULL (admin) returns all; otherwise only that owner's trades. Never used by the scheduler.
+    private static final String SELECT_ACTIVE_FOR_USER =
+            "SELECT id, user_profile_id, status, monitor_config, entry_fills, market_context, trade_code, expiry_date " +
+            "FROM trades WHERE status IN ('ACTIVE', 'EXIT_FAILED') " +
+            "AND (CAST(? AS UUID) IS NULL OR user_profile_id = CAST(? AS UUID))";
+
     // Trades still ACTIVE past their expiry date with P&L not yet computed.
     // These are candidates for the morning expiry sweep in ExpiryPnlService.
     private static final String SELECT_EXPIRED_ACTIVE =
@@ -61,6 +68,16 @@ public class TradeMonitorReader {
      */
     public List<TradeMonitorData> findAllActive() {
         return jdbc.query(SELECT_ALL_ACTIVE, ROW_MAPPER);
+    }
+
+    /**
+     * ACTIVE/EXIT_FAILED trades visible to one caller, for the UI live-monitor read.
+     * {@code scope == null} (admin) returns every trade; otherwise only that user's.
+     * Distinct from {@link #findAllActive()}, which the scheduler uses to monitor ALL users.
+     */
+    public List<TradeMonitorData> findActiveForUser(UUID scope) {
+        String s = scope != null ? scope.toString() : null;
+        return jdbc.query(SELECT_ACTIVE_FOR_USER, ROW_MAPPER, s, s);
     }
 
     /**

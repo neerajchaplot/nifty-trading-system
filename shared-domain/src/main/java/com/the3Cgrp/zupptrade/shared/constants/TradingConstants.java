@@ -12,6 +12,8 @@ public final class TradingConstants {
     private TradingConstants() {}
 
     public static final String API_KEY_HEADER = "X-API-Key";
+    /** Acting user's profile id, forwarded on trusted agent→agent calls (behind X-API-Key). */
+    public static final String USER_ID_HEADER = "X-User-Id";
     public static final BigDecimal RISK_FREE_RATE = new BigDecimal("0.065");
 
     // PoP ladder thresholds — used by Agent 2 to compute indicative T1/T2 Nifty levels

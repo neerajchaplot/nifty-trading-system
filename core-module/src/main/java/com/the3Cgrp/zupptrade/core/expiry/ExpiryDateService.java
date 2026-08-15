@@ -8,6 +8,9 @@ import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +30,11 @@ public class ExpiryDateService {
     private static final String CACHE_KEY = "NIFTY_EXPIRY_DATES";
     private static final int CACHE_TTL_HOURS = 168; // 7 days — calendar rarely changes
 
+    // NSE options settle at 15:30 IST on expiry day. Before that, expiry day is still the live
+    // contract; after that, it has settled and the "next" expiry must roll to the following week.
+    private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+    private static final LocalTime EXPIRY_CUTOFF = LocalTime.of(15, 30);
+
     private static final TypeReference<List<LocalDate>> DATE_LIST_TYPE = new TypeReference<>() {};
 
     private final JdbcTemplate jdbc;
@@ -40,14 +48,29 @@ public class ExpiryDateService {
     }
 
     /**
-     * Returns the closest upcoming Nifty expiry date (>= today).
+     * Returns the closest still-open Nifty expiry date, in IST.
+     * <p>
+     * Expiry day counts as "current" only until 15:30 IST (settlement). After the cutoff — e.g. an
+     * evening re-score on expiry Tuesday — today's expiry has already settled, so this rolls forward
+     * to the next weekly expiry. Without this, {@code d >= today} kept returning the just-expired date
+     * for the rest of the calendar day, and Agent 2 rejected every recommendation with DTE=0.
+     * <p>
      * Returns null if no upcoming date is found (empty cache + Upstox unavailable).
      */
     public LocalDate nextExpiry() {
-        List<LocalDate> all = allExpiries();
-        LocalDate today = LocalDate.now();
+        return resolveNextExpiry(allExpiries(), ZonedDateTime.now(IST));
+    }
+
+    /**
+     * Pure expiry-roll logic — package-private so the cutoff/rollover can be unit-tested
+     * deterministically without depending on the wall clock.
+     * Expiry day is included only until 15:30 IST; after that it is skipped.
+     */
+    static LocalDate resolveNextExpiry(List<LocalDate> all, ZonedDateTime nowIst) {
+        LocalDate today = nowIst.toLocalDate();
+        boolean pastCutoff = nowIst.toLocalTime().isAfter(EXPIRY_CUTOFF);
         return all.stream()
-                .filter(d -> !d.isBefore(today))
+                .filter(d -> d.isAfter(today) || (d.isEqual(today) && !pastCutoff))
                 .findFirst()
                 .orElse(null);
     }

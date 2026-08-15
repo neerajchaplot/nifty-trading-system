@@ -99,3 +99,9 @@ agent3:
     # Black-Scholes
     risk-free-rate: 0.065
     nifty-instrument-key: "NSE_INDEX|Nifty 50"
+
+# Multi-user identity (Phase 3): shared HS256 key — MUST match agent-user (JWT_SIGNING_KEY).
+# Absent key -> JwtService boots but validation yields anonymous (no behaviour change).
+zupptrade:
+  jwt:
+    signing-key: ${JWT_SIGNING_KEY:}

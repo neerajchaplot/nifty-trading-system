@@ -5,6 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.the3Cgrp.zupptrade.agent4.domain.dto.response.CriticalAlertDto;
 import com.the3Cgrp.zupptrade.agent4.exception.AlertNotFoundException;
 import com.the3Cgrp.zupptrade.agent4.repository.CriticalAlertRepository;
+import com.the3Cgrp.zupptrade.agent4.repository.CriticalAlertRepository.AlertOwnership;
+import com.the3Cgrp.zupptrade.core.security.OwnershipGuard;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -28,24 +30,33 @@ public class CriticalAlertService {
     private static final Logger log = LoggerFactory.getLogger(CriticalAlertService.class);
 
     private final CriticalAlertRepository repository;
+    private final OwnershipGuard guard;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public CriticalAlertService(CriticalAlertRepository repository) {
+    public CriticalAlertService(CriticalAlertRepository repository, OwnershipGuard guard) {
         this.repository = repository;
+        this.guard = guard;
     }
 
     public List<CriticalAlertDto> getLiveAlerts() {
-        return repository.findLive().stream().map(this::toDto).toList();
+        // Phase 5 scope: caller's profile id, or null for admin (all alerts). 401 if anonymous.
+        return repository.findLive(guard.scopeProfileId()).stream().map(this::toDto).toList();
     }
 
     /**
-     * Acknowledges a LIVE alert. Throws {@link AlertNotFoundException} when nothing was updated
-     * (alert absent or already acknowledged) so the controller returns a 404 Problem Detail.
+     * Acknowledges a LIVE alert owned by the caller. Ordering:
+     *   absent alert → {@link AlertNotFoundException} (404);
+     *   alert owned by another user → 403 (via OwnershipGuard);
+     *   caller's alert already acknowledged → 404.
      */
     public void acknowledge(UUID alertId) {
+        AlertOwnership ownership = repository.findAlertOwner(alertId)
+                .orElseThrow(() -> new AlertNotFoundException(alertId));
+        guard.requireOwner(ownership.ownerProfileId());   // 401 anon / 403 cross-user / pass for owner|admin
+
         int updated = repository.acknowledge(alertId);
         if (updated == 0) {
-            throw new AlertNotFoundException(alertId);
+            throw new AlertNotFoundException(alertId);     // existed but was already acknowledged
         }
         log.info("critical_alert.acknowledged alertId={}", alertId);
     }

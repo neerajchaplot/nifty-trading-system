@@ -37,8 +37,11 @@ public class UpstoxTokenDbLoader implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(UpstoxTokenDbLoader.class);
 
+    // Phase 4: market data uses the ADMIN row (shared, daily-refreshed token), not a random user's.
     private static final String SQL =
             "SELECT encrypted_token FROM api_tokens WHERE service = 'UPSTOX' " +
+            "AND user_profile_id = (SELECT id FROM user_profiles WHERE is_admin = true " +
+            "                       ORDER BY created_at ASC LIMIT 1) " +
             "ORDER BY fetched_at DESC LIMIT 1";
 
     // AES-256-GCM parameters — must match upstox-auth's TokenEncryptionService

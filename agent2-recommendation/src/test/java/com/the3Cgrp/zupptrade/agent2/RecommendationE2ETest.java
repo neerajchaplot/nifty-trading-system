@@ -687,8 +687,12 @@ class RecommendationE2ETest {
     // =========================================================================
 
     private RestClient restClient() {
+        // Phase 5: /recommend and /confirm are ownership-guarded. Authenticate as the seeded profile
+        // (the trade owner) via X-User-Id so the guard passes.
         return RestClient.builder()
                 .baseUrl("http://localhost:" + port)
+                .defaultHeader(com.the3Cgrp.zupptrade.shared.constants.TradingConstants.USER_ID_HEADER,
+                        userProfileId.toString())
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .build();

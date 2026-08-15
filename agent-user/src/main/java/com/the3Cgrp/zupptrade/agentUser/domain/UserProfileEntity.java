@@ -14,8 +14,29 @@ public class UserProfileEntity {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "user_id", unique = true, nullable = false, length = 50)
+    @Column(name = "user_id", nullable = false, length = 50)
     private String userId;
+
+    /** UPSTOX (live) | GOOGLE (simulation). Nullable on legacy rows until backfilled. */
+    @Column(name = "auth_provider", length = 10)
+    private String authProvider;
+
+    @Column(name = "email", length = 255)
+    private String email;
+
+    @Column(name = "display_name", length = 120)
+    private String displayName;
+
+    /** SIMULATION | LIVE — gates real vs simulated order paths. */
+    @Column(name = "account_mode", length = 12)
+    private String accountMode;
+
+    @Column(name = "status", nullable = false, length = 20)
+    private String status = "ACTIVE";
+
+    /** The admin profile's Upstox token serves shared market-data reads for simulation users. */
+    @Column(name = "is_admin", nullable = false)
+    private boolean admin = false;
 
     @Column(nullable = false, precision = 15, scale = 2)
     private BigDecimal capital;
@@ -73,6 +94,18 @@ public class UserProfileEntity {
     public UUID getId()                          { return id; }
     public String getUserId()                    { return userId; }
     public void setUserId(String v)              { this.userId = v; }
+    public String getAuthProvider()              { return authProvider; }
+    public void setAuthProvider(String v)        { this.authProvider = v; }
+    public String getEmail()                     { return email; }
+    public void setEmail(String v)               { this.email = v; }
+    public String getDisplayName()               { return displayName; }
+    public void setDisplayName(String v)         { this.displayName = v; }
+    public String getAccountMode()               { return accountMode; }
+    public void setAccountMode(String v)         { this.accountMode = v; }
+    public String getStatus()                    { return status; }
+    public void setStatus(String v)              { this.status = v; }
+    public boolean isAdmin()                     { return admin; }
+    public void setAdmin(boolean v)              { this.admin = v; }
     public BigDecimal getCapital()               { return capital; }
     public void setCapital(BigDecimal v)         { this.capital = v; }
     public BigDecimal getMinPop()                { return minPop; }
