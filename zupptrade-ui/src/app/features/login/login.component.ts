@@ -13,7 +13,7 @@ import { AuthProvider, AuthService } from '../../core/services/auth.service';
   template: `
     <div class="login-page">
       <div class="login-card">
-        <img src="assets/zupp-logo.jpg" alt="ZuppTrade" class="logo" />
+        <img src="assets/wordmark-transparent.png" alt="ZuppTrade" class="logo" />
         <h1>Welcome to ZuppTrade</h1>
         <p class="sub">Nifty&nbsp;50 options — sign in to continue</p>
 

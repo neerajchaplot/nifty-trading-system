@@ -5,20 +5,22 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { AuthService } from '../../core/services/auth.service';
 import { UserStateService } from '../../core/services/user-state.service';
+import { HelpModalComponent } from '../../shared/components/help-modal/help-modal.component';
 
 @Component({
   selector: 'app-nav',
   standalone: true,
-  imports: [CommonModule, MatButtonModule, MatIconModule],
+  imports: [CommonModule, MatButtonModule, MatIconModule, HelpModalComponent],
   template: `
     <nav class="nav">
-      <img src="assets/zupp-icon.jpg" alt="ZuppTrade" class="nav-logo">
+      <img src="assets/wordmark-transparent.png" alt="ZuppTrade" class="nav-logo">
       <span class="nav-sub">Nifty 50 Options Dashboard</span>
       <div class="nav-right">
         <span class="nav-time">{{ clock }}</span>
         <span class="live-badge">
           <span class="live-dot"></span> LIVE
         </span>
+        <button class="btn-help" (click)="helpOpen = true" title="How ZuppTrade works" aria-label="Help">?</button>
         <button class="btn-icon" (click)="refresh.emit()">↻ Refresh</button>
         <div class="user-box" *ngIf="userName">
           <span class="user-line">
@@ -31,6 +33,7 @@ import { UserStateService } from '../../core/services/user-state.service';
         <button class="btn-icon" *ngIf="!userName" (click)="logout()">⇥ Logout</button>
       </div>
     </nav>
+    <app-help-modal [open]="helpOpen" (closed)="helpOpen = false"></app-help-modal>
   `,
   styles: [`
     .nav {
@@ -105,6 +108,19 @@ import { UserStateService } from '../../core/services/user-state.service';
     }
     .btn-icon:hover { background: #F8FAFC; border-color: #CBD5E1; }
 
+    .btn-help {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      border: 1px solid #E2E8F0;
+      background: #fff;
+      color: #64748B;
+      font-size: 13px; font-weight: 700;
+      cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      font-family: inherit;
+    }
+    .btn-help:hover { background: #EFF6FF; border-color: #93C5FD; color: #2563EB; }
+
     /* Signed-in user: name on top, Logout beneath it */
     .user-box {
       display: flex;
@@ -151,6 +167,7 @@ import { UserStateService } from '../../core/services/user-state.service';
 export class NavComponent implements OnInit, OnDestroy {
   @Output() refresh = new EventEmitter<void>();
 
+  helpOpen = false;
   clock = '';
   private timer?: ReturnType<typeof setInterval>;
 
