@@ -58,6 +58,7 @@ services:
       GROQ_API_KEY: ${GROQ_API_KEY}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       X_API_KEY: ${INTERNAL_API_KEY}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
     networks:
       - zupptrade-net
     healthcheck:
@@ -87,6 +88,7 @@ services:
       UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       X_API_KEY: ${INTERNAL_API_KEY}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
     networks:
       - zupptrade-net
     healthcheck:
@@ -118,6 +120,7 @@ services:
       UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       X_API_KEY: ${INTERNAL_API_KEY}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
       AGENT1_URL: http://agent1:8081
       AGENT2_URL: http://agent2:8082
       AGENT5_URL: http://agent5:8085
@@ -146,6 +149,7 @@ services:
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "3"
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "1"
       X_API_KEY: ${INTERNAL_API_KEY}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
     networks:
       - zupptrade-net
     healthcheck:
@@ -179,6 +183,7 @@ services:
       UPSTOX_API_SECRET: ${UPSTOX_API_SECRET}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       X_API_KEY: ${INTERNAL_API_KEY}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
     networks:
       - zupptrade-net
     healthcheck:
@@ -208,6 +213,19 @@ services:
       UPSTOX_ACCESS_TOKEN: ${UPSTOX_ACCESS_TOKEN}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       X_API_KEY: ${INTERNAL_API_KEY}
+      JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+      # ── Multi-user login (agent-user only) ──────────────────────────────────
+      # Google OIDC (SIMULATION users)
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      # Upstox LOGIN app (the cloud app registered with the :443 callback) — SEPARATE from
+      # UPSTOX_API_KEY, which is the market-data app used by upstox-auth.
+      UPSTOX_LOGIN_API_KEY: ${UPSTOX_LOGIN_API_KEY}
+      UPSTOX_LOGIN_API_SECRET: ${UPSTOX_LOGIN_API_SECRET}
+      UPSTOX_AUTH_REDIRECT: ${UPSTOX_AUTH_REDIRECT}
+      # Where agent-user hands the browser back after login (the SPA callback route)
+      AUTH_UI_REDIRECT: ${AUTH_UI_REDIRECT}
     networks:
       - zupptrade-net
     healthcheck:

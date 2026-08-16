@@ -19,6 +19,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -231,18 +232,33 @@ public class UpstoxAutoConfiguration {
      *   is still null (e.g., test-only context without JDBC auto-config), fix it by adding
      *   spring-boot-starter-jdbc to that module's test scope — not by changing this bean.
      */
+    /**
+     * The AES-256-GCM token encryptor, shared by every reader/writer of {@code api_tokens}:
+     * ApiTokenDbLoader (market-data token), agent-user's ApiTokenWriter (stores a user's order
+     * token on login), and agent5's BrokerTokenResolver (decrypts it to place orders). Registered
+     * as a bean so those {@code ObjectProvider<TokenEncryptionService>} consumers resolve it —
+     * previously it was only new-ed privately inside ApiTokenDbLoader, so everyone else got null
+     * ("Token encryption unavailable"). Only active when the key is configured.
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(name = "upstox.api.token-encryption-key")
+    public TokenEncryptionService tokenEncryptionService(UpstoxProperties props) {
+        return new TokenEncryptionService(props.getTokenEncryptionKey());
+    }
+
     @Bean
     @ConditionalOnProperty(name = "upstox.api.token-encryption-key")
     @ConditionalOnClass(JdbcTemplate.class)
     public ApiTokenDbLoader apiTokenDbLoader(ObjectProvider<JdbcTemplate> jdbcProvider,
-                                             UpstoxProperties props,
-                                             UpstoxTokenHolder tokenHolder) {
+                                             UpstoxTokenHolder tokenHolder,
+                                             TokenEncryptionService tokenEncryptionService) {
         JdbcTemplate jdbc = jdbcProvider.getIfAvailable();
         if (jdbc == null) {
             log.warn("upstox.db.token.loader.skipped — JdbcTemplate bean not available (no datasource configured)");
             return null;
         }
-        return new ApiTokenDbLoader(jdbc, new TokenEncryptionService(props.getTokenEncryptionKey()), tokenHolder);
+        return new ApiTokenDbLoader(jdbc, tokenEncryptionService, tokenHolder);
     }
 
     @Bean

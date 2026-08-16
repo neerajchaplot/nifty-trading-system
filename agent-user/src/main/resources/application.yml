@@ -37,6 +37,10 @@ server:
 upstox:
   api:
     base-url: https://api.upstox.com
+    # Login app (agent-user only) — the Upstox app whose redirect is the :8086 login callback.
+    # KEEP THIS SEPARATE from UPSTOX_API_KEY, which is the market-data app (:8080) used by upstox-auth.
+    api-key: ${UPSTOX_LOGIN_API_KEY:}
+    api-secret: ${UPSTOX_LOGIN_API_SECRET:}
     access-token: ${UPSTOX_ACCESS_TOKEN:}
     token-encryption-key: ${TOKEN_ENCRYPTION_KEY:}
 
