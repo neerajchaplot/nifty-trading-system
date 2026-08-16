@@ -15,9 +15,11 @@ import static org.mockito.Mockito.when;
 
 class UserIdentityFilterTest {
 
+    private static final String KEY = "test-internal-key-0123456789";
+
     private final JwtService jwt = new JwtService(props());
     private final UserContext ctx = new UserContext();
-    private final UserIdentityFilter filter = new UserIdentityFilter(jwt, ctx);
+    private final UserIdentityFilter filter = new UserIdentityFilter(jwt, ctx, KEY);
 
     private static JwtProperties props() {
         JwtProperties p = new JwtProperties();
@@ -30,55 +32,70 @@ class UserIdentityFilterTest {
         return (req, res) -> seen.set(ctx.current().orElse(null));
     }
 
+    private AuthenticatedUser run(HttpServletRequest req) throws Exception {
+        AtomicReference<AuthenticatedUser> seen = new AtomicReference<>();
+        filter.doFilterInternal(req, mock(HttpServletResponse.class), capturing(seen));
+        return seen.get();
+    }
+
     @Test
     void bearerJwt_populatesContext_thenClearsAfter() throws Exception {
         UUID pid = UUID.randomUUID();
         String token = jwt.issue(new AuthenticatedUser(pid, "LIVE", true, "UPSTOX")).accessToken();
         HttpServletRequest req = mock(HttpServletRequest.class);
         when(req.getHeader("Authorization")).thenReturn("Bearer " + token);
-        AtomicReference<AuthenticatedUser> seen = new AtomicReference<>();
 
-        filter.doFilterInternal(req, mock(HttpServletResponse.class), capturing(seen));
+        AuthenticatedUser seen = run(req);
 
-        assertThat(seen.get()).isNotNull();
-        assertThat(seen.get().profileId()).isEqualTo(pid);
-        assertThat(seen.get().admin()).isTrue();
+        assertThat(seen).isNotNull();
+        assertThat(seen.profileId()).isEqualTo(pid);
+        assertThat(seen.admin()).isTrue();
         assertThat(ctx.isAuthenticated()).isFalse(); // cleared in finally
     }
 
     @Test
-    void xUserIdHeader_populatesContext_whenNoBearer() throws Exception {
+    void xUserId_withValidApiKey_populatesContext() throws Exception {
         UUID pid = UUID.randomUUID();
         HttpServletRequest req = mock(HttpServletRequest.class);
-        when(req.getHeader("Authorization")).thenReturn(null);
         when(req.getHeader(TradingConstants.USER_ID_HEADER)).thenReturn(pid.toString());
-        AtomicReference<AuthenticatedUser> seen = new AtomicReference<>();
+        when(req.getHeader(TradingConstants.API_KEY_HEADER)).thenReturn(KEY);
 
-        filter.doFilterInternal(req, mock(HttpServletResponse.class), capturing(seen));
+        AuthenticatedUser seen = run(req);
 
-        assertThat(seen.get()).isNotNull();
-        assertThat(seen.get().profileId()).isEqualTo(pid);
-        assertThat(seen.get().accountMode()).isNull(); // forwarded id carries only the id
+        assertThat(seen).isNotNull();
+        assertThat(seen.profileId()).isEqualTo(pid);
+        assertThat(seen.accountMode()).isNull(); // forwarded id carries only the id
+    }
+
+    /** The vulnerability: X-User-Id with NO key must be ignored (no impersonation). */
+    @Test
+    void xUserId_withoutApiKey_isAnonymous() throws Exception {
+        HttpServletRequest req = mock(HttpServletRequest.class);
+        when(req.getHeader(TradingConstants.USER_ID_HEADER)).thenReturn(UUID.randomUUID().toString());
+        // no X-API-Key header
+
+        assertThat(run(req)).isNull();
+    }
+
+    @Test
+    void xUserId_withWrongApiKey_isAnonymous() throws Exception {
+        HttpServletRequest req = mock(HttpServletRequest.class);
+        when(req.getHeader(TradingConstants.USER_ID_HEADER)).thenReturn(UUID.randomUUID().toString());
+        when(req.getHeader(TradingConstants.API_KEY_HEADER)).thenReturn("wrong-key");
+
+        assertThat(run(req)).isNull();
     }
 
     @Test
     void invalidBearer_isAnonymous() throws Exception {
         HttpServletRequest req = mock(HttpServletRequest.class);
         when(req.getHeader("Authorization")).thenReturn("Bearer not-a-jwt");
-        AtomicReference<AuthenticatedUser> seen = new AtomicReference<>();
 
-        filter.doFilterInternal(req, mock(HttpServletResponse.class), capturing(seen));
-
-        assertThat(seen.get()).isNull();
+        assertThat(run(req)).isNull();
     }
 
     @Test
     void noHeaders_isAnonymous() throws Exception {
-        HttpServletRequest req = mock(HttpServletRequest.class);
-        AtomicReference<AuthenticatedUser> seen = new AtomicReference<>();
-
-        filter.doFilterInternal(req, mock(HttpServletResponse.class), capturing(seen));
-
-        assertThat(seen.get()).isNull();
+        assertThat(run(mock(HttpServletRequest.class))).isNull();
     }
 }

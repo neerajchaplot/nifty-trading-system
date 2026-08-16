@@ -145,6 +145,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE: "3"
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "1"
+      X_API_KEY: ${INTERNAL_API_KEY}
     networks:
       - zupptrade-net
     healthcheck:

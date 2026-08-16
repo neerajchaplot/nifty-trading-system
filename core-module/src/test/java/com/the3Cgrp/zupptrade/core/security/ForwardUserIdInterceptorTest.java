@@ -16,8 +16,10 @@ import static org.mockito.Mockito.when;
 
 class ForwardUserIdInterceptorTest {
 
+    private static final String KEY = "test-internal-key-0123456789";
+
     private final UserContext ctx = new UserContext();
-    private final ForwardUserIdInterceptor interceptor = new ForwardUserIdInterceptor(ctx);
+    private final ForwardUserIdInterceptor interceptor = new ForwardUserIdInterceptor(ctx, KEY);
 
     private HttpRequest requestWithHeaders(HttpHeaders headers) {
         HttpRequest req = mock(HttpRequest.class);
@@ -32,22 +34,25 @@ class ForwardUserIdInterceptorTest {
     }
 
     @Test
-    void addsHeaderWhenUserPresent() throws Exception {
+    void sendsBothApiKeyAndUserId_whenUserPresent() throws Exception {
         UUID pid = UUID.randomUUID();
         ctx.set(new AuthenticatedUser(pid, "LIVE", true, "UPSTOX"));
         HttpHeaders headers = new HttpHeaders();
 
         interceptor.intercept(requestWithHeaders(headers), new byte[0], stubExecution());
 
+        assertThat(headers.getFirst(TradingConstants.API_KEY_HEADER)).isEqualTo(KEY);
         assertThat(headers.getFirst(TradingConstants.USER_ID_HEADER)).isEqualTo(pid.toString());
     }
 
+    /** Anonymous internal call (e.g. a scheduled thread with no bound user): key yes, user no. */
     @Test
-    void noHeaderWhenAnonymous() throws Exception {
+    void sendsApiKeyButNoUserId_whenAnonymous() throws Exception {
         HttpHeaders headers = new HttpHeaders();
 
         interceptor.intercept(requestWithHeaders(headers), new byte[0], stubExecution());
 
+        assertThat(headers.getFirst(TradingConstants.API_KEY_HEADER)).isEqualTo(KEY);
         assertThat(headers.getFirst(TradingConstants.USER_ID_HEADER)).isNull();
     }
 }

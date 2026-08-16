@@ -2,6 +2,7 @@ package com.the3Cgrp.zupptrade.core.security;
 
 import com.the3Cgrp.zupptrade.core.upstox.crypto.TokenEncryptionService;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingClass;
@@ -46,15 +47,17 @@ public class IdentityAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnMissingClass("org.springframework.security.web.SecurityFilterChain")
-    public UserIdentityFilter userIdentityFilter(JwtService jwt, UserContext userContext) {
-        return new UserIdentityFilter(jwt, userContext);
+    public UserIdentityFilter userIdentityFilter(JwtService jwt, UserContext userContext,
+                                                 @Value("${X_API_KEY:}") String internalApiKey) {
+        return new UserIdentityFilter(jwt, userContext, internalApiKey);
     }
 
     /** Attach to internal RestClient builders to forward the acting user on agent→agent calls. */
     @Bean
     @ConditionalOnMissingBean
-    public ForwardUserIdInterceptor forwardUserIdInterceptor(UserContext userContext) {
-        return new ForwardUserIdInterceptor(userContext);
+    public ForwardUserIdInterceptor forwardUserIdInterceptor(UserContext userContext,
+                                                             @Value("${X_API_KEY:}") String internalApiKey) {
+        return new ForwardUserIdInterceptor(userContext, internalApiKey);
     }
 
     /** Resolves a user's decrypted Upstox token (order path). Needs a JdbcTemplate (all agents have one). */

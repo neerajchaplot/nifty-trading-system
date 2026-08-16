@@ -4,6 +4,7 @@ import com.the3Cgrp.zupptrade.agent5.dto.*;
 import com.the3Cgrp.zupptrade.agent5.service.MarginCheckService;
 import com.the3Cgrp.zupptrade.agent5.service.TradeExecutionService;
 import com.the3Cgrp.zupptrade.agent5.service.UpstoxConnectionCheckService;
+import com.the3Cgrp.zupptrade.core.security.OwnershipGuard;
 import com.the3Cgrp.zupptrade.shared.dto.ExitTradeRequest;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -48,21 +49,25 @@ public class ExecutionController {
     private final UpstoxConnectionCheckService connectionCheckService;
     private final MarginCheckService           marginCheckService;
     private final JdbcTemplate                 jdbc;
+    private final OwnershipGuard               ownershipGuard;
 
     public ExecutionController(TradeExecutionService executionService,
                                UpstoxConnectionCheckService connectionCheckService,
                                MarginCheckService marginCheckService,
-                               JdbcTemplate jdbc) {
+                               JdbcTemplate jdbc,
+                               OwnershipGuard ownershipGuard) {
         this.executionService        = executionService;
         this.connectionCheckService  = connectionCheckService;
         this.marginCheckService      = marginCheckService;
         this.jdbc                    = jdbc;
+        this.ownershipGuard          = ownershipGuard;
     }
 
     @PostMapping("/execute")
     public ResponseEntity<ExecuteTradeResponse> execute(
             @Valid @RequestBody ExecuteTradeRequest request,
             @RequestHeader(value = "X-Sim-Fill-Mode", required = false) SimFillMode simMode) {
+        guardOwner(request.tradeId());
         log.info("api.execute", kv("tradeId", request.tradeId()), kv("legs", request.legs().size()),
                 kv("simMode", simMode));
         // simMode is honored ONLY when simulate-fills is enabled (sandbox/simulation); the real
@@ -78,6 +83,7 @@ public class ExecutionController {
         if (!request.tradeId().equals(tradeId)) {
             return ResponseEntity.badRequest().build();
         }
+        guardOwner(tradeId);
         log.info("api.exit", kv("tradeId", tradeId), kv("reason", request.reason()), kv("simMode", simMode));
         SimFillMode mode = (simMode == null) ? SimFillMode.FILL : simMode;
         ExitTradeResponse response = executionService.exit(request, mode);
@@ -94,6 +100,7 @@ public class ExecutionController {
     @PostMapping("/margin/check")
     public ResponseEntity<MarginCheckService.MarginCheckResultDto> marginCheck(
             @Valid @RequestBody MarginCheckService.MarginCheckRequestBody request) {
+        guardOwner(request.tradeId());
         log.info("api.margin.check",
                 kv("tradeId", request.tradeId()), kv("overrideLots", request.overrideLots()));
         try {
@@ -143,6 +150,20 @@ public class ExecutionController {
     public ResponseEntity<UpstoxStatusResponse> upstoxStatus() {
         log.info("api.upstox.status");
         return ResponseEntity.ok(connectionCheckService.check());
+    }
+
+    /**
+     * Authorization: a caller may only act on a trade it owns. Identity is either a validated user
+     * JWT (UI/mobile) or the trade owner forwarded behind a valid X-API-Key (agent3 scheduler).
+     * Anonymous → 401; another user's trade → 403. Unknown trade → skip (the service reports it).
+     */
+    private void guardOwner(UUID tradeId) {
+        java.util.List<UUID> owner = jdbc.query(
+                "SELECT user_profile_id FROM trades WHERE id = ?",
+                (rs, i) -> rs.getObject("user_profile_id", UUID.class), tradeId);
+        if (!owner.isEmpty()) {
+            ownershipGuard.requireOwner(owner.get(0));
+        }
     }
 
     private boolean pingDb() {
