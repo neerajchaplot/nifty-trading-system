@@ -50,6 +50,13 @@
   box-shadow: 0 0 0 1px #bbf7d0 inset;
 }
 
+/* Failed = entry handoff could not place the order (kept visible, not hidden) */
+.fm-failed {
+  background: #fef2f2;
+  border-color: #fecaca;
+  box-shadow: 0 0 0 1px #fee2e2 inset;
+}
+
 .fm-card-head {
   display: flex;
   justify-content: space-between;
@@ -68,6 +75,7 @@
     border: 1px solid #e2e8f0;
   }
   .fm-status-active { background: #f0fdf4; color: #16a34a; border-color: #bbf7d0; }
+  .fm-status-failed { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
 }
 
 .fm-levels {
@@ -82,7 +90,7 @@
   .neg { color: #dc2626; }
 }
 
-.fm-activation, .fm-live {
+.fm-activation, .fm-live, .fm-failed-msg {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -94,8 +102,10 @@
     background: #cbd5e1; flex: none;
   }
   .dot-live { background: #16a34a; box-shadow: 0 0 0 3px #dcfce7; }
+  .dot-failed { background: #dc2626; box-shadow: 0 0 0 3px #fee2e2; }
 }
 .fm-live { color: #15803d; }
+.fm-failed-msg { color: #b91c1c; font-weight: 600; }
 
 .fm-foot {
   display: flex;

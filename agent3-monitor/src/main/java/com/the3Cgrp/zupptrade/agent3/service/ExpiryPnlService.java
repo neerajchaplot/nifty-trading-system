@@ -10,6 +10,7 @@ import com.the3Cgrp.zupptrade.ledger.TradeLedgerService;
 import com.the3Cgrp.zupptrade.ledger.payload.TradeExpiredPayload;
 import com.the3Cgrp.zupptrade.shared.dto.MonitorConfigDto;
 import com.the3Cgrp.zupptrade.shared.dto.TradeLegDto;
+import com.the3Cgrp.zupptrade.shared.enums.TradeStatus;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -137,11 +138,13 @@ public class ExpiryPnlService {
         // 3. Compute settled P&L from intrinsic values at expiry
         BigDecimal pnl = computeExpiryPnl(config, niftyClose.get());
 
-        // 4. Persist result and write ledger event
+        // 4. Persist result and write ledger event. Settle both ACTIVE and EXIT_FAILED at expiry — a failed
+        // exit can never complete on expired instruments. Record the distinct reason for audit.
+        String closeReason = trade.status() == TradeStatus.EXIT_FAILED ? "EXPIRED_EXIT_FAILED" : "EXPIRED";
         jdbc.update(
                 "UPDATE trades SET status = 'CLOSED', closed_at = ?::TIMESTAMPTZ, " +
-                "close_reason = 'EXPIRED', actual_pnl = ? WHERE id = ? AND status = 'ACTIVE'",
-                expiryDate.toString() + " 15:30:00+05:30", pnl, trade.tradeId());
+                "close_reason = ?, actual_pnl = ? WHERE id = ? AND status IN ('ACTIVE', 'EXIT_FAILED')",
+                expiryDate.toString() + " 15:30:00+05:30", closeReason, pnl, trade.tradeId());
 
         ledger.record(trade.tradeId(), LedgerEventType.TRADE_EXPIRED,
                 new TradeExpiredPayload(niftyClose.get(), pnl, COMPUTED_BY),
@@ -225,7 +228,7 @@ public class ExpiryPnlService {
     private void markClosedNoPnl(TradeMonitorData trade, String reason) {
         jdbc.update(
                 "UPDATE trades SET status = 'CLOSED', closed_at = NOW(), close_reason = ? " +
-                "WHERE id = ? AND status = 'ACTIVE'",
+                "WHERE id = ? AND status IN ('ACTIVE', 'EXIT_FAILED')",
                 reason, trade.tradeId());
         ledger.record(trade.tradeId(), LedgerEventType.TRADE_EXPIRED,
                 new TradeExpiredPayload(null, null, COMPUTED_BY), COMPUTED_BY);

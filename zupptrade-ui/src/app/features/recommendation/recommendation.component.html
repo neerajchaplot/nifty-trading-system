@@ -200,22 +200,30 @@
             <input class="override-input" type="number" [(ngModel)]="overrideLots" min="1" [placeholder]="tradeCard.lots">
             <span class="override-hint">Algorithm: {{ tradeCard.lots }}</span>
           </div>
-          <div class="override-row">
-            <label class="override-label">T1 · Watch</label>
-            <input class="override-input t1-input" type="number" [(ngModel)]="overrideT1" [placeholder]="tradeCard.thresholds.t1WatchNiftyLevel">
-          </div>
-          <div class="override-row">
-            <label class="override-label">T2 · Readjust</label>
-            <input class="override-input t2-input" type="number" [(ngModel)]="overrideT2" [placeholder]="tradeCard.thresholds.t2ReadjustNiftyLevel">
-          </div>
-          <div class="override-row">
-            <label class="override-label">T3 · Exit</label>
-            <input class="override-input t3-input" type="number" [(ngModel)]="overrideT3" [placeholder]="tradeCard.thresholds.t3ExitNiftyLevel">
-            <span class="override-hint t3-hint">Min: {{ tradeCard.shortLeg.strike }} (short strike)</span>
-          </div>
+          <!-- Credit Watch/Readjust/Exit ladder — credit spreads only. A debit spread is monitored via
+               breakeven / profit-book / loss-cut, which are auto-managed, so this editor is hidden. -->
+          <ng-container *ngIf="!isDebit">
+            <div class="override-row">
+              <label class="override-label">T1 · Watch</label>
+              <input class="override-input t1-input" type="number" [(ngModel)]="overrideT1" [placeholder]="tradeCard.thresholds.t1WatchNiftyLevel">
+            </div>
+            <div class="override-row">
+              <label class="override-label">T2 · Readjust</label>
+              <input class="override-input t2-input" type="number" [(ngModel)]="overrideT2" [placeholder]="tradeCard.thresholds.t2ReadjustNiftyLevel">
+            </div>
+            <div class="override-row">
+              <label class="override-label">T3 · Exit</label>
+              <input class="override-input t3-input" type="number" [(ngModel)]="overrideT3" [placeholder]="tradeCard.thresholds.t3ExitNiftyLevel">
+              <span class="override-hint t3-hint">Min: {{ tradeCard.shortLeg.strike }} (short strike)</span>
+            </div>
 
-          <div class="override-error" *ngIf="overrideThresholdError">
-            ⚠ {{ overrideThresholdError }}
+            <div class="override-error" *ngIf="overrideThresholdError">
+              ⚠ {{ overrideThresholdError }}
+            </div>
+          </ng-container>
+
+          <div class="override-note" *ngIf="isDebit" style="font-size:12px; color:#64748B; padding:4px 2px;">
+            Debit spread — exit levels (breakeven / profit-book / loss-cut) are managed automatically. Adjust lots and check margin, then confirm.
           </div>
 
           <!-- Margin check -->
@@ -241,7 +249,7 @@
             </div>
           </div>
 
-          <div class="pop-block-banner" *ngIf="isPopBlocked">
+          <div class="pop-block-banner" *ngIf="isPopBlocked && !isDebit">
             ✗ PoP is below 50% — this trade cannot be confirmed.
           </div>
         </div>

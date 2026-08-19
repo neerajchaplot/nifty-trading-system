@@ -55,7 +55,13 @@ export class FuturesMonitorComponent implements OnInit, OnDestroy {
     return status === 'CONFIRMED' || status === 'FILLED';
   }
 
+  /** Entry handoff failed — kept visible on the monitor so it never silently disappears. */
+  isFailed(plan: FuturesPlanCard): boolean {
+    return plan.status === 'EXECUTION_FAILED';
+  }
+
   cardClass(plan: FuturesPlanCard): string {
+    if (this.isFailed(plan)) return 'fm-card fm-failed';
     return this.isActive(plan.status) ? 'fm-card fm-active' : 'fm-card fm-dormant';
   }
 
@@ -65,6 +71,7 @@ export class FuturesMonitorComponent implements OnInit, OnDestroy {
       case 'BREAK_DETECTED': return 'Break detected';
       case 'CONFIRMED': return 'Active';
       case 'FILLED': return 'Active';
+      case 'EXECUTION_FAILED': return 'Failed';
       default: return plan.status;
     }
   }

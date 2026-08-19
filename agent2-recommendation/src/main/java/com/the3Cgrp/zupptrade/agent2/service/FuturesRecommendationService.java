@@ -225,13 +225,18 @@ public class FuturesRecommendationService {
 
     // ------------------------------------------------------------------ list (screen 2)
 
-    /** Accepted futures plans for today — dormant (ARMED/BREAK_DETECTED) and active (CONFIRMED/FILLED). */
+    /**
+     * Accepted futures plans for today — dormant (ARMED/BREAK_DETECTED), active (CONFIRMED/FILLED),
+     * and failed (EXECUTION_FAILED). Failed plans are kept in the list so a plan whose entry handoff
+     * failed stays visible on the monitor (rendered as "Failed") instead of silently disappearing.
+     */
     @Transactional(readOnly = true)
     public List<FuturesPlanCardDto> listActive() {
         LocalDate today = LocalDate.now(clock);
         List<FuturePlanStatus> statuses = List.of(
                 FuturePlanStatus.ARMED, FuturePlanStatus.BREAK_DETECTED,
-                FuturePlanStatus.CONFIRMED, FuturePlanStatus.FILLED);
+                FuturePlanStatus.CONFIRMED, FuturePlanStatus.FILLED,
+                FuturePlanStatus.EXECUTION_FAILED);
         return ledgerRepository.findByTradeDateAndStatusInOrderByCreatedAtDesc(today, statuses).stream()
                 .map(e -> toCard(e, gatePassed(e), readArms(e)))
                 .toList();

@@ -10,6 +10,8 @@ import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxIntradayCandleClient.Intr
 import com.the3Cgrp.zupptrade.shared.enums.FuturePlanStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 
@@ -21,6 +23,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -67,15 +70,19 @@ class FuturesEntrySchedulerTest {
     }
 
     @Test
-    void twoClosesBeyond_handsToAgent5_whenReached_noFailure() {
+    void twoClosesBeyond_confirmsThenHandsToAgent5_whenReached_noFailure() {
         when(reader.findWatchable()).thenReturn(List.of(armedLong()));
         when(intradayClient.fetchNiftyIntradayCandles(5))
                 .thenReturn(List.of(candle(20, "24285"), candle(25, "24290")));
-        when(agent5Client.placeGtt(planId)).thenReturn(true); // Agent 5 reached → it owns FILLED
+        when(agent5Client.placeGtt(planId))
+                .thenReturn(Agent5FuturesClient.HandoffResult.ok()); // Agent 5 owns FILLED
 
         scheduler.runCycleOnce();
 
-        verify(agent5Client).placeGtt(planId);
+        // CONFIRMED must be persisted BEFORE the handoff — Agent 5's GTT precondition requires it.
+        InOrder order = inOrder(reader, agent5Client);
+        order.verify(reader).markConfirmed(planId);
+        order.verify(agent5Client).placeGtt(planId);
         verify(reader, never()).markExecutionFailed(any());
         verify(alertService, never()).critical(any(), any(), any());
     }
@@ -85,12 +92,32 @@ class FuturesEntrySchedulerTest {
         when(reader.findWatchable()).thenReturn(List.of(armedLong()));
         when(intradayClient.fetchNiftyIntradayCandles(5))
                 .thenReturn(List.of(candle(20, "24285"), candle(25, "24290")));
-        when(agent5Client.placeGtt(planId)).thenReturn(false); // Agent 5 unreachable
+        when(agent5Client.placeGtt(planId))
+                .thenReturn(Agent5FuturesClient.HandoffResult.failed("Agent 5 was unreachable (Connection refused)"));
+
+        scheduler.runCycleOnce();
+
+        verify(reader).markConfirmed(planId); // still transitioned before the (failed) handoff
+        verify(reader).markExecutionFailed(planId);
+        ArgumentCaptor<String> msg = ArgumentCaptor.forClass(String.class);
+        verify(alertService).critical(eq(planId), eq("futures_gtt_handoff_failed"), msg.capture());
+        assertThat(msg.getValue()).contains("Agent 5 was unreachable");
+    }
+
+    @Test
+    void handoffRejected_marksExecutionFailed_alertCarriesRealReason() {
+        when(reader.findWatchable()).thenReturn(List.of(armedLong()));
+        when(intradayClient.fetchNiftyIntradayCandles(5))
+                .thenReturn(List.of(candle(20, "24285"), candle(25, "24290")));
+        when(agent5Client.placeGtt(planId))
+                .thenReturn(Agent5FuturesClient.HandoffResult.failed("Agent 5 rejected the handoff (HTTP 500)"));
 
         scheduler.runCycleOnce();
 
         verify(reader).markExecutionFailed(planId);
-        verify(alertService).critical(eq(planId), eq("futures_gtt_handoff_failed"), anyString());
+        ArgumentCaptor<String> msg = ArgumentCaptor.forClass(String.class);
+        verify(alertService).critical(eq(planId), eq("futures_gtt_handoff_failed"), msg.capture());
+        assertThat(msg.getValue()).contains("Agent 5 rejected the handoff (HTTP 500)");
     }
 
     @Test

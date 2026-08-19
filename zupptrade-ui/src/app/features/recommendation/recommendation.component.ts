@@ -15,6 +15,7 @@ import {
   TradeCard,
 } from '../../core/models/trade.model';
 import { OptionType } from '../../core/models/enums';
+import { canConfirmOverride } from './override-confirm';
 import { Agent1Service } from '../../core/services/agent1.service';
 import { Agent2Service } from '../../core/services/agent2.service';
 import { Agent5Service } from '../../core/services/agent5.service';
@@ -142,7 +143,13 @@ export class RecommendationComponent implements OnInit, OnChanges, OnDestroy {
     return isPeShort ? !(t1 > t2 && t2 > t3) : !(t1 < t2 && t2 < t3);
   }
 
+  /** True for bull call / bear put — the credit PoP floor and Watch/Readjust/Exit ladder don't apply. */
+  get isDebit(): boolean {
+    return this.tradeCard?.spreadDirection === 'DEBIT';
+  }
+
   get overrideThresholdError(): string | null {
+    if (this.isDebit) return null;   // credit-only ladder validation — never blocks a debit confirm
     if (this.t3BreachesShortStrike) {
       const shortStrike = this.tradeCard?.shortLeg.strike;
       const isPeShort   = this.tradeCard?.shortLeg.optionType === 'PE';
@@ -159,12 +166,16 @@ export class RecommendationComponent implements OnInit, OnChanges, OnDestroy {
     return null;
   }
 
-  // Whether the current override configuration can proceed to confirm
+  // Whether the current override configuration can proceed to confirm.
+  // Debit spreads skip the credit-only PoP floor + Watch/Readjust/Exit ladder checks (see canConfirmOverride).
   get canConfirmWithOverride(): boolean {
-    if (this.isPopBlocked) return false;
-    if (this.t3BreachesShortStrike || this.thresholdOrderInvalid) return false;
-    if (!this.marginResult) return false;
-    return this.marginResult.sufficient;
+    return canConfirmOverride({
+      isDebit: this.isDebit,
+      popBlocked: this.isPopBlocked,
+      thresholdInvalid: this.t3BreachesShortStrike || this.thresholdOrderInvalid,
+      marginChecked: !!this.marginResult,
+      marginSufficient: this.marginResult?.sufficient ?? false,
+    });
   }
 
   constructor(

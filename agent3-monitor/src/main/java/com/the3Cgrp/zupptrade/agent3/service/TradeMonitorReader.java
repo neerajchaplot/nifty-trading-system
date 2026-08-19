@@ -35,11 +35,12 @@ public class TradeMonitorReader {
             "FROM trades WHERE status IN ('ACTIVE', 'EXIT_FAILED') " +
             "AND (CAST(? AS UUID) IS NULL OR user_profile_id = CAST(? AS UUID))";
 
-    // Trades still ACTIVE past their expiry date with P&L not yet computed.
-    // These are candidates for the morning expiry sweep in ExpiryPnlService.
+    // Trades past their expiry date with P&L not yet computed — candidates for the expiry sweep.
+    // Includes EXIT_FAILED: an exit that failed can never complete on expired instruments (the exchange
+    // has already settled them), so these must be settled at intrinsic value, not retried forever.
     private static final String SELECT_EXPIRED_ACTIVE =
             "SELECT id, user_profile_id, status, monitor_config, entry_fills, market_context, trade_code, expiry_date " +
-            "FROM trades WHERE status = 'ACTIVE' AND expiry_date < CURRENT_DATE AND actual_pnl IS NULL";
+            "FROM trades WHERE status IN ('ACTIVE', 'EXIT_FAILED') AND expiry_date < CURRENT_DATE AND actual_pnl IS NULL";
 
     private static final RowMapper<TradeMonitorData> ROW_MAPPER = (rs, rowNum) -> mapRow(rs);
 

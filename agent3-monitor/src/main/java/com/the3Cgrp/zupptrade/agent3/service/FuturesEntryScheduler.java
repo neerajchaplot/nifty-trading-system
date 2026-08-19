@@ -113,19 +113,23 @@ public class FuturesEntryScheduler {
 
         switch (d.state()) {
             case CONFIRMED -> {
-                boolean reached = agent5Client.placeGtt(row.id());
-                if (reached) {
+                // Persist ARMED/BREAK_DETECTED → CONFIRMED BEFORE the handoff: Agent 5's GTT placement
+                // hard-requires the plan to already be CONFIRMED. Without this the handoff is rejected
+                // and the plan dies EXECUTION_FAILED. (schema V116: activated_at = submitted to Agent 5)
+                reader.markConfirmed(row.id());
+                Agent5FuturesClient.HandoffResult handoff = agent5Client.placeGtt(row.id());
+                if (handoff.reached()) {
                     // Agent 5 owns the outcome (FILLED, or its own EXECUTION_FAILED + alert).
                     log.info("agent3.futures.handed_off planCode={} arm={} entry={} reason={}",
                             row.planCode(), arm, row.entryPrice(), d.reason());
                 } else {
-                    // Handoff unreachable → fail fast, no retry; the user acts on the critical alert.
+                    // Reached-but-rejected OR unreachable → fail fast, no retry; user acts on the alert.
                     reader.markExecutionFailed(row.id());
                     alertService.critical(row.id(), "futures_gtt_handoff_failed",
-                            "Futures entry confirmed but Agent 5 was unreachable for " + row.planCode()
-                                    + " — no order placed. Manual check required (no retry).");
-                    log.error("agent3.futures.handoff_failed planCode={} — marked EXECUTION_FAILED",
-                            row.planCode());
+                            "Futures entry confirmed for " + row.planCode() + " but the Agent 5 handoff failed — "
+                                    + handoff.failureReason() + ". No order placed, no retry — manual check required.");
+                    log.error("agent3.futures.handoff_failed planCode={} reason={} — marked EXECUTION_FAILED",
+                            row.planCode(), handoff.failureReason());
                 }
             }
             case BREAK_DETECTED, INVALIDATED, EXPIRED -> {

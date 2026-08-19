@@ -89,6 +89,9 @@ services:
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       X_API_KEY: ${INTERNAL_API_KEY}
       JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+      # FUTURES flow: Agent 2 (re)generates the Agent 1 signal from admin commentary.
+      # Reach Agent 1 by service name on the compose network — localhost would hit this container.
+      AGENT1_URL: http://agent1:8081
     networks:
       - zupptrade-net
     healthcheck:

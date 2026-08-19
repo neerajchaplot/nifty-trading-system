@@ -16,7 +16,9 @@
 
         <div class="fm-card-head">
           <span class="fm-label">{{ arm.label }}</span>
-          <span class="fm-status" [class.fm-status-active]="isActive(plan.status)">
+          <span class="fm-status"
+                [class.fm-status-active]="isActive(plan.status)"
+                [class.fm-status-failed]="isFailed(plan)">
             {{ statusLabel(plan) }}
           </span>
         </div>
@@ -28,8 +30,13 @@
           <div><span>Lots</span><b>{{ arm.lots }}</b></div>
         </div>
 
+        <!-- Failed: entry handoff could not place the order -->
+        <div class="fm-failed-msg" *ngIf="isFailed(plan)">
+          <span class="dot dot-failed"></span>Order could not be placed — see Critical alerts.
+        </div>
+
         <!-- Dormant: show what makes it go live -->
-        <div class="fm-activation" *ngIf="!isActive(plan.status)">
+        <div class="fm-activation" *ngIf="!isActive(plan.status) && !isFailed(plan)">
           <span class="dot"></span>{{ activationText(plan) }}
         </div>
 
