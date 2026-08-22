@@ -8,14 +8,16 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * Verifies weight resolution precedence: a valid "default" profile wins; otherwise the system
- * config weights are used. Scoring must never fail because of a missing or malformed profile.
+ * Verifies weight resolution precedence: an explicit override (FUTURES) or the acting user's own
+ * profile (TRADING, via {@link TierWeightResolver#resolve(UUID)}) wins; otherwise the system config
+ * weights are used. Scoring must never fail over a missing, malformed, or absent profile.
  */
 class TierWeightResolverTest {
 
@@ -96,6 +98,52 @@ class TierWeightResolverTest {
         TierWeightResolver.ResolvedWeights r = resolver.resolveOverride(
                 new BigDecimal("0.30"), new BigDecimal("0.20"), new BigDecimal("0.20"),
                 new BigDecimal("0.10"), new BigDecimal("0.10"));
+
+        assertThat(r.source()).isEqualTo(TierWeightResolver.SOURCE_SYSTEM_DEFAULT);
+    }
+
+    // --- per-user resolution: resolve(UUID) — the TRADING flow weights by the acting user ---
+
+    @Test
+    void resolveByUser_validProfile_usesThatUsersWeights() {
+        UUID pid = UUID.randomUUID();
+        // A user (e.g. geekuno) who set Tier 4 / commentary to 60%.
+        UserProfileEntity p = profile("0.10", "0.10", "0.10", "0.10", "0.60");
+        when(repository.findById(pid)).thenReturn(Optional.of(p));
+
+        TierWeightResolver.ResolvedWeights r = resolver.resolve(pid);
+
+        assertThat(r.source()).isEqualTo(TierWeightResolver.SOURCE_USER_PROFILE);
+        assertThat(r.byTier().get(TierWeightResolver.T4)).isEqualByComparingTo("0.60");
+        assertThat(r.byTier().get(TierWeightResolver.T1A)).isEqualByComparingTo("0.10");
+    }
+
+    @Test
+    void resolveByUser_nullUser_fallsBackToConfigDefaults() {
+        // Scheduled / house run with no authenticated user.
+        TierWeightResolver.ResolvedWeights r = resolver.resolve((UUID) null);
+
+        assertThat(r.source()).isEqualTo(TierWeightResolver.SOURCE_SYSTEM_DEFAULT);
+        assertThat(r.byTier().get(TierWeightResolver.T4)).isEqualByComparingTo("0.10");
+    }
+
+    @Test
+    void resolveByUser_profileNotFound_fallsBackToConfigDefaults() {
+        UUID pid = UUID.randomUUID();
+        when(repository.findById(pid)).thenReturn(Optional.empty());
+
+        TierWeightResolver.ResolvedWeights r = resolver.resolve(pid);
+
+        assertThat(r.source()).isEqualTo(TierWeightResolver.SOURCE_SYSTEM_DEFAULT);
+    }
+
+    @Test
+    void resolveByUser_weightsNotSummingToOne_fallsBackToConfigDefaults() {
+        UUID pid = UUID.randomUUID();
+        UserProfileEntity p = profile("0.30", "0.30", "0.30", "0.30", "0.30");  // sums to 1.50
+        when(repository.findById(pid)).thenReturn(Optional.of(p));
+
+        TierWeightResolver.ResolvedWeights r = resolver.resolve(pid);
 
         assertThat(r.source()).isEqualTo(TierWeightResolver.SOURCE_SYSTEM_DEFAULT);
     }

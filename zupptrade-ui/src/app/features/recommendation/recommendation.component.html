@@ -178,7 +178,9 @@
 
         <!-- ── Monitor Thresholds (view or edit) ──────────── -->
         <div class="divider-label">Monitor Thresholds</div>
-        <div class="monitor-config" *ngIf="!overrideMode">
+
+        <!-- 2-leg spreads: a single Watch/Readjust/Exit ladder -->
+        <div class="monitor-config" *ngIf="!overrideMode && !isIronCondor">
           <div class="monitor-row">
             <span class="monitor-key">T1 · Watch</span>
             <span class="monitor-val t1">{{ tradeCard.thresholds.t1WatchNiftyLevel | number }}</span>
@@ -193,6 +195,43 @@
           </div>
         </div>
 
+        <!-- Iron Condor: two ladders — put side (Nifty falling) and call side (Nifty rising) -->
+        <div class="monitor-config" *ngIf="!overrideMode && isIronCondor"
+             style="display:flex; gap:20px; flex-wrap:wrap;">
+          <div style="flex:1 1 140px;">
+            <div style="font-weight:600; font-size:12px; margin-bottom:6px;">Put side
+              <span style="font-weight:400; color:#64748B;">· Nifty falls</span></div>
+            <div class="monitor-row">
+              <span class="monitor-key">T1 · Watch</span>
+              <span class="monitor-val t1">{{ tradeCard.thresholds.t1WatchNiftyDown | number }}</span>
+            </div>
+            <div class="monitor-row">
+              <span class="monitor-key">T2 · Readjust</span>
+              <span class="monitor-val t2">{{ tradeCard.thresholds.t2ReadjustNiftyDown | number }}</span>
+            </div>
+            <div class="monitor-row">
+              <span class="monitor-key">T3 · Exit</span>
+              <span class="monitor-val t3">{{ tradeCard.thresholds.t3ExitNiftyDown | number }}</span>
+            </div>
+          </div>
+          <div style="flex:1 1 140px;">
+            <div style="font-weight:600; font-size:12px; margin-bottom:6px;">Call side
+              <span style="font-weight:400; color:#64748B;">· Nifty rises</span></div>
+            <div class="monitor-row">
+              <span class="monitor-key">T1 · Watch</span>
+              <span class="monitor-val t1">{{ tradeCard.thresholds.t1WatchNiftyUp | number }}</span>
+            </div>
+            <div class="monitor-row">
+              <span class="monitor-key">T2 · Readjust</span>
+              <span class="monitor-val t2">{{ tradeCard.thresholds.t2ReadjustNiftyUp | number }}</span>
+            </div>
+            <div class="monitor-row">
+              <span class="monitor-key">T3 · Exit</span>
+              <span class="monitor-val t3">{{ tradeCard.thresholds.t3ExitNiftyUp | number }}</span>
+            </div>
+          </div>
+        </div>
+
         <!-- ── Override Panel ─────────────────────────────── -->
         <div class="override-section" *ngIf="overrideMode">
           <div class="override-row">
@@ -202,7 +241,7 @@
           </div>
           <!-- Credit Watch/Readjust/Exit ladder — credit spreads only. A debit spread is monitored via
                breakeven / profit-book / loss-cut, which are auto-managed, so this editor is hidden. -->
-          <ng-container *ngIf="!isDebit">
+          <ng-container *ngIf="!isDebit && !isIronCondor">
             <div class="override-row">
               <label class="override-label">T1 · Watch</label>
               <input class="override-input t1-input" type="number" [(ngModel)]="overrideT1" [placeholder]="tradeCard.thresholds.t1WatchNiftyLevel">
@@ -224,6 +263,10 @@
 
           <div class="override-note" *ngIf="isDebit" style="font-size:12px; color:#64748B; padding:4px 2px;">
             Debit spread — exit levels (breakeven / profit-book / loss-cut) are managed automatically. Adjust lots and check margin, then confirm.
+          </div>
+
+          <div class="override-note" *ngIf="isIronCondor" style="font-size:12px; color:#64748B; padding:4px 2px;">
+            Iron Condor — the exit ladder is bilateral (put side + call side) and algorithm-locked; it recomputes live each cycle. Adjust lots and check margin, then confirm.
           </div>
 
           <!-- Margin check -->

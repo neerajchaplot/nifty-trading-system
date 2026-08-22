@@ -11,17 +11,18 @@ import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Resolves the per-tier weights used to compute the composite score.
  *
- * <p>Weights come from the single {@code "default"} user profile so the signal reflects the
- * user's preferences. If that profile is missing, or its five weights do not sum to 1.0000,
- * the system config weights ({@link TradingProperties}) are used instead — the scoring pipeline
- * never fails over a bad profile.
+ * <p>{@link #resolve(UUID)} weights the signal by the acting user's own profile ({@code user_profiles.id}) —
+ * this is the TRADING flow. {@link #resolveOverride} applies an explicit per-request weighting — the
+ * FUTURES flow. A null user, a missing profile, or weights that do not sum to 1.0000 fall back to the
+ * system config weights ({@link TradingProperties}); the scoring pipeline never fails over a bad profile.
  *
  * <p>The resolved weights drive the composite once, so bias, strength AND confidence all follow
- * the user's weighting — there is no separate system-weighted computation.
+ * the weighting — there is no separate system-weighted computation.
  */
 @Service
 public class TierWeightResolver {
@@ -54,30 +55,52 @@ public class TierWeightResolver {
     /** Resolved weights plus where they came from (for audit/logging). */
     public record ResolvedWeights(Map<String, BigDecimal> byTier, String source) {}
 
+    /**
+     * Legacy no-arg resolution — reads the {@code "default"} profile. Retained only as the fallback
+     * for a malformed per-request override and for callers with no user. Prefer {@link #resolve(UUID)}.
+     */
     public ResolvedWeights resolve() {
-        Map<String, BigDecimal> config = configWeights();
-
-        Optional<UserProfileEntity> profile;
         try {
-            profile = repository.findByUserId(DEFAULT_USER_ID);
+            return fromProfile(repository.findByUserId(DEFAULT_USER_ID), DEFAULT_USER_ID);
         } catch (Exception e) {
             // A read failure must never break scoring — fall back to config.
-            log.warn("agent1.weights.profile_read_failed reason={} — using system defaults", e.getMessage());
-            return new ResolvedWeights(config, SOURCE_SYSTEM_DEFAULT);
+            log.warn("agent1.weights.profile_read_failed id={} reason={} — using system defaults",
+                    DEFAULT_USER_ID, e.getMessage());
+            return new ResolvedWeights(configWeights(), SOURCE_SYSTEM_DEFAULT);
         }
+    }
 
+    /**
+     * Per-user resolution — the TRADING flow weights the signal by the acting user's own profile
+     * ({@code user_profiles.id}). A null id (scheduled/house runs with no authenticated user), a
+     * missing profile, or weights that do not sum to 1.0000 fall back to the system config weights.
+     */
+    public ResolvedWeights resolve(UUID profileId) {
+        if (profileId == null) {
+            log.info("agent1.weights.no_user — using system defaults");
+            return new ResolvedWeights(configWeights(), SOURCE_SYSTEM_DEFAULT);
+        }
+        try {
+            return fromProfile(repository.findById(profileId), profileId);
+        } catch (Exception e) {
+            log.warn("agent1.weights.profile_read_failed id={} reason={} — using system defaults",
+                    profileId, e.getMessage());
+            return new ResolvedWeights(configWeights(), SOURCE_SYSTEM_DEFAULT);
+        }
+    }
+
+    /** Validate a looked-up profile and build ResolvedWeights, or fall back to config weights. */
+    private ResolvedWeights fromProfile(Optional<UserProfileEntity> profile, Object idForLog) {
         if (profile.isEmpty()) {
-            log.info("agent1.weights.no_profile userId={} — using system defaults", DEFAULT_USER_ID);
-            return new ResolvedWeights(config, SOURCE_SYSTEM_DEFAULT);
+            log.info("agent1.weights.no_profile id={} — using system defaults", idForLog);
+            return new ResolvedWeights(configWeights(), SOURCE_SYSTEM_DEFAULT);
         }
-
         Map<String, BigDecimal> userWeights = weightMap(profile.get());
         if (!isValid(userWeights)) {
-            log.warn("agent1.weights.invalid_profile weights={} — using system defaults", userWeights);
-            return new ResolvedWeights(config, SOURCE_SYSTEM_DEFAULT);
+            log.warn("agent1.weights.invalid_profile id={} weights={} — using system defaults", idForLog, userWeights);
+            return new ResolvedWeights(configWeights(), SOURCE_SYSTEM_DEFAULT);
         }
-
-        log.info("agent1.weights.resolved source={} weights={}", SOURCE_USER_PROFILE, userWeights);
+        log.info("agent1.weights.resolved source={} id={} weights={}", SOURCE_USER_PROFILE, idForLog, userWeights);
         return new ResolvedWeights(userWeights, SOURCE_USER_PROFILE);
     }
 

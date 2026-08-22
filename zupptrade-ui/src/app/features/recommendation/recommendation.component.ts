@@ -148,6 +148,16 @@ export class RecommendationComponent implements OnInit, OnChanges, OnDestroy {
     return this.tradeCard?.spreadDirection === 'DEBIT';
   }
 
+  /**
+   * True for Iron Condor / Wide Iron Condor — the monitor ladder is bilateral (put side + call side),
+   * so the single Watch/Readjust/Exit levels are null and the two-sided Down/Up levels are used instead.
+   * Detected by the threshold shape rather than the strategy name, so it holds for any bilateral strategy.
+   */
+  get isIronCondor(): boolean {
+    const t = this.tradeCard?.thresholds;
+    return !!t && t.t1WatchNiftyLevel == null && t.t1WatchNiftyDown != null;
+  }
+
   get overrideThresholdError(): string | null {
     if (this.isDebit) return null;   // credit-only ladder validation — never blocks a debit confirm
     if (this.t3BreachesShortStrike) {

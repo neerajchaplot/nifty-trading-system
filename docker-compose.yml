@@ -59,6 +59,9 @@ services:
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       X_API_KEY: ${INTERNAL_API_KEY}
       JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+      LOG_PATH: /var/log/zupptrade
+    volumes:
+      - ./logs:/var/log/zupptrade
     networks:
       - zupptrade-net
     healthcheck:
@@ -92,6 +95,9 @@ services:
       # FUTURES flow: Agent 2 (re)generates the Agent 1 signal from admin commentary.
       # Reach Agent 1 by service name on the compose network — localhost would hit this container.
       AGENT1_URL: http://agent1:8081
+      LOG_PATH: /var/log/zupptrade
+    volumes:
+      - ./logs:/var/log/zupptrade
     networks:
       - zupptrade-net
     healthcheck:
@@ -127,6 +133,9 @@ services:
       AGENT1_URL: http://agent1:8081
       AGENT2_URL: http://agent2:8082
       AGENT5_URL: http://agent5:8085
+      LOG_PATH: /var/log/zupptrade
+    volumes:
+      - ./logs:/var/log/zupptrade
     networks:
       - zupptrade-net
     healthcheck:
@@ -153,6 +162,9 @@ services:
       SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE: "1"
       X_API_KEY: ${INTERNAL_API_KEY}
       JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+      LOG_PATH: /var/log/zupptrade
+    volumes:
+      - ./logs:/var/log/zupptrade
     networks:
       - zupptrade-net
     healthcheck:
@@ -187,6 +199,9 @@ services:
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       X_API_KEY: ${INTERNAL_API_KEY}
       JWT_SIGNING_KEY: ${JWT_SIGNING_KEY}
+      LOG_PATH: /var/log/zupptrade
+    volumes:
+      - ./logs:/var/log/zupptrade
     networks:
       - zupptrade-net
     healthcheck:
@@ -229,6 +244,9 @@ services:
       UPSTOX_AUTH_REDIRECT: ${UPSTOX_AUTH_REDIRECT}
       # Where agent-user hands the browser back after login (the SPA callback route)
       AUTH_UI_REDIRECT: ${AUTH_UI_REDIRECT}
+      LOG_PATH: /var/log/zupptrade
+    volumes:
+      - ./logs:/var/log/zupptrade
     networks:
       - zupptrade-net
     healthcheck:
@@ -260,6 +278,9 @@ services:
       UPSTOX_TOTP_SEED: ${UPSTOX_TOTP_SEED}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       UPSTOX_REDIRECT_URI: ${UPSTOX_REDIRECT_URI:-http://localhost:8080/callback}
+      LOG_PATH: /var/log/zupptrade
+    volumes:
+      - ./logs:/var/log/zupptrade
     networks:
       - zupptrade-net
 
