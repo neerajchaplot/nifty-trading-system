@@ -6,12 +6,13 @@ const config: CapacitorConfig = {
   webDir: 'www',
   server: {
     androidScheme: 'https',
-    // --- DEV ONLY: live-reload against the LAN dev server ---
-    // Loads the app from `npm run start:lan` on the PC so the ng-serve proxy
-    // still forwards /api/* to the backend agents. cleartext allows plain http.
-    // REMOVE `url` + `cleartext` before a real/bundled release build.
-    url: 'http://192.168.1.5:4201',
-    cleartext: true,
+  },
+  plugins: {
+    // Route Angular HttpClient (XHR/fetch) through native HTTP: handles TLS natively and
+    // bypasses browser CORS, so the app can call the cross-origin Azure HTTPS API directly.
+    CapacitorHttp: {
+      enabled: true,
+    },
   },
 };
 

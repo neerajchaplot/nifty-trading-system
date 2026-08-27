@@ -14,6 +14,9 @@ public class AuthProperties {
     /** Where the SPA should land after a successful login (tokens delivered in the URL fragment). */
     private String uiRedirectUri = "http://localhost:4200/auth/callback";
 
+    /** Where a MOBILE app should land after login — a custom-scheme deep link the OS routes back into the app. */
+    private String mobileRedirectUri = "zupptrade://auth/callback";
+
     @NestedConfigurationProperty
     private Google google = new Google();
     @NestedConfigurationProperty
@@ -21,6 +24,8 @@ public class AuthProperties {
 
     public String getUiRedirectUri()        { return uiRedirectUri; }
     public void setUiRedirectUri(String v)  { this.uiRedirectUri = v; }
+    public String getMobileRedirectUri()       { return mobileRedirectUri; }
+    public void setMobileRedirectUri(String v) { this.mobileRedirectUri = v; }
     public Google getGoogle()               { return google; }
     public void setGoogle(Google v)         { this.google = v; }
     public Upstox getUpstox()               { return upstox; }

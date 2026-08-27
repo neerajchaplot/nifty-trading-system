@@ -8,4 +8,16 @@ export type TradeStatus = 'PENDING_CONFIRM' | 'CONFIRMED' | 'REJECTED' | 'EXPIRE
 export type OptionType = 'CE' | 'PE';
 export type LegAction = 'BUY' | 'SELL';
 export type MonitorAction = 'HOLD' | 'WATCH' | 'READJUST' | 'EXIT';
-export type ThresholdHit = 'T1' | 'T2' | 'T3' | 'NONE';
+export type ThresholdHit =
+  | 'T1' | 'T2' | 'T3' | 'NONE'
+  | 'DEBIT_POP_DISASTER' | 'DEBIT_GIVEBACK_LOCK' | 'DEBIT_EXPIRY_EXIT';
+
+// Futures (Camarilla intraday) — mirrors zupptrade-ui enums
+export type ConfirmAction = 'CONFIRM' | 'REJECT';
+export type FutureArmType = 'LONG_ROTATION' | 'SHORT_ROTATION' | 'LONG_BREAKOUT' | 'SHORT_BREAKDOWN';
+export type TradeDirection = 'LONG' | 'SHORT';
+export type OpenZone = 'BREAKOUT' | 'RANGE' | 'BREAKDOWN';
+export type ArmCardStatus = 'RECOMMENDED' | 'ALLOWED' | 'BLOCKED';
+export type FuturePlanStatus =
+  | 'PRIMED' | 'ARMED' | 'BREAK_DETECTED' | 'CONFIRMED' | 'FILLED'
+  | 'CLOSED' | 'NO_TRADE' | 'REJECTED' | 'INVALIDATED' | 'EXPIRED' | 'EXECUTION_FAILED';

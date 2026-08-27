@@ -1,0 +1,29 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Scenario spine — READJUST + EXIT variant of bull_put_5day.
+# Same entry conditions (08 Jul 09:20, spot 24350) so Agent 1/2 place the SAME Iron
+# Condor (PE short ~23650 / CE short ~25050). The price path then produces TWO put-side
+# triggers on 10 Jul:
+#   1. spot dips into the T2_DOWN readjust band (23800) -> READJUST -> old trade exits +
+#      Agent 1->2->5 re-enters a counter-trade (clone at entry conditions).
+#   2. spot then breaches the counter-trade's PE short (23500) -> T3_SHORT_STRIKE_BREACH -> EXIT.
+#
+# Requires the folder-sim re-entry flag: SIMULATION_READJUST_REENTRY_ENABLED=true
+# (else READJUST just exits the old trade with no counter-trade — the default sim stub).
+# ─────────────────────────────────────────────────────────────────────────────
+name: bull_put_5day_readjust
+description: >
+  Iron Condor entered Wed; spot dips into the put-side T2 readjust band on 10 Jul (READJUST →
+  counter-trade re-entered), then breaches the counter-trade's PE short same day → EXIT.
+
+# `step` = virtual minutes advanced per beat during market hours (09:15–15:30 IST). 30m keeps
+# the walk to a snappy ~1 min. The two triggers are placed one 30m-step apart so the readjust
+# fires on exactly one cycle before the breach (avoids re-adjust churn while spot sits in the band).
+clock:
+  start: 2026-07-08T09:15:00+05:30
+  end:   2026-07-14T15:30:00+05:30
+  step:  30m
+
+entry:
+  at: 2026-07-08T09:20:00+05:30
+  userProfile: TEST_USER_10L
+  expiry: 2026-07-14

@@ -7,7 +7,8 @@
     "start": "ng serve --proxy-config proxy.conf.json --port 4201",
     "start:lan": "ng serve --host 0.0.0.0 --proxy-config proxy.conf.json --port 4201",
     "build": "ng build",
-    "test": "ng test"
+    "test": "ng test",
+    "apk": "ng build --configuration development && cap sync android && cd android && .\\gradlew.bat assembleDebug"
   },
   "dependencies": {
     "@angular/animations": "^18.2.0",
@@ -19,8 +20,11 @@
     "@angular/platform-browser-dynamic": "^18.2.0",
     "@angular/router": "^18.2.0",
     "@capacitor/android": "^6.1.0",
+    "@capacitor/app": "^6.0.3",
+    "@capacitor/browser": "^6.0.6",
     "@capacitor/core": "^6.1.0",
     "@capacitor/ios": "^6.1.0",
+    "@capacitor/preferences": "^6.0.4",
     "@ionic/angular": "^8.2.0",
     "ionicons": "^7.4.0",
     "rxjs": "^7.8.1",
@@ -32,6 +36,13 @@
     "@angular/cli": "^18.2.0",
     "@angular/compiler-cli": "^18.2.0",
     "@capacitor/cli": "^6.1.0",
+    "@types/jasmine": "~5.1.0",
+    "jasmine-core": "~5.2.0",
+    "karma": "~6.4.0",
+    "karma-chrome-launcher": "~3.2.0",
+    "karma-coverage": "~2.2.0",
+    "karma-jasmine": "~5.1.0",
+    "karma-jasmine-html-reporter": "~2.1.0",
     "typescript": "~5.4.5"
   }
 }

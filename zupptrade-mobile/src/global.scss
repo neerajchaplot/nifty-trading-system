@@ -21,8 +21,8 @@
   --ion-color-danger:          #DC2626;
   --ion-color-warning:         #D97706;
 
-  --ion-font-family:           -apple-system, 'Inter', BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
-  --ion-background-color:      #F8FAFC;
+  --ion-font-family:           'Inter', system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+  --ion-background-color:      #E3E8F0;
   --ion-item-background:       #FFFFFF;
   --ion-toolbar-background:    #FFFFFF;
   --ion-tab-bar-background:    #FFFFFF;
@@ -30,24 +30,7 @@
   --ion-card-background:       #FFFFFF;
 }
 
-/* Dark mode */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --zt-surface: #0F172A;
-    --zt-border:  #1E293B;
-    --zt-text:    #F1F5F9;
-    --zt-sub:     #94A3B8;
-    --zt-muted:   #475569;
-
-    --ion-background-color:      #0F172A;
-    --ion-item-background:       #1E293B;
-    --ion-toolbar-background:    #0F172A;
-    --ion-tab-bar-background:    #0F172A;
-    --ion-tab-bar-border-color:  #1E293B;
-    --ion-card-background:       #1E293B;
-    --ion-text-color:            #F1F5F9;
-  }
-}
+/* Light-only — matches the web app (no dark mode). */
 
 /* Utility classes */
 .text-green  { color: var(--zt-green) !important; }

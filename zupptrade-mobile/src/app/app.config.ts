@@ -4,13 +4,13 @@ import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { IonicRouteStrategy, provideIonicAngular } from '@ionic/angular/standalone';
 
 import { routes } from './app.routes';
-import { apiKeyInterceptor } from './core/interceptors/api-key.interceptor';
+import { authInterceptor } from './core/interceptors/auth.interceptor';
 
 export const appConfig: ApplicationConfig = {
   providers: [
     { provide: RouteReuseStrategy, useClass: IonicRouteStrategy },
     provideIonicAngular({ mode: 'md' }),
     provideRouter(routes),
-    provideHttpClient(withInterceptors([apiKeyInterceptor])),
+    provideHttpClient(withInterceptors([authInterceptor])),
   ],
 };

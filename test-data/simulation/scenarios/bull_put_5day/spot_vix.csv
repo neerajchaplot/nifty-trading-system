@@ -1,13 +1,20 @@
 # time (ISO offset-datetime), spot, vix   — read as a step function: the row at-or-before the virtual clock wins
+# Tuned to walk an Iron Condor (PE short ~23650) to a clean, visible EXIT:
+#   spot stays well above the T1 WATCH level (short+150 = 23800) for the first sessions -> HOLD,
+#   then on 13 Jul it breaches the 23650 PE short in one decisive drop (to 23500) ->
+#   T3_SHORT_STRIKE_BREACH -> EXIT. The drop skips the WATCH/READJUST bands in a single tick so the
+#   auto-conductor doesn't readjust-and-reenter before the exit (which would muddy the result).
+# VIX rises 18 -> 22.5 but stays < 24 (no PAUSE) with small intraday steps (no >30% spike override),
+# so the EXIT is unambiguously the price breach, not a volatility trigger.
 time,spot,vix
 2026-07-08T09:20:00+05:30,24350,18.0
 2026-07-08T13:00:00+05:30,24320,18.2
-2026-07-09T09:20:00+05:30,24300,18.5
-2026-07-09T13:00:00+05:30,24260,18.8
-2026-07-10T09:20:00+05:30,24200,19.2
-2026-07-10T13:00:00+05:30,24170,19.5
-2026-07-13T09:20:00+05:30,24100,19.8
-2026-07-13T13:00:00+05:30,24060,20.1
-2026-07-14T09:20:00+05:30,24010,20.6
-2026-07-14T11:30:00+05:30,23985,21.0
-2026-07-14T14:00:00+05:30,23950,21.4
+2026-07-09T09:20:00+05:30,24250,18.5
+2026-07-09T13:00:00+05:30,24190,18.8
+2026-07-10T09:20:00+05:30,24120,19.2
+2026-07-10T13:00:00+05:30,24040,19.6
+2026-07-13T09:20:00+05:30,23950,20.2
+2026-07-13T11:30:00+05:30,23500,21.4
+2026-07-13T13:00:00+05:30,23450,21.7
+2026-07-14T09:20:00+05:30,23400,22.0
+2026-07-14T13:00:00+05:30,23350,22.5

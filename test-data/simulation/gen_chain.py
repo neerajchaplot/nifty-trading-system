@@ -13,7 +13,12 @@ import sys, math, re
 from datetime import date, datetime
 
 R = 0.065           # risk-free rate
-STRIKE_RANGE = 500  # ATM ± this, step 50
+STRIKE_RANGE = 2500 # ATM ± this, step 50. Must exceed the 1.2-SD short-strike distance (plus the
+                    # long-wing spread) or Agent 2 can't place a credit spread / Iron Condor and
+                    # throws MarketDataUnavailableException. 500 was too narrow (~1.0-SD at 18% VIX).
+                    # 2500 also keeps BOTH wings of an already-placed trade in range on every session
+                    # as the spot walks down — the per-day chain re-centres on that day's ATM, so a
+                    # falling spot would otherwise drop the far (CE) wing off a narrower ladder.
 OI_PEAK = 1_200_000 # ATM open interest; falls off with distance
 
 

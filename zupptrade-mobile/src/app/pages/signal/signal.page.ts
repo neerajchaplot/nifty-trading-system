@@ -5,6 +5,7 @@ import {
   IonRefresherContent, IonCard, IonCardContent, IonBadge,
   IonSkeletonText, IonButton, IonIcon, IonButtons,
 } from '@ionic/angular/standalone';
+import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { addIcons } from 'ionicons';
 import { refreshOutline, trendingUpOutline, trendingDownOutline, removeOutline } from 'ionicons/icons';
 import { DashboardStateService } from '../../core/services/dashboard-state.service';
@@ -15,20 +16,13 @@ import { Agent1Signal } from '../../core/models/agent1-signal.model';
   selector: 'app-signal',
   standalone: true,
   imports: [
-    CommonModule,
+    CommonModule, AppHeaderComponent,
     IonHeader, IonToolbar, IonTitle, IonContent, IonRefresher,
     IonRefresherContent, IonCard, IonCardContent, IonBadge,
     IonSkeletonText, IonButton, IonIcon, IonButtons,
   ],
   template: `
-    <ion-header>
-      <ion-toolbar style="--background:#ffffff; --border-color:#E2E8F0;">
-        <ion-buttons slot="start">
-          <img src="assets/zupp-logo.jpg" alt="ZuppTrade" style="height:32px;width:auto;margin-left:8px;object-fit:contain;">
-        </ion-buttons>
-        <ion-title style="color:#1B4FA8;">Market Signal</ion-title>
-      </ion-toolbar>
-    </ion-header>
+    <app-header title="Market Signal"></app-header>
 
     <ion-content class="ion-padding">
       <ion-refresher slot="fixed" (ionRefresh)="doRefresh($event)">

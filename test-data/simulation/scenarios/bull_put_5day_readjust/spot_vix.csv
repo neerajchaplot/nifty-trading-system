@@ -1,0 +1,21 @@
+# time (ISO offset-datetime), spot, vix   — step function: the row at-or-before the virtual clock wins.
+# READJUST + EXIT walk for an Iron Condor with PE short ~23650 (CE short ~25050):
+#   - Entry row identical to bull_put_5day (24350 / 18.0) so the SAME IC is placed.
+#   - Spot holds in HOLD territory (above the ~24020 T1_DOWN line) through 08–10 Jul morning.
+#   - 10 Jul 13:00 -> 23800: inside the put-side T2_DOWN readjust band (23650 < spot <= ~23900) but
+#     ABOVE the 23650 short -> READJUST (level hit, not breach). With the re-entry flag on, Agent 3
+#     exits the old IC and re-enters a counter-trade (clone at entry conditions).
+#   - 10 Jul 13:30 -> 23500: breaches the counter-trade's 23650 PE short -> T3_SHORT_STRIKE_BREACH
+#     -> EXIT. The two rows are one 30m conductor-step apart so the readjust fires on exactly one
+#     cycle before the breach (no readjust churn).
+# VIX stays 18 -> 20.2 (< 22 relaxed-gate boundary, < 24 no PAUSE, small intraday steps).
+time,spot,vix
+2026-07-08T09:20:00+05:30,24350,18.0
+2026-07-08T13:00:00+05:30,24320,18.2
+2026-07-09T09:20:00+05:30,24280,18.4
+2026-07-09T13:00:00+05:30,24240,18.6
+2026-07-10T09:20:00+05:30,24200,18.9
+2026-07-10T13:00:00+05:30,23800,19.6
+2026-07-10T13:30:00+05:30,23500,20.2
+2026-07-13T09:20:00+05:30,23450,20.8
+2026-07-14T09:20:00+05:30,23400,21.4

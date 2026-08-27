@@ -3,7 +3,7 @@ import {
   IonTabs, IonTabBar, IonTabButton, IonIcon, IonLabel,
 } from '@ionic/angular/standalone';
 import { addIcons } from 'ionicons';
-import { analyticsOutline, swapHorizontalOutline, pulseOutline, documentTextOutline } from 'ionicons/icons';
+import { analyticsOutline, swapHorizontalOutline, pulseOutline, documentTextOutline, barChartOutline } from 'ionicons/icons';
 
 @Component({
   selector: 'app-tabs',
@@ -28,6 +28,11 @@ import { analyticsOutline, swapHorizontalOutline, pulseOutline, documentTextOutl
           <ion-label>Monitor</ion-label>
         </ion-tab-button>
 
+        <ion-tab-button tab="futures">
+          <ion-icon name="bar-chart-outline" />
+          <ion-label>Futures</ion-label>
+        </ion-tab-button>
+
         <ion-tab-button tab="audit">
           <ion-icon name="document-text-outline" />
           <ion-label>Audit</ion-label>
@@ -39,6 +44,6 @@ import { analyticsOutline, swapHorizontalOutline, pulseOutline, documentTextOutl
 })
 export class TabsComponent {
   constructor() {
-    addIcons({ analyticsOutline, swapHorizontalOutline, pulseOutline, documentTextOutline });
+    addIcons({ analyticsOutline, swapHorizontalOutline, pulseOutline, documentTextOutline, barChartOutline });
   }
 }

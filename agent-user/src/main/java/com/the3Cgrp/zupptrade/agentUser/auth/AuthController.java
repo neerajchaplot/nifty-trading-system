@@ -35,25 +35,27 @@ public class AuthController {
     // ── Upstox (live) ─────────────────────────────────────────
 
     @GetMapping("/upstox/login")
-    public ResponseEntity<Void> upstoxLogin() {
-        return redirect(upstox.buildAuthorizationUrl(newState()));
+    public ResponseEntity<Void> upstoxLogin(@RequestParam(value = "client", required = false) String client) {
+        return redirect(upstox.buildAuthorizationUrl(newState(client)));
     }
 
     @GetMapping("/upstox/callback")
-    public ResponseEntity<Void> upstoxCallback(@RequestParam("code") String code) {
-        return redirect(uiRedirectWithTokens(authService.loginWithUpstox(code)));
+    public ResponseEntity<Void> upstoxCallback(@RequestParam("code") String code,
+                                               @RequestParam(value = "state", required = false) String state) {
+        return redirect(redirectWithTokens(authService.loginWithUpstox(code), state));
     }
 
     // ── Google (simulation) ───────────────────────────────────
 
     @GetMapping("/google/login")
-    public ResponseEntity<Void> googleLogin() {
-        return redirect(google.buildAuthorizationUrl(newState()));
+    public ResponseEntity<Void> googleLogin(@RequestParam(value = "client", required = false) String client) {
+        return redirect(google.buildAuthorizationUrl(newState(client)));
     }
 
     @GetMapping("/google/callback")
-    public ResponseEntity<Void> googleCallback(@RequestParam("code") String code) {
-        return redirect(uiRedirectWithTokens(authService.loginWithGoogle(code)));
+    public ResponseEntity<Void> googleCallback(@RequestParam("code") String code,
+                                               @RequestParam(value = "state", required = false) String state) {
+        return redirect(redirectWithTokens(authService.loginWithGoogle(code), state));
     }
 
     // ── Session ───────────────────────────────────────────────
@@ -71,12 +73,19 @@ public class AuthController {
 
     // ── Helpers ───────────────────────────────────────────────
 
-    private static String newState() {
-        return UUID.randomUUID().toString();
+    private static String newState(String client) {
+        boolean mobile = "mobile".equalsIgnoreCase(client);
+        return UUID.randomUUID() + "|" + (mobile ? "mobile" : "web");
     }
 
-    private String uiRedirectWithTokens(TokenPair pair) {
-        return UriComponentsBuilder.fromUriString(props.getUiRedirectUri())
+    private static boolean isMobile(String state) {
+        return state != null && state.endsWith("|mobile");
+    }
+
+    /** Web → uiRedirectUri; mobile → mobileRedirectUri. Tokens in the fragment (unchanged). */
+    private String redirectWithTokens(TokenPair pair, String state) {
+        String base = isMobile(state) ? props.getMobileRedirectUri() : props.getUiRedirectUri();
+        return UriComponentsBuilder.fromUriString(base)
                 .fragment("access_token=" + pair.accessToken()
                         + "&refresh_token=" + pair.refreshToken()
                         + "&expires_in=" + pair.accessExpiresInSeconds())

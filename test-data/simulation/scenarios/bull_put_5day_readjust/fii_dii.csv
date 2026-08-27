@@ -1,0 +1,7 @@
+# date, fii_fut_net, fii_opt_net, dii_net, fii_long_ratio   (net values in Rs Crore; the row at-or-before the clock date wins)
+date,fii_fut_net,fii_opt_net,dii_net,fii_long_ratio
+2026-07-07,620,210,450,0.58
+2026-07-08,540,180,410,0.56
+2026-07-09,300,90,520,0.53
+2026-07-10,-120,-60,640,0.49
+2026-07-13,-480,-210,710,0.44

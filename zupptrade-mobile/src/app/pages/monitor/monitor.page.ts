@@ -4,6 +4,8 @@ import {
   IonHeader, IonToolbar, IonTitle, IonContent, IonRefresher,
   IonRefresherContent, IonCard, IonCardContent, IonBadge, IonButtons,
 } from '@ionic/angular/standalone';
+import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
+import { CriticalAlertsComponent } from '../../shared/components/critical-alerts/critical-alerts.component';
 import { DashboardStateService } from '../../core/services/dashboard-state.service';
 import { ActiveTrade } from '../../core/models/trade.model';
 
@@ -11,24 +13,19 @@ import { ActiveTrade } from '../../core/models/trade.model';
   selector: 'app-monitor',
   standalone: true,
   imports: [
-    CommonModule,
+    CommonModule, AppHeaderComponent, CriticalAlertsComponent,
     IonHeader, IonToolbar, IonTitle, IonContent, IonRefresher,
     IonRefresherContent, IonCard, IonCardContent, IonBadge, IonButtons,
   ],
   template: `
-    <ion-header>
-      <ion-toolbar style="--background:#ffffff; --border-color:#E2E8F0;">
-        <ion-buttons slot="start">
-          <img src="assets/zupp-logo.jpg" alt="ZuppTrade" style="height:32px;width:auto;margin-left:8px;object-fit:contain;">
-        </ion-buttons>
-        <ion-title style="color:#1B4FA8;">Monitor</ion-title>
-      </ion-toolbar>
-    </ion-header>
+    <app-header title="Monitor"></app-header>
 
     <ion-content class="ion-padding">
       <ion-refresher slot="fixed" (ionRefresh)="doRefresh($event)">
         <ion-refresher-content></ion-refresher-content>
       </ion-refresher>
+
+      <app-critical-alerts></app-critical-alerts>
 
       <ng-container *ngIf="activeTrades$ | async as trades">
 

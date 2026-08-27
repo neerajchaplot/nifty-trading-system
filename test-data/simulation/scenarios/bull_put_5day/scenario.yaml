@@ -8,13 +8,15 @@ description: >
   Bull-put spread (SELL 24000 PE / BUY 23900 PE) entered Wed, spot drifts down over
   5 sessions and breaches the short strike near Tuesday expiry → WATCH → EXIT.
 
-# Virtual-clock window the conductor walks. `step` = virtual minutes advanced per tick
-# during market hours (09:15–15:30 IST). 5 sessions at 5-min steps ≈ a few hundred ticks,
-# which run in seconds of real time.
+# Virtual-clock window the conductor walks. `step` = virtual minutes advanced per beat
+# during market hours (09:15–15:30 IST). Each beat runs one full monitoring cycle (~200ms),
+# so the walk time is (number of steps) x (cycle + interval). 30m keeps it to ~55 market steps
+# across the 5 sessions — a snappy ~1-min hands-off walk to the 13-Jul EXIT. Lower it (e.g. 5m)
+# for finer-grained monitoring at the cost of a longer walk.
 clock:
   start: 2026-07-08T09:15:00+05:30
   end:   2026-07-14T15:30:00+05:30
-  step:  5m
+  step:  30m
 
 # When to run the entry pipeline (Agent 1 score → Agent 2 recommend → confirm → Agent 5 execute).
 # After this, Agent 3's scheduler monitors the resulting trade every `step` until `end`.

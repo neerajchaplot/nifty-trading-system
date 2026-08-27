@@ -14,8 +14,10 @@ import com.the3Cgrp.zupptrade.agent1.scoring.TierScorer;
 import com.the3Cgrp.zupptrade.agent1.service.TierWeightResolver;
 import com.the3Cgrp.zupptrade.core.expiry.ExpiryDateService;
 import com.the3Cgrp.zupptrade.core.security.UserContext;
+import com.the3Cgrp.zupptrade.shared.simulation.ScenarioMeta;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,6 +57,9 @@ public class ScoringPipeline {
     private final TierWeightResolver tierWeightResolver;
     private final SignalExplanationService explanationService;
     private final UserContext userContext;
+    // Present only under the simulation profile (bean published by SimulationConfig). In every other
+    // profile this resolves to empty, so expiry resolution stays exactly as it was in production.
+    private final ObjectProvider<ScenarioMeta> scenarioMetaProvider;
 
     public ScoringPipeline(List<TierScorer> tierScorers,
                            SignalComposer composer,
@@ -63,7 +68,8 @@ public class ScoringPipeline {
                            ExpiryDateService expiryDateService,
                            TierWeightResolver tierWeightResolver,
                            SignalExplanationService explanationService,
-                           UserContext userContext) {
+                           UserContext userContext,
+                           ObjectProvider<ScenarioMeta> scenarioMetaProvider) {
         this.tierScorers = tierScorers;
         this.composer = composer;
         this.repository = repository;
@@ -72,6 +78,7 @@ public class ScoringPipeline {
         this.tierWeightResolver = tierWeightResolver;
         this.explanationService = explanationService;
         this.userContext = userContext;
+        this.scenarioMetaProvider = scenarioMetaProvider;
     }
 
     /** Step 1-4 outside transaction (no DB writes during external API calls). Step 5 in transaction. */
@@ -81,14 +88,24 @@ public class ScoringPipeline {
         // zoneless timestamp was being misread downstream. See Agent1SignalDto.timestamp.
         LocalDateTime runTime = LocalDateTime.now(ZoneOffset.UTC);
 
-        // Resolve expiry date: use caller-supplied value if present, otherwise auto-fetch next Tuesday expiry
+        // Resolve expiry date. Precedence:
+        //   1. Caller-supplied value (explicit request wins in every profile).
+        //   2. Simulation: the scenario's expiry — so DTE is measured against the scenario timeline,
+        //      not the real-world calendar. Without this the live ExpiryDateService resolves today's
+        //      next expiry (wall-clock), which corrupts every downstream DTE/PoP/strike calc in a sim.
+        //   3. Live: the next open Tuesday expiry from Upstox/cache.
+        ScenarioMeta scenario = scenarioMetaProvider.getIfAvailable();
         LocalDate effectiveExpiry = request.expiryDate() != null
                 ? request.expiryDate()
-                : expiryDateService.nextExpiry();
+                : scenario != null
+                        ? scenario.expiry()
+                        : expiryDateService.nextExpiry();
         if (effectiveExpiry == null) {
             throw new IllegalStateException("Cannot determine expiry date — Upstox unavailable and no expiry supplied");
         }
-        log.info("pipeline.expiry resolved={} supplied={}", effectiveExpiry, request.expiryDate() != null);
+        String expirySource = request.expiryDate() != null ? "request"
+                : scenario != null ? "scenario" : "service";
+        log.info("pipeline.expiry resolved={} source={}", effectiveExpiry, expirySource);
 
         // Step 1: Fetch all inputs via the provider (live Upstox/Marketaux/LLM, or scenario folder
         // under the simulation profile). The provider never throws — missing data becomes null.

@@ -1,11 +1,14 @@
 import { Component, OnInit, inject } from '@angular/core';
+import { Router } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import {
   IonHeader, IonToolbar, IonTitle, IonContent, IonCard, IonCardContent,
   IonButton, IonIcon, IonBadge, IonSpinner, IonAlert, IonButtons,
+  IonSegment, IonSegmentButton, IonLabel,
 } from '@ionic/angular/standalone';
+import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { addIcons } from 'ionicons';
-import { checkmarkCircleOutline, closeCircleOutline, refreshOutline } from 'ionicons/icons';
+import { checkmarkCircleOutline, closeCircleOutline, refreshOutline, pulseOutline } from 'ionicons/icons';
 import { DashboardStateService } from '../../core/services/dashboard-state.service';
 import { Agent2Service } from '../../core/services/agent2.service';
 import { UserStateService } from '../../core/services/user-state.service';
@@ -20,19 +23,13 @@ type PageState = 'ready' | 'loading' | 'tradecard' | 'active' | 'skip';
   selector: 'app-trade',
   standalone: true,
   imports: [
-    CommonModule,
+    CommonModule, AppHeaderComponent,
     IonHeader, IonToolbar, IonTitle, IonContent, IonCard, IonCardContent,
     IonButton, IonIcon, IonBadge, IonSpinner, IonAlert, IonButtons,
+    IonSegment, IonSegmentButton, IonLabel,
   ],
   template: `
-    <ion-header>
-      <ion-toolbar style="--background:#ffffff; --border-color:#E2E8F0;">
-        <ion-buttons slot="start">
-          <img src="assets/zupp-logo.jpg" alt="ZuppTrade" style="height:32px;width:auto;margin-left:8px;object-fit:contain;">
-        </ion-buttons>
-        <ion-title style="color:#1B4FA8;">Trade</ion-title>
-      </ion-toolbar>
-    </ion-header>
+    <app-header title="Trade"></app-header>
 
     <ion-content class="ion-padding">
 
@@ -91,7 +88,7 @@ type PageState = 'ready' | 'loading' | 'tradecard' | 'active' | 'skip';
           Skip Decision Overridden — original signal: {{ tradeCard.skipReason }}. Fallback strategy applied.
         </div>
 
-        <!-- Strategy header -->
+        <!-- Strategy header (always visible) -->
         <ion-card>
           <ion-card-content>
             <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
@@ -106,118 +103,127 @@ type PageState = 'ready' | 'loading' | 'tradecard' | 'active' | 'skip';
           </ion-card-content>
         </ion-card>
 
-        <!-- Legs -->
-        <ion-card>
-          <ion-card-content>
-            <div class="divider-label">Legs</div>
-            <div style="display:flex; gap:8px;">
-              <div class="leg-card leg-sell">
-                <div class="leg-action">SELL</div>
-                <div class="leg-strike">{{ tradeCard.shortLeg.strike }}</div>
-                <div class="leg-meta">{{ tradeCard.shortLeg.optionType }} · ₹{{ tradeCard.shortLeg.ltp | number:'1.2-2' }}</div>
-              </div>
-              <div class="leg-card leg-buy">
-                <div class="leg-action">BUY</div>
-                <div class="leg-strike">{{ tradeCard.longLeg.strike }}</div>
-                <div class="leg-meta">{{ tradeCard.longLeg.optionType }} · ₹{{ tradeCard.longLeg.ltp | number:'1.2-2' }}</div>
-              </div>
-            </div>
-            <!-- Iron Condor CE legs -->
-            <div *ngIf="tradeCard.shortLeg2" style="display:flex; gap:8px; margin-top:8px;">
-              <div class="leg-card leg-sell">
-                <div class="leg-action">SELL</div>
-                <div class="leg-strike">{{ tradeCard.shortLeg2!.strike }}</div>
-                <div class="leg-meta">{{ tradeCard.shortLeg2!.optionType }} · ₹{{ tradeCard.shortLeg2!.ltp | number:'1.2-2' }}</div>
-              </div>
-              <div class="leg-card leg-buy">
-                <div class="leg-action">BUY</div>
-                <div class="leg-strike">{{ tradeCard.longLeg2!.strike }}</div>
-                <div class="leg-meta">{{ tradeCard.longLeg2!.optionType }} · ₹{{ tradeCard.longLeg2!.ltp | number:'1.2-2' }}</div>
-              </div>
-            </div>
-          </ion-card-content>
-        </ion-card>
+        <!-- Segment: Summary | Legs | Checks -->
+        <ion-segment [value]="cardTab" (ionChange)="cardTab = $any($event.detail.value)" style="margin-bottom:12px;">
+          <ion-segment-button value="summary"><ion-label>Summary</ion-label></ion-segment-button>
+          <ion-segment-button value="legs"><ion-label>Legs</ion-label></ion-segment-button>
+          <ion-segment-button value="checks"><ion-label>Checks</ion-label></ion-segment-button>
+        </ion-segment>
 
-        <!-- P&L summary -->
-        <ion-card>
-          <ion-card-content>
-            <div class="divider-label">Summary</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-              <div>
-                <div style="font-size:10px; color:var(--zt-muted); text-transform:uppercase;">Net Premium</div>
-                <div style="font-size:16px; font-weight:800; color:var(--zt-green);">₹{{ tradeCard.netPremiumPerUnit | number:'1.2-2' }}</div>
+        <!-- ── SUMMARY (decision pane) ── -->
+        <ng-container *ngIf="cardTab === 'summary'">
+          <ion-card>
+            <ion-card-content>
+              <div class="divider-label">P&L Summary</div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                <div>
+                  <div style="font-size:10px; color:var(--zt-muted); text-transform:uppercase;">Net Premium</div>
+                  <div style="font-size:16px; font-weight:800; color:var(--zt-green);">₹{{ tradeCard.netPremiumPerUnit | number:'1.2-2' }}</div>
+                </div>
+                <div>
+                  <div style="font-size:10px; color:var(--zt-muted); text-transform:uppercase;">Lots</div>
+                  <div style="font-size:16px; font-weight:800;">{{ tradeCard.lots }} × {{ tradeCard.lotSize }}</div>
+                </div>
+                <div>
+                  <div style="font-size:10px; color:var(--zt-muted); text-transform:uppercase;">Max Profit</div>
+                  <div style="font-size:15px; font-weight:700; color:var(--zt-green);">₹{{ tradeCard.maxProfitTotal | number:'1.0-0' }}</div>
+                </div>
+                <div>
+                  <div style="font-size:10px; color:var(--zt-muted); text-transform:uppercase;">Expected Loss</div>
+                  <div style="font-size:15px; font-weight:700; color:var(--zt-red);">₹{{ tradeCard.realExpectedLossTotal | number:'1.0-0' }}</div>
+                </div>
+                <div>
+                  <div style="font-size:10px; color:var(--zt-muted); text-transform:uppercase;">PoP</div>
+                  <div style="font-size:15px; font-weight:700;">{{ tradeCard.pop | number:'1.1-1' }}%</div>
+                </div>
+                <div>
+                  <div style="font-size:10px; color:var(--zt-muted); text-transform:uppercase;">RoC</div>
+                  <div style="font-size:15px; font-weight:700; color:var(--zt-blue);">{{ tradeCard.roc | number:'1.2-2' }}%</div>
+                </div>
               </div>
-              <div>
-                <div style="font-size:10px; color:var(--zt-muted); text-transform:uppercase;">Lots</div>
-                <div style="font-size:16px; font-weight:800;">{{ tradeCard.lots }} × {{ tradeCard.lotSize }}</div>
-              </div>
-              <div>
-                <div style="font-size:10px; color:var(--zt-muted); text-transform:uppercase;">Max Profit</div>
-                <div style="font-size:15px; font-weight:700; color:var(--zt-green);">₹{{ tradeCard.maxProfitTotal | number:'1.0-0' }}</div>
-              </div>
-              <div>
-                <div style="font-size:10px; color:var(--zt-muted); text-transform:uppercase;">Expected Loss</div>
-                <div style="font-size:15px; font-weight:700; color:var(--zt-red);">₹{{ tradeCard.realExpectedLossTotal | number:'1.0-0' }}</div>
-              </div>
-              <div>
-                <div style="font-size:10px; color:var(--zt-muted); text-transform:uppercase;">PoP</div>
-                <div style="font-size:15px; font-weight:700;">{{ tradeCard.pop | number:'1.1-1' }}%</div>
-              </div>
-              <div>
-                <div style="font-size:10px; color:var(--zt-muted); text-transform:uppercase;">RoC</div>
-                <div style="font-size:15px; font-weight:700; color:var(--zt-blue);">{{ tradeCard.roc | number:'1.2-2' }}%</div>
-              </div>
-            </div>
-          </ion-card-content>
-        </ion-card>
+            </ion-card-content>
+          </ion-card>
 
-        <!-- Gates -->
-        <ion-card>
-          <ion-card-content>
-            <div class="divider-label">Gate Checks</div>
-            <div *ngFor="let g of tradeCard.gateResults"
-                 style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid var(--zt-border);">
-              <span style="font-size:12px; color:var(--zt-sub);">{{ g.gate }}</span>
-              <ion-badge [color]="g.passed ? 'success' : 'danger'">{{ g.passed ? 'PASS' : 'FAIL' }}</ion-badge>
-            </div>
-          </ion-card-content>
-        </ion-card>
+          <div *ngIf="error" class="error-banner">{{ error }}</div>
 
-        <!-- Thresholds -->
-        <ion-card>
-          <ion-card-content>
-            <div class="divider-label">Monitoring Levels</div>
-            <div style="display:flex; flex-direction:column; gap:6px; font-size:12px;">
-              <div style="display:flex; justify-content:space-between;">
-                <span class="level-t1">T1 Watch</span>
-                <span>{{ tradeCard.thresholds.t1WatchNiftyLevel ?? tradeCard.thresholds.t1WatchNiftyDown | number:'1.0-0' }}</span>
-              </div>
-              <div style="display:flex; justify-content:space-between;">
-                <span class="level-t2">T2 Readjust</span>
-                <span>{{ tradeCard.thresholds.t2ReadjustNiftyLevel ?? tradeCard.thresholds.t2ReadjustNiftyDown | number:'1.0-0' }}</span>
-              </div>
-              <div style="display:flex; justify-content:space-between;">
-                <span class="level-t3">T3 Exit</span>
-                <span>{{ tradeCard.thresholds.t3ExitNiftyLevel ?? tradeCard.thresholds.t3ExitNiftyDown | number:'1.0-0' }}</span>
-              </div>
-            </div>
-          </ion-card-content>
-        </ion-card>
+          <div style="display:flex; gap:10px; margin-top:8px;">
+            <ion-button color="danger" fill="outline" expand="block" style="flex:1;" (click)="reject()">
+              <ion-icon name="close-circle-outline" slot="start"></ion-icon>
+              Reject
+            </ion-button>
+            <ion-button color="success" expand="block" style="flex:1;" (click)="confirm()">
+              <ion-icon name="checkmark-circle-outline" slot="start"></ion-icon>
+              Confirm
+            </ion-button>
+          </div>
+        </ng-container>
 
-        <!-- Error -->
-        <div *ngIf="error" class="error-banner">{{ error }}</div>
+        <!-- ── LEGS ── -->
+        <ng-container *ngIf="cardTab === 'legs'">
+          <ion-card>
+            <ion-card-content>
+              <div class="divider-label">Legs</div>
+              <div style="display:flex; gap:8px;">
+                <div class="leg-card leg-sell">
+                  <div class="leg-action">SELL</div>
+                  <div class="leg-strike">{{ tradeCard.shortLeg.strike }}</div>
+                  <div class="leg-meta">{{ tradeCard.shortLeg.optionType }} · ₹{{ tradeCard.shortLeg.ltp | number:'1.2-2' }}</div>
+                </div>
+                <div class="leg-card leg-buy">
+                  <div class="leg-action">BUY</div>
+                  <div class="leg-strike">{{ tradeCard.longLeg.strike }}</div>
+                  <div class="leg-meta">{{ tradeCard.longLeg.optionType }} · ₹{{ tradeCard.longLeg.ltp | number:'1.2-2' }}</div>
+                </div>
+              </div>
+              <div *ngIf="tradeCard.shortLeg2" style="display:flex; gap:8px; margin-top:8px;">
+                <div class="leg-card leg-sell">
+                  <div class="leg-action">SELL</div>
+                  <div class="leg-strike">{{ tradeCard.shortLeg2!.strike }}</div>
+                  <div class="leg-meta">{{ tradeCard.shortLeg2!.optionType }} · ₹{{ tradeCard.shortLeg2!.ltp | number:'1.2-2' }}</div>
+                </div>
+                <div class="leg-card leg-buy">
+                  <div class="leg-action">BUY</div>
+                  <div class="leg-strike">{{ tradeCard.longLeg2!.strike }}</div>
+                  <div class="leg-meta">{{ tradeCard.longLeg2!.optionType }} · ₹{{ tradeCard.longLeg2!.ltp | number:'1.2-2' }}</div>
+                </div>
+              </div>
+            </ion-card-content>
+          </ion-card>
+        </ng-container>
 
-        <!-- CTA buttons -->
-        <div style="display:flex; gap:10px; margin-top:8px;">
-          <ion-button color="danger" fill="outline" expand="block" style="flex:1;" (click)="reject()">
-            <ion-icon name="close-circle-outline" slot="start"></ion-icon>
-            Reject
-          </ion-button>
-          <ion-button color="success" expand="block" style="flex:1;" (click)="confirm()">
-            <ion-icon name="checkmark-circle-outline" slot="start"></ion-icon>
-            Confirm
-          </ion-button>
-        </div>
+        <!-- ── CHECKS (gates + levels) ── -->
+        <ng-container *ngIf="cardTab === 'checks'">
+          <ion-card>
+            <ion-card-content>
+              <div class="divider-label">Gate Checks</div>
+              <div *ngFor="let g of tradeCard.gateResults"
+                   style="display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid var(--zt-border);">
+                <span style="font-size:12px; color:var(--zt-sub);">{{ g.gate }}</span>
+                <ion-badge [color]="g.passed ? 'success' : 'danger'">{{ g.passed ? 'PASS' : 'FAIL' }}</ion-badge>
+              </div>
+            </ion-card-content>
+          </ion-card>
+
+          <ion-card>
+            <ion-card-content>
+              <div class="divider-label">Monitoring Levels</div>
+              <div style="display:flex; flex-direction:column; gap:6px; font-size:12px;">
+                <div style="display:flex; justify-content:space-between;">
+                  <span class="level-t1">T1 Watch</span>
+                  <span>{{ tradeCard.thresholds.t1WatchNiftyLevel ?? tradeCard.thresholds.t1WatchNiftyDown | number:'1.0-0' }}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                  <span class="level-t2">T2 Readjust</span>
+                  <span>{{ tradeCard.thresholds.t2ReadjustNiftyLevel ?? tradeCard.thresholds.t2ReadjustNiftyDown | number:'1.0-0' }}</span>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                  <span class="level-t3">T3 Exit</span>
+                  <span>{{ tradeCard.thresholds.t3ExitNiftyLevel ?? tradeCard.thresholds.t3ExitNiftyDown | number:'1.0-0' }}</span>
+                </div>
+              </div>
+            </ion-card-content>
+          </ion-card>
+        </ng-container>
 
         <ion-button expand="block" fill="clear" (click)="reset()" style="margin-top:4px;">
           New Recommendation
@@ -228,8 +234,12 @@ type PageState = 'ready' | 'loading' | 'tradecard' | 'active' | 'skip';
       <div *ngIf="pageState === 'active'" class="empty-state" style="padding-top: 24px;">
         <div class="empty-icon">✅</div>
         <div class="empty-title">Trade Confirmed</div>
-        <div class="empty-sub">Check the Monitor tab for live P&L and threshold alerts.</div>
-        <ion-button fill="outline" (click)="reset()" style="margin-top:16px;">New Recommendation</ion-button>
+        <div class="empty-sub">Your position is live. Track P&L and threshold alerts under Live Trades.</div>
+        <ion-button (click)="goLiveTrades()" style="margin-top:16px;">
+          <ion-icon name="pulse-outline" slot="start"></ion-icon>
+          View Live Trades
+        </ion-button>
+        <ion-button fill="clear" (click)="reset()" style="margin-top:4px;">New Recommendation</ion-button>
       </div>
 
     </ion-content>
@@ -239,15 +249,17 @@ export class TradePage implements OnInit {
   private state = inject(DashboardStateService);
   private agent2 = inject(Agent2Service);
   private userState = inject(UserStateService);
+  private router = inject(Router);
 
   signal$ = this.state.signal;
   pageState: PageState = 'ready';
+  cardTab: 'summary' | 'legs' | 'checks' = 'summary';
   tradeCard: TradeCard | null = null;
   error: string | null = null;
   skipReason: string | null = null;
 
   ngOnInit(): void {
-    addIcons({ checkmarkCircleOutline, closeCircleOutline, refreshOutline });
+    addIcons({ checkmarkCircleOutline, closeCircleOutline, refreshOutline, pulseOutline });
   }
 
   generate(signal: Agent1Signal): void {
@@ -263,6 +275,7 @@ export class TradePage implements OnInit {
           this.pageState = 'skip';
         } else {
           this.tradeCard = card;
+          this.cardTab = 'summary';
           this.pageState = 'tradecard';
         }
       },
@@ -293,8 +306,11 @@ export class TradePage implements OnInit {
     this.tradeCard = null;
     this.error = null;
     this.skipReason = null;
+    this.cardTab = 'summary';
     this.pageState = 'ready';
   }
+
+  goLiveTrades(): void { this.router.navigate(['/monitor']); }
 
   confColor(conf: string): string {
     if (conf === 'HIGH') return 'success';

@@ -84,9 +84,14 @@ public class ReadjustmentService {
         this.jdbc                  = jdbc;
         this.ledger                = ledger;
         this.clock                 = clock;
-        // Simulation (contract §6/§11.1): on READJUST, exit the old trade but skip the live
-        // Agent 1 / Agent 2 re-entry chain — Phase-B sims run without those services.
-        this.stubReentry           = environment.acceptsProfiles(Profiles.of("simulation"));
+        // Simulation default (contract §6/§11.1): on READJUST, exit the old trade but skip the live
+        // Agent 1 / Agent 2 re-entry chain — headless Phase-B sims run without those services.
+        // A folder-replay sim that DOES run all agents can opt back into real re-entry (so READJUST
+        // places a counter-trade) by setting `simulation.readjust.reentry-enabled=true`. Off the
+        // simulation profile (prod) the stub is never active and re-entry always runs — unchanged.
+        boolean simProfile     = environment.acceptsProfiles(Profiles.of("simulation"));
+        boolean reentryEnabled = environment.getProperty("simulation.readjust.reentry-enabled", Boolean.class, Boolean.FALSE);
+        this.stubReentry       = simProfile && !reentryEnabled;
     }
 
     /**

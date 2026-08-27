@@ -1,6 +1,6 @@
 package com.the3Cgrp.zupptrade.agent3.client;
 
-import com.the3Cgrp.zupptrade.shared.dto.Agent1SignalDto;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -44,11 +44,11 @@ public class Agent1ScoreClient {
         ScoreRequest request = new ScoreRequest(expiryDate, null, true);
 
         try {
-            Agent1SignalDto signal = agent1RestClient.post()
+            ScoreResponse signal = agent1RestClient.post()
                     .uri("/api/v1/agent1/score")
                     .body(request)
                     .retrieve()
-                    .body(Agent1SignalDto.class);
+                    .body(ScoreResponse.class);
 
             if (signal == null || signal.id() == null) {
                 log.error("agent1.score.null_response expiryDate={}", expiryDate);
@@ -75,4 +75,14 @@ public class Agent1ScoreClient {
 
     /** Local projection — matches ScoreRequestDto JSON shape in agent1-market_analyst. */
     private record ScoreRequest(LocalDate expiryDate, String commentary, boolean fetchMarketaux) {}
+
+    /**
+     * Minimal projection of Agent 1's /score response — we only need the new signal id (bias/strength
+     * are for the log line, kept as String to avoid any enum-mapping edge case). Deserialising the
+     * full {@code Agent1SignalDto} here fails: its scoreBreakdown/keyLevels/dataGaps use
+     * {@code @JsonRawValue}, which is serialise-only, so Jackson cannot map those JSON objects back
+     * into String fields. {@code ignoreUnknown} skips them — and every other field — cleanly.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    private record ScoreResponse(UUID id, String bias, String strength) {}
 }
