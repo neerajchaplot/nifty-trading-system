@@ -103,6 +103,10 @@ public class UpstoxOrderClient {
         public OrderStatusResponse getOrderStatus(String orderId) {
             return token == null ? UpstoxOrderClient.this.getOrderStatus(orderId) : UpstoxOrderClient.this.getOrderStatus(orderId, token);
         }
+        // TEMP DIAGNOSTIC — order-domain read (no placement). Remove after Upstox diagnosis.
+        public String getOrderBook() {
+            return token == null ? UpstoxOrderClient.this.getOrderBook(null) : UpstoxOrderClient.this.getOrderBook(token);
+        }
         public TaggedOrdersResponse getOrderDetailsByTag(String tag) {
             return token == null ? UpstoxOrderClient.this.getOrderDetailsByTag(tag) : UpstoxOrderClient.this.getOrderDetailsByTag(tag, token);
         }
@@ -213,6 +217,19 @@ public class UpstoxOrderClient {
             throw new UpstoxOrderException("Order status returned null for orderId=" + orderId);
         }
         return response;
+    }
+
+    // ── TEMP DIAGNOSTIC: order-book read — v2 read host (upstoxOrderReadRestClient) ──
+    // Proves whether the trade owner's token (same one that 401s on /v3/order/place) can read the
+    // order domain at all. GET /v2/order/retrieve-all places NOTHING. Remove after Upstox diagnosis.
+    public String getOrderBook(String bearerToken) {
+        log.info("upstox.diag.orderbook.read");
+        return withRetry("getOrderBook",
+                () -> orderReadRestClient.get()
+                        .uri("/v2/order/retrieve-all")
+                        .headers(h -> applyBearer(h, bearerToken))
+                        .retrieve()
+                        .body(String.class));
     }
 
     // ── Order lookup by tag — v2 read (upstoxOrderRestClient) ────────────────

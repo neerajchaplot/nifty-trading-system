@@ -76,6 +76,17 @@ public class ExecutionController {
         return ResponseEntity.ok(executionService.execute(request, mode));
     }
 
+    /**
+     * TEMP DIAGNOSTIC — order-domain READ using the trade owner's token. Places NOTHING.
+     * If this returns ORDER_READ_OK while /v3/order/place returns 401, the block is order-PLACEMENT
+     * permission on the app (Upstox-side), not auth/IP. Remove after Upstox diagnosis.
+     */
+    @PostMapping("/diag/order-read/{tradeId}")
+    public ResponseEntity<String> diagOrderRead(@PathVariable UUID tradeId) {
+        log.warn("api.diag.order-read", kv("tradeId", tradeId));
+        return ResponseEntity.ok(executionService.diagnoseOrderRead(tradeId));
+    }
+
     @PostMapping("/exit/{tradeId}")
     public ResponseEntity<ExitTradeResponse> exit(@PathVariable UUID tradeId,
                                                    @Valid @RequestBody ExitTradeRequest request,

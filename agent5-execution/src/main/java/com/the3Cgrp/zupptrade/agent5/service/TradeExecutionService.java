@@ -130,6 +130,26 @@ public class TradeExecutionService {
         return owner.profileId() != null ? brokerTokenResolver.resolveTokenForProfile(owner.profileId()) : null;
     }
 
+    /**
+     * TEMP DIAGNOSTIC — resolves the trade OWNER's token (the exact token that 401s on placement)
+     * and attempts an order-domain READ (GET /v2/order/retrieve-all). Places NOTHING. Proves whether
+     * the same token can read the order book: read OK + placement 401 = order-PLACEMENT permission on
+     * the app, not auth/IP. Remove after Upstox diagnosis.
+     */
+    public String diagnoseOrderRead(UUID tradeId) {
+        TradeOwner owner = readTradeOwner(tradeId);
+        OrderSession upstox = orderClient.session(resolveOwnerToken(owner));
+        try {
+            String body = upstox.getOrderBook();
+            int len = body == null ? 0 : body.length();
+            log.warn("diag.orderread.ok", kv("tradeId", tradeId), kv("ownerProfile", owner.profileId()), kv("bodyLen", len));
+            return "ORDER_READ_OK ownerProfile=" + owner.profileId() + " bodyLen=" + len;
+        } catch (RuntimeException e) {
+            log.warn("diag.orderread.failed", kv("tradeId", tradeId), kv("ownerProfile", owner.profileId()), kv("error", e.getMessage()));
+            return "ORDER_READ_FAILED ownerProfile=" + owner.profileId() + " error=" + e.getMessage();
+        }
+    }
+
     // ── Entry ───────────────────────────────────────────────────────────────
 
     /** Overload for callers that don't specify a simulation fault mode (production + tests). */
