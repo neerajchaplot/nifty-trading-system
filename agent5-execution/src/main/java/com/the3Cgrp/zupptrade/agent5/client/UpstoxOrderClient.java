@@ -311,9 +311,16 @@ public class UpstoxOrderClient {
                 boolean rateLimited = e.getStatusCode().value() == 429;
                 if (e.getStatusCode().is4xxClientError() && !rateLimited) {
                     // Non-transient client error — deterministic, nothing placed.
+                    // TEMP DIAGNOSTIC: log selected response headers on 4xx. An empty-body 401 gives
+                    // no clue on its own; the gateway headers (WWW-Authenticate / Server / x-*) tell an
+                    // edge/IP reject apart from an account-entitlement reject. Remove once diagnosed.
+                    org.springframework.http.HttpHeaders rh = e.getResponseHeaders();
                     log.error("upstox.client.error",
                             kv("operation", operation),
                             kv("status", e.getStatusCode().value()),
+                            kv("wwwAuthenticate", rh == null ? null : rh.getFirst("WWW-Authenticate")),
+                            kv("server", rh == null ? null : rh.getFirst("Server")),
+                            kv("allHeaders", rh == null ? null : rh.toString()),
                             kv("body", e.getResponseBodyAsString()));
                     throw new UpstoxOrderException(
                             operation + " failed with " + e.getStatusCode() + ": " + e.getResponseBodyAsString(),
