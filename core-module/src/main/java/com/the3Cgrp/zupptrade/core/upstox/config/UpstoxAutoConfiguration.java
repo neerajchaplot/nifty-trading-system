@@ -124,7 +124,10 @@ public class UpstoxAutoConfiguration {
                         }
                     }
                     request.getHeaders().set("Accept", "application/json");
-                    request.getHeaders().set("Api-Version", "2.0");
+                    // NOTE: order placement/modify/cancel are the Upstox v3 order APIs on api-hft —
+                    // the documented v3 request sends NO Api-Version header. Stamping "2.0" onto a
+                    // /v3 endpoint is contradictory and the api-hft gateway rejects it (empty-body 401).
+                    // Api-Version 2.0 stays on the market client (v2) and the order-READ client (v2).
                     return execution.execute(request, body);
                 })
                 .build();
