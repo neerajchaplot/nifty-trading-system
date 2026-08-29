@@ -178,3 +178,10 @@ export interface LegFill {
   quantityFilled: number;
   averageFillPrice: number;
 }
+
+export interface MarginUtilization {
+  usedMargin: number;
+  availableMargin: number;
+  totalMargin: number;
+  utilizationPct: number;
+}

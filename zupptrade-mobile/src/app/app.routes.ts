@@ -7,26 +7,13 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/login/login.page').then(m => m.LoginPage),
   },
   {
-    path: 'profile',
-    canActivate: [authGuard],
-    loadComponent: () => import('./pages/profile/profile.page').then(m => m.ProfilePage),
-  },
-  {
     path: '',
-    loadComponent: () => import('./tabs/tabs.component').then(m => m.TabsComponent),
+    loadComponent: () => import('./shell/shell.component').then(m => m.ShellComponent),
     canActivate: [authGuard],
     children: [
       {
-        path: 'signal',
-        loadComponent: () => import('./pages/signal/signal.page').then(m => m.SignalPage),
-      },
-      {
-        path: 'trade',
-        loadComponent: () => import('./pages/trade/trade.page').then(m => m.TradePage),
-      },
-      {
-        path: 'monitor',
-        loadComponent: () => import('./pages/monitor/monitor.page').then(m => m.MonitorPage),
+        path: 'trading',
+        loadComponent: () => import('./features/trading/trading.page').then(m => m.TradingPage),
       },
       {
         path: 'futures',
@@ -36,7 +23,11 @@ export const routes: Routes = [
         path: 'audit',
         loadComponent: () => import('./pages/audit/audit.page').then(m => m.AuditPage),
       },
-      { path: '', redirectTo: 'signal', pathMatch: 'full' },
+      {
+        path: 'profile',
+        loadComponent: () => import('./pages/profile/profile.page').then(m => m.ProfilePage),
+      },
+      { path: '', redirectTo: 'trading', pathMatch: 'full' },
     ],
   },
   { path: '**', redirectTo: '' },

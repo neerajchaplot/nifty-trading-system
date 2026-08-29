@@ -1,0 +1,644 @@
+<title>ZuppTrade</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+/* ============ TOKENS ============ */
+:root{
+  --bg:#F7F9FC; --surface:#FFFFFF; --surface-2:#EEF2F8; --surface-3:#E4EAF3;
+  --ink:#0E1622; --muted:#55627A; --faint:#8894AC;
+  --line:#DEE5F0; --line-strong:#C6D0E0;
+  --accent:#0C8F6A; --accent-ink:#0A6E52; --accent-soft:#DCF1E8;
+  --bull:#0C8F6A; --bear:#C0483A; --warn:#A9720F; --neutral-vote:#69748A;
+  --grid:rgba(14,22,34,.045);
+  --shadow:0 1px 2px rgba(16,30,54,.05), 0 10px 30px -18px rgba(16,30,54,.28);
+  --shadow-lift:0 2px 6px rgba(16,30,54,.08), 0 22px 48px -24px rgba(16,30,54,.38);
+
+  --maxw:1120px;
+  --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+:root:not([data-theme="light"]){
+  @media (prefers-color-scheme:dark){
+    --bg:#0A0E15; --surface:#111725; --surface-2:#161F30; --surface-3:#1D2839;
+    --ink:#E7ECF4; --muted:#98A5BB; --faint:#67738C;
+    --line:#212B3E; --line-strong:#324056;
+    --accent:#35C89A; --accent-ink:#57D6AE; --accent-soft:rgba(53,200,154,.13);
+    --bull:#35C89A; --bear:#E56A57; --warn:#E3AE55; --neutral-vote:#7F8DA7;
+    --grid:rgba(150,170,200,.05);
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 14px 34px -20px rgba(0,0,0,.7);
+    --shadow-lift:0 2px 8px rgba(0,0,0,.5), 0 26px 60px -28px rgba(0,0,0,.8);
+  }
+}
+[data-theme="dark"]{
+  --bg:#0A0E15; --surface:#111725; --surface-2:#161F30; --surface-3:#1D2839;
+  --ink:#E7ECF4; --muted:#98A5BB; --faint:#67738C;
+  --line:#212B3E; --line-strong:#324056;
+  --accent:#35C89A; --accent-ink:#57D6AE; --accent-soft:rgba(53,200,154,.13);
+  --bull:#35C89A; --bear:#E56A57; --warn:#E3AE55; --neutral-vote:#7F8DA7;
+  --grid:rgba(150,170,200,.05);
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 14px 34px -20px rgba(0,0,0,.7);
+  --shadow-lift:0 2px 8px rgba(0,0,0,.5), 0 26px 60px -28px rgba(0,0,0,.8);
+}
+
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:var(--serif); font-size:1.05rem; line-height:1.7;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size:34px 34px;
+}
+.wrap{max-width:var(--maxw); margin:0 auto; padding:0 clamp(20px,5vw,44px)}
+
+/* ============ TYPE ============ */
+h1,h2,h3{font-family:var(--display); font-weight:700; line-height:1.08; letter-spacing:-.02em; text-wrap:balance; margin:0}
+p{margin:0}
+.eyebrow{
+  font-family:var(--mono); font-size:.74rem; font-weight:500; letter-spacing:.19em;
+  text-transform:uppercase; color:var(--accent-ink);
+}
+.lede{font-size:clamp(1.1rem,1.7vw,1.32rem); color:var(--muted); max-width:60ch}
+.section-head{max-width:64ch; margin-bottom:clamp(30px,4vw,52px)}
+.section-head h2{font-size:clamp(1.85rem,3.6vw,2.7rem); margin:.5rem 0 .7rem}
+.section-head p{color:var(--muted); font-size:1.08rem}
+.k{font-family:var(--mono); font-size:.86em; letter-spacing:.01em}
+
+/* ============ NAV ============ */
+header.nav{
+  position:sticky; top:0; z-index:50;
+  backdrop-filter:saturate(1.4) blur(10px);
+  background:color-mix(in srgb, var(--bg) 82%, transparent);
+  border-bottom:1px solid var(--line);
+}
+.nav-in{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 0}
+.brand{display:flex; align-items:center; gap:11px; font-family:var(--display); font-weight:800; letter-spacing:-.03em; font-size:1.22rem; color:var(--ink); text-decoration:none}
+.brand .mark{width:26px; height:26px; flex:none; color:var(--accent)}
+.brand b{color:var(--accent-ink); font-weight:800}
+.nav-links{display:flex; gap:28px; align-items:center}
+.nav-links a{font-family:var(--mono); font-size:.8rem; letter-spacing:.04em; text-transform:uppercase; color:var(--muted); text-decoration:none; transition:color .18s}
+.nav-links a:hover{color:var(--ink)}
+@media(max-width:760px){.nav-links{display:none}}
+.toggle{
+  font-family:var(--mono); font-size:.72rem; letter-spacing:.08em; text-transform:uppercase;
+  background:var(--surface-2); color:var(--muted); border:1px solid var(--line);
+  border-radius:999px; padding:7px 13px; cursor:pointer; transition:.18s;
+}
+.toggle:hover{color:var(--ink); border-color:var(--line-strong)}
+
+/* ============ HERO ============ */
+.hero{padding:clamp(56px,9vw,110px) 0 clamp(40px,6vw,72px); position:relative}
+.hero .eyebrow{margin-bottom:22px}
+.hero h1{font-size:clamp(2.5rem,6.2vw,4.5rem); font-weight:800; max-width:16ch}
+.hero h1 .hl{color:var(--accent-ink)}
+.hero .lede{margin-top:26px; font-size:clamp(1.12rem,1.9vw,1.4rem); line-height:1.6}
+.hero-tags{display:flex; flex-wrap:wrap; gap:10px; margin-top:34px}
+.tag{
+  font-family:var(--mono); font-size:.76rem; letter-spacing:.03em; color:var(--muted);
+  border:1px solid var(--line); border-radius:999px; padding:7px 14px; background:var(--surface);
+}
+.tag .dot{color:var(--accent); font-weight:700}
+
+/* signal strip in hero */
+.signal-strip{
+  margin-top:clamp(40px,6vw,64px); border:1px solid var(--line); border-radius:16px;
+  background:linear-gradient(180deg, var(--surface), var(--surface-2));
+  box-shadow:var(--shadow); overflow:hidden;
+}
+.signal-strip .bar{display:flex; align-items:stretch; flex-wrap:wrap}
+.signal-strip .cell{flex:1 1 200px; padding:22px 24px; border-right:1px solid var(--line)}
+.signal-strip .cell:last-child{border-right:none}
+.signal-strip .lab{font-family:var(--mono); font-size:.72rem; letter-spacing:.13em; text-transform:uppercase; color:var(--faint)}
+.signal-strip .val{font-family:var(--display); font-weight:700; font-size:1.5rem; margin-top:8px; letter-spacing:-.02em}
+.signal-strip .sub{font-size:.92rem; color:var(--muted); margin-top:3px}
+.val.bull{color:var(--bull)} .val.warnc{color:var(--warn)}
+
+/* ============ SECTION SHELL ============ */
+section.block{padding:clamp(52px,8vw,96px) 0; border-top:1px solid var(--line)}
+.block-lead{display:grid; grid-template-columns:1.1fr .9fr; gap:clamp(28px,5vw,64px); align-items:end}
+@media(max-width:860px){.block-lead{grid-template-columns:1fr; gap:18px}}
+
+/* ============ PILLARS (philosophy) ============ */
+.pillars{display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:8px}
+@media(max-width:800px){.pillars{grid-template-columns:1fr}}
+.pillar{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:26px 24px; box-shadow:var(--shadow); transition:transform .2s, box-shadow .2s, border-color .2s}
+.pillar:hover{transform:translateY(-3px); box-shadow:var(--shadow-lift); border-color:var(--line-strong)}
+.pillar .ic{width:30px;height:30px;color:var(--accent); margin-bottom:16px}
+.pillar h3{font-size:1.16rem; margin-bottom:8px}
+.pillar p{color:var(--muted); font-size:.99rem}
+
+/* ============ TIER ENGINE ============ */
+.engine{background:var(--surface); border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow); overflow:hidden}
+.tier-row{display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1.7fr) 128px 118px; gap:20px; align-items:center; padding:20px 26px; border-bottom:1px solid var(--line)}
+.tier-row:hover{background:var(--surface-2)}
+.tier-name{font-family:var(--display); font-weight:700; font-size:1.05rem; letter-spacing:-.01em}
+.tier-name .n{font-family:var(--mono); font-size:.74rem; color:var(--faint); display:block; letter-spacing:.1em; margin-bottom:3px}
+.tier-ev{color:var(--muted); font-size:.95rem; line-height:1.5}
+.wt{display:flex; flex-direction:column; gap:6px}
+.wt-track{height:7px; border-radius:99px; background:var(--surface-3); overflow:hidden}
+.wt-fill{height:100%; border-radius:99px; background:linear-gradient(90deg,var(--accent),var(--accent-ink))}
+.wt-lab{font-family:var(--mono); font-size:.66rem; letter-spacing:.1em; text-transform:uppercase; color:var(--faint)}
+.votes{display:flex; gap:6px; justify-content:flex-end}
+.chip{width:30px;height:30px;border-radius:8px; display:grid; place-items:center; font-family:var(--mono); font-weight:600; font-size:.9rem; border:1px solid var(--line)}
+.chip.on-bull{background:color-mix(in srgb,var(--bull) 16%,transparent); color:var(--bull); border-color:color-mix(in srgb,var(--bull) 38%,transparent)}
+.chip.on-neu{background:var(--surface-3); color:var(--neutral-vote)}
+.chip.off{opacity:.3}
+@media(max-width:820px){
+  .tier-row{grid-template-columns:1fr 1fr; gap:12px 18px; padding:18px 18px}
+  .votes{justify-content:flex-start}
+}
+.engine-foot{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:20px; padding:24px 26px; background:var(--surface-2)}
+.composite{display:flex; flex-wrap:wrap; gap:26px}
+.composite .m{min-width:120px}
+.composite .lab{font-family:var(--mono); font-size:.7rem; letter-spacing:.13em; text-transform:uppercase; color:var(--faint)}
+.composite .v{font-family:var(--display); font-weight:800; font-size:1.5rem; margin-top:5px; letter-spacing:-.02em}
+.composite .v.bull{color:var(--bull)}
+.flowline{font-family:var(--mono); font-size:.8rem; color:var(--muted); display:flex; align-items:center; gap:10px}
+.flowline svg{color:var(--accent)}
+.guard{
+  margin-top:20px; display:flex; gap:14px; align-items:flex-start;
+  border:1px dashed var(--line-strong); border-radius:12px; padding:16px 20px; background:var(--surface);
+}
+.guard .ic{color:var(--warn); flex:none; width:22px;height:22px; margin-top:2px}
+.guard p{font-size:.96rem; color:var(--muted)}
+.guard b{color:var(--ink); font-weight:600}
+
+/* ============ GATES ============ */
+.gates{display:grid; grid-template-columns:repeat(4,1fr); gap:16px}
+@media(max-width:900px){.gates{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:520px){.gates{grid-template-columns:1fr}}
+.gate{position:relative; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:24px 20px 22px; box-shadow:var(--shadow); transition:transform .2s, border-color .2s}
+.gate:hover{transform:translateY(-3px); border-color:var(--accent)}
+.gate .num{font-family:var(--mono); font-size:.72rem; letter-spacing:.12em; color:var(--faint)}
+.gate .check{position:absolute; top:20px; right:18px; width:22px;height:22px; color:var(--accent)}
+.gate h3{font-size:1.05rem; margin:14px 0 8px}
+.gate p{font-size:.94rem; color:var(--muted)}
+.gate .type{margin-top:14px; font-family:var(--mono); font-size:.68rem; letter-spacing:.08em; text-transform:uppercase; color:var(--accent-ink)}
+.gate-note{margin-top:22px; font-family:var(--mono); font-size:.85rem; color:var(--muted); text-align:center}
+
+.buildflow{display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:40px}
+@media(max-width:900px){.buildflow{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:520px){.buildflow{grid-template-columns:1fr}}
+.step{border-left:2px solid var(--accent); padding:4px 0 4px 16px}
+.step .s{font-family:var(--mono); font-size:.7rem; letter-spacing:.1em; color:var(--faint)}
+.step h4{font-family:var(--display); font-weight:700; font-size:1rem; margin:5px 0 6px; letter-spacing:-.01em}
+.step p{font-size:.9rem; color:var(--muted); line-height:1.5}
+
+/* ============ LIFECYCLE ============ */
+.track{display:grid; grid-template-columns:repeat(4,1fr); gap:0; border:1px solid var(--line); border-radius:14px; overflow:hidden; background:var(--surface); box-shadow:var(--shadow)}
+@media(max-width:820px){.track{grid-template-columns:1fr 1fr}}
+@media(max-width:480px){.track{grid-template-columns:1fr}}
+.stage{padding:24px 22px; border-right:1px solid var(--line); position:relative}
+.stage:last-child{border-right:none}
+.stage .st{font-family:var(--mono); font-size:.72rem; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); display:flex; align-items:center; gap:8px}
+.stage .st .d{width:9px;height:9px;border-radius:99px; background:var(--accent)}
+.stage h3{font-size:1.15rem; margin:12px 0 8px}
+.stage p{font-size:.93rem; color:var(--muted)}
+.stage[data-heat="1"] .d{background:var(--bull)}
+.stage[data-heat="2"] .d{background:var(--warn)}
+.stage[data-heat="3"] .d{background:var(--warn)}
+.stage[data-heat="4"] .d{background:var(--bear)}
+.stage[data-heat="4"]{background:color-mix(in srgb,var(--bear) 7%,var(--surface))}
+.overrides{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px}
+@media(max-width:620px){.overrides{grid-template-columns:1fr}}
+.ov{display:flex; gap:14px; align-items:flex-start; background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--bear); border-radius:12px; padding:18px 20px}
+.ov .ic{color:var(--bear); flex:none; width:22px;height:22px; margin-top:2px}
+.ov h4{font-family:var(--display); font-weight:700; font-size:.98rem; margin-bottom:5px}
+.ov p{font-size:.9rem; color:var(--muted)}
+
+/* ============ FUTURES ============ */
+.futures-panel{display:grid; grid-template-columns:.85fr 1.15fr; gap:clamp(26px,4vw,48px); align-items:center}
+@media(max-width:880px){.futures-panel{grid-template-columns:1fr; gap:34px}}
+.ladder{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:26px 26px; box-shadow:var(--shadow); font-family:var(--mono)}
+.ladder .lv{display:flex; align-items:center; justify-content:space-between; padding:11px 0; border-bottom:1px dashed var(--line); font-size:.9rem}
+.ladder .lv:last-child{border-bottom:none}
+.ladder .lv .tagn{color:var(--faint); font-size:.72rem; letter-spacing:.1em}
+.ladder .lv .nm{color:var(--ink); font-weight:600}
+.ladder .lv.up .nm{color:var(--bull)} .ladder .lv.dn .nm{color:var(--bear)} .ladder .lv.pv .nm{color:var(--muted)}
+.ladder .lv .zone{font-size:.72rem; color:var(--muted)}
+.arms{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:26px}
+@media(max-width:520px){.arms{grid-template-columns:1fr}}
+.arm{border:1px solid var(--line); border-radius:12px; padding:18px 18px; background:var(--surface); transition:border-color .2s, transform .2s}
+.arm:hover{border-color:var(--accent); transform:translateY(-2px)}
+.arm .dir{font-family:var(--mono); font-size:.7rem; letter-spacing:.1em; text-transform:uppercase}
+.arm.long .dir{color:var(--bull)} .arm.short .dir{color:var(--bear)}
+.arm h4{font-family:var(--display); font-weight:700; font-size:1rem; margin:7px 0 5px; letter-spacing:-.01em}
+.arm p{font-size:.86rem; color:var(--muted); line-height:1.45}
+.fnote{display:flex; flex-wrap:wrap; gap:12px; margin-top:26px}
+.fnote .n{flex:1 1 240px; display:flex; gap:12px; align-items:flex-start; font-size:.94rem; color:var(--muted)}
+.fnote .n svg{color:var(--accent); flex:none; width:20px;height:20px; margin-top:3px}
+.fnote .n b{color:var(--ink); font-weight:600}
+
+/* ============ TRUST CARDS ============ */
+.trust{display:grid; grid-template-columns:repeat(3,1fr); gap:18px}
+@media(max-width:860px){.trust{grid-template-columns:1fr}}
+.tc{background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:28px 26px; box-shadow:var(--shadow); transition:transform .2s, box-shadow .2s}
+.tc:hover{transform:translateY(-4px); box-shadow:var(--shadow-lift)}
+.tc .ic{width:32px;height:32px;color:var(--accent); margin-bottom:18px}
+.tc h3{font-size:1.22rem; margin-bottom:10px}
+.tc p{color:var(--muted); font-size:.98rem}
+.tc ul{margin:14px 0 0; padding:0; list-style:none; display:flex; flex-direction:column; gap:9px}
+.tc li{position:relative; padding-left:20px; font-size:.9rem; color:var(--muted)}
+.tc li::before{content:""; position:absolute; left:0; top:.62em; width:7px;height:7px; border-radius:99px; background:var(--accent)}
+
+/* ============ CLOSE ============ */
+.close{padding:clamp(60px,9vw,110px) 0; border-top:1px solid var(--line); text-align:center}
+.close h2{font-size:clamp(2rem,4.4vw,3.2rem); font-weight:800; max-width:18ch; margin:0 auto}
+.close .hl{color:var(--accent-ink)}
+.close p{color:var(--muted); max-width:52ch; margin:22px auto 0; font-size:1.1rem}
+
+/* ============ FOOTER ============ */
+footer{border-top:1px solid var(--line); background:var(--surface); padding:40px 0}
+.foot-in{display:flex; flex-wrap:wrap; gap:24px; align-items:center; justify-content:space-between}
+.disc{font-size:.82rem; color:var(--faint); max-width:70ch; line-height:1.55}
+.disc b{color:var(--muted); font-weight:600}
+
+/* reveal */
+.reveal{opacity:0; transform:translateY(18px); transition:opacity .7s ease, transform .7s ease}
+.reveal.in{opacity:1; transform:none}
+@media (prefers-reduced-motion:reduce){.reveal{opacity:1; transform:none; transition:none}}
+
+:focus-visible{outline:2px solid var(--accent); outline-offset:3px; border-radius:4px}
+</style>
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="#top" aria-label="ZuppTrade home">
+      <svg class="mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 2c3.6 2.3 5.2 6 5.2 10.1 0 2.2-.6 4.3-1.7 6.1H8.5c-1.1-1.8-1.7-3.9-1.7-6.1C6.8 8 8.4 4.3 12 2Z" fill="currentColor" opacity=".18"/>
+        <path d="M12 2c3.6 2.3 5.2 6 5.2 10.1 0 2.2-.6 4.3-1.7 6.1H8.5c-1.1-1.8-1.7-3.9-1.7-6.1C6.8 8 8.4 4.3 12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+        <circle cx="12" cy="9.6" r="1.9" fill="currentColor"/>
+        <path d="M8.5 18.3 6.4 22M15.5 18.3 17.6 22M12 18.4V22" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+      Zupp<b>Trade</b>
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#signal">Signal</a>
+      <a href="#trade">Trade</a>
+      <a href="#monitor">Monitor</a>
+      <a href="#futures">Futures</a>
+      <a href="#trust">Trust</a>
+    </nav>
+    <button class="toggle" id="themeBtn" type="button" aria-label="Switch colour theme">Theme</button>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap">
+      <p class="eyebrow reveal">Automated Nifty&nbsp;50 · Rule-based · Auditable</p>
+      <h1 class="reveal">Consistency, <span class="hl">engineered</span> — not big wins, gambled.</h1>
+      <p class="lede reveal">An automated Nifty&nbsp;50 trading system covering weekly options and a disciplined intraday-futures engine. Every trade is rule-based, repeatable, and sized to your risk — and it doesn't stop at entry: positions monitor themselves and exit by rule.</p>
+      <div class="hero-tags reveal">
+        <span class="tag"><span class="dot">▪</span> Weekly options spreads</span>
+        <span class="tag"><span class="dot">▪</span> Intraday futures engine</span>
+        <span class="tag"><span class="dot">▪</span> Self-monitoring exits</span>
+        <span class="tag"><span class="dot">▪</span> Nothing is a black box</span>
+      </div>
+
+      <div class="signal-strip reveal" aria-label="Illustrative signal output">
+        <div class="bar">
+          <div class="cell">
+            <div class="lab">Direction</div>
+            <div class="val bull">Bullish</div>
+            <div class="sub">bias derived from five evidence tiers</div>
+          </div>
+          <div class="cell">
+            <div class="lab">Strength</div>
+            <div class="val">Mild</div>
+            <div class="sub">how decisively the evidence leans</div>
+          </div>
+          <div class="cell">
+            <div class="lab">Confidence</div>
+            <div class="val">High</div>
+            <div class="sub">tier agreement, adjusted for volatility</div>
+          </div>
+          <div class="cell">
+            <div class="lab">Guardrail</div>
+            <div class="val warnc">Watching VIX</div>
+            <div class="sub">extreme volatility halts auto-trading</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PHILOSOPHY -->
+  <section class="block" id="why">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">The principle</p>
+        <h2>Built to be understood, line by line.</h2>
+        <p>Every signal, trade, and exit traces back to the exact inputs and simple maths behind it — figures you can re-derive yourself. The edge is discipline, not opacity.</p>
+      </div>
+      <div class="pillars">
+        <div class="pillar reveal">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <h3>Rule-based &amp; repeatable</h3>
+          <p>The same inputs always produce the same decision. No discretion, no mood, no improvisation — deterministic behaviour you can audit and trust.</p>
+        </div>
+        <div class="pillar reveal">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3 4 6v6c0 4.4 3.2 7.6 8 9 4.8-1.4 8-4.6 8-9V6l-8-3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m9 12 2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <h3>Sized to your risk</h3>
+          <p>Position size is set so a realistic bad outcome stays inside a small, fixed slice of your capital — decided before the trade, never after.</p>
+        </div>
+        <div class="pillar reveal">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 20V10M9 20V4M15 20v-7M21 20V8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <h3>Fully re-derivable</h3>
+          <p>No float-point fudge, no hidden model. Precision arithmetic throughout and a complete audit trail from signal to settled P&amp;L.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SIGNAL ENGINE -->
+  <section class="block" id="signal">
+    <div class="wrap">
+      <div class="block-lead reveal">
+        <div>
+          <p class="eyebrow">How a direction is decided</p>
+          <h2 style="font-size:clamp(1.85rem,3.6vw,2.7rem);margin:.5rem 0 .7rem">Five tiers of evidence, one weighted verdict.</h2>
+        </div>
+        <p style="color:var(--muted)">Each tier casts a simple <span class="k">bullish / neutral / bearish</span> vote. Some tiers carry more weight than others. Their weighted result becomes your bias, strength, and confidence.</p>
+      </div>
+
+      <div class="engine reveal" role="table" aria-label="Five scoring tiers">
+        <div class="tier-row">
+          <div class="tier-name"><span class="n">TIER 01</span>Price structure</div>
+          <div class="tier-ev">Where price sits against its moving averages, trend of highs and lows, put-call balance, and max-pain.</div>
+          <div class="wt"><div class="wt-track"><div class="wt-fill" style="width:100%"></div></div><span class="wt-lab">Core weight</span></div>
+          <div class="votes"><span class="chip on-bull">+</span><span class="chip off">0</span><span class="chip off">−</span></div>
+        </div>
+        <div class="tier-row">
+          <div class="tier-name"><span class="n">TIER 02</span>Technical indicators</div>
+          <div class="tier-ev">Moving-average crossovers, RSI, MACD and candlestick patterns — the classic trend and momentum reads.</div>
+          <div class="wt"><div class="wt-track"><div class="wt-fill" style="width:66%"></div></div><span class="wt-lab">Strong</span></div>
+          <div class="votes"><span class="chip on-bull">+</span><span class="chip off">0</span><span class="chip off">−</span></div>
+        </div>
+        <div class="tier-row">
+          <div class="tier-name"><span class="n">TIER 03</span>Institutional flow</div>
+          <div class="tier-ev">Where the big money is moving — foreign and domestic institutional buying and selling across futures, options and cash.</div>
+          <div class="wt"><div class="wt-track"><div class="wt-fill" style="width:100%"></div></div><span class="wt-lab">Core weight</span></div>
+          <div class="votes"><span class="chip off">+</span><span class="chip on-neu">0</span><span class="chip off">−</span></div>
+        </div>
+        <div class="tier-row">
+          <div class="tier-name"><span class="n">TIER 04</span>Volatility &amp; macro</div>
+          <div class="tier-ev">The direction of volatility, open-interest shifts, and the overnight global lead from GIFT Nifty.</div>
+          <div class="wt"><div class="wt-track"><div class="wt-fill" style="width:33%"></div></div><span class="wt-lab">Context</span></div>
+          <div class="votes"><span class="chip on-bull">+</span><span class="chip off">0</span><span class="chip off">−</span></div>
+        </div>
+        <div class="tier-row">
+          <div class="tier-name"><span class="n">TIER 05</span>Commentary &amp; news</div>
+          <div class="tier-ev">News sentiment and — when you provide it — your own market view, read into a structured signal.</div>
+          <div class="wt"><div class="wt-track"><div class="wt-fill" style="width:33%"></div></div><span class="wt-lab">Context</span></div>
+          <div class="votes"><span class="chip off">+</span><span class="chip on-neu">0</span><span class="chip off">−</span></div>
+        </div>
+
+        <div class="engine-foot">
+          <div class="flowline">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Weighted composite
+          </div>
+          <div class="composite">
+            <div class="m"><div class="lab">Bias</div><div class="v bull">Bullish</div></div>
+            <div class="m"><div class="lab">Strength</div><div class="v">Mild</div></div>
+            <div class="m"><div class="lab">Confidence</div><div class="v">High</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="guard reveal">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3 2 20h20L12 3Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M12 10v4M12 17h.01" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <p><b>Confidence bends with volatility.</b> Calm markets lift conviction; stressed markets dampen it. When volatility turns <b>extreme, the system refuses to auto-trade</b> — it flags the situation to you instead of guessing.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRADE BUILD -->
+  <section class="block" id="trade">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">From direction to trade</p>
+        <h2>A direction only becomes a trade if it survives the gauntlet.</h2>
+        <p>The bias is turned into a specific options spread, then forced through four quality gates. Fail any hard gate and the trade is rejected — standing aside is a valid outcome.</p>
+      </div>
+
+      <div class="buildflow reveal">
+        <div class="step"><span class="s">STEP 01</span><h4>Pick the strategy</h4><p>Chosen from your bias, the volatility regime, and how richly options are priced.</p></div>
+        <div class="step"><span class="s">STEP 02</span><h4>Map the move</h4><p>Estimate how far the market can realistically travel by expiry — cross-checked two ways.</p></div>
+        <div class="step"><span class="s">STEP 03</span><h4>Select strikes</h4><p>Sell beyond that likely range, with a defined-risk spread around it.</p></div>
+        <div class="step"><span class="s">STEP 04</span><h4>Size the position</h4><p>Lots set so a realistic loss stays within a fixed slice of capital.</p></div>
+      </div>
+
+      <div class="gates">
+        <div class="gate reveal">
+          <svg class="check" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/><path d="m8.5 12 2.4 2.4L15.6 9.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="num">GATE 01</div>
+          <h3>Probability of profit</h3>
+          <p>A genuine, Black-Scholes-derived chance of finishing in profit — not a hopeful guess.</p>
+          <div class="type">Hard gate</div>
+        </div>
+        <div class="gate reveal">
+          <svg class="check" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/><path d="m8.5 12 2.4 2.4L15.6 9.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="num">GATE 02</div>
+          <h3>Loss stays contained</h3>
+          <p>A realistic worst case must fit inside a small, fixed slice of your capital — this sizes the trade.</p>
+          <div class="type">Sizing gate</div>
+        </div>
+        <div class="gate reveal">
+          <svg class="check" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/><path d="m8.5 12 2.4 2.4L15.6 9.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="num">GATE 03</div>
+          <h3>Internally consistent</h3>
+          <p>The trade's own probability measures must agree with each other before it's allowed through.</p>
+          <div class="type">Hard gate</div>
+        </div>
+        <div class="gate reveal">
+          <svg class="check" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/><path d="m8.5 12 2.4 2.4L15.6 9.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="num">GATE 04</div>
+          <h3>Worth the capital</h3>
+          <p>The expected return must clear a threshold scaled to how long the trade is held.</p>
+          <div class="type">Hard gate</div>
+        </div>
+      </div>
+      <p class="gate-note reveal">Clear every gate → a sized trade card. Fail one → rejected, with the reason shown.</p>
+    </div>
+  </section>
+
+  <!-- MONITOR -->
+  <section class="block" id="monitor">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">After entry</p>
+        <h2>The trade watches itself.</h2>
+        <p>A live position is never place-and-forget. It's re-checked on a schedule through the session, and each check picks one of four actions — with exit levels that tighten as expiry approaches.</p>
+      </div>
+
+      <div class="track reveal">
+        <div class="stage" data-heat="1">
+          <div class="st"><span class="d"></span>Action</div>
+          <h3>Hold</h3>
+          <p>The trade is behaving. Nothing to do — keep letting time work in its favour.</p>
+        </div>
+        <div class="stage" data-heat="2">
+          <div class="st"><span class="d"></span>Action</div>
+          <h3>Watch</h3>
+          <p>The market is approaching a level of interest. Probability is re-checked more closely.</p>
+        </div>
+        <div class="stage" data-heat="3">
+          <div class="st"><span class="d"></span>Action</div>
+          <h3>Readjust</h3>
+          <p>Pressure is building. The position can be rolled or tightened to defend it.</p>
+        </div>
+        <div class="stage" data-heat="4">
+          <div class="st"><span class="d"></span>Action</div>
+          <h3>Exit</h3>
+          <p>A defence line is breached. All legs are closed — decisively, by rule.</p>
+        </div>
+      </div>
+
+      <div class="overrides">
+        <div class="ov reveal">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <div><h4>Volatility spike → immediate exit</h4><p>A sharp intraday jump in volatility forces the position closed regardless of price.</p></div>
+        </div>
+        <div class="ov reveal">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" stroke-width="1.5"/><path d="M10 9v6M14 9v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+          <div><h4>Extreme volatility → pause &amp; alert</h4><p>When conditions turn extreme, automated monitoring pauses and hands the decision to you.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FUTURES -->
+  <section class="block" id="futures">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">A separate discipline</p>
+        <h2>The intraday futures engine.</h2>
+        <p>A standalone Nifty-futures strategy: intraday only, hard stop-loss, no overnight risk. It runs twice around the open — a primed plan first, then a confirmation of which setup is actually live.</p>
+      </div>
+
+      <div class="futures-panel">
+        <div class="ladder reveal" aria-label="Reference levels from yesterday's range">
+          <div class="lv up"><span class="nm">H4 · breakout</span><span class="tagn">UPPER</span></div>
+          <div class="lv up"><span class="nm">H3 · rotation cap</span><span class="zone">breakout zone above</span></div>
+          <div class="lv pv"><span class="nm">Pivot</span><span class="zone">range zone</span></div>
+          <div class="lv dn"><span class="nm">L3 · rotation floor</span><span class="zone">breakdown zone below</span></div>
+          <div class="lv dn"><span class="nm">L4 · breakdown</span><span class="tagn">LOWER</span></div>
+        </div>
+        <div>
+          <p style="color:var(--muted); font-size:1.05rem">Yesterday's range draws a ladder of reference levels (the Camarilla method). Around them sits a grid of four disciplined setups — <b style="color:var(--ink)">bias picks the side, confidence sets how aggressively, and a compression check can veto the trade entirely.</b></p>
+          <div class="arms">
+            <div class="arm long reveal"><span class="dir">Long</span><h4>Rotation</h4><p>Reclaim the floor and fade back toward the middle of the range.</p></div>
+            <div class="arm short reveal"><span class="dir">Short</span><h4>Rotation</h4><p>Reject the cap and fade back down through the range.</p></div>
+            <div class="arm long reveal"><span class="dir">Long</span><h4>Breakout</h4><p>Accept above the upper band and run with the move.</p></div>
+            <div class="arm short reveal"><span class="dir">Short</span><h4>Breakdown</h4><p>Lose the lower band and ride the break lower.</p></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fnote">
+        <div class="n reveal"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2v20M2 12h20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span><b>Trigger, never anticipation.</b> A trade is placed only when price actually reaches the level and confirms — no chasing.</span></div>
+        <div class="n reveal"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12h4l2-6 4 12 2-6h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span><b>Stop and target, set upfront.</b> Every trade carries both a hard stop-loss and a profit target from the moment it's placed.</span></div>
+        <div class="n reveal"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 18 18 6M8 6h10v10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span><b>Flat by the close.</b> No overnight exposure — the engine squares off within the session, every day.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TRUST -->
+  <section class="block" id="trust">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">Control &amp; verification</p>
+        <h2>Three ways the system keeps you in command.</h2>
+      </div>
+      <div class="trust">
+        <div class="tc reveal">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 3h9l4 4v14H6V3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M14 3v5h5M9 13h6M9 17h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <h3>Audit</h3>
+          <p>Every trade is recorded end to end — the signal that started it, the trade built, the fills paid, and every check that followed.</p>
+          <ul>
+            <li>How often the approach wins</li>
+            <li>How much of the possible profit it kept</li>
+            <li>Whether the signal was actually right</li>
+          </ul>
+        </div>
+        <div class="tc reveal">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6c0 4-2 6-2 6h16s-2-2-2-6a6 6 0 0 0-6-6Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M10 20a2 2 0 0 0 4 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          <h3>Critical alerts</h3>
+          <p>Whenever the system can't be certain your position is safe, it stops and shows the full picture rather than guessing.</p>
+          <ul>
+            <li>An order leg didn't fill — the other is auto-closed</li>
+            <li>An exit couldn't complete, or fills came in worse than expected</li>
+            <li>Each alert stays until you acknowledge it</li>
+          </ul>
+        </div>
+        <div class="tc reveal">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 4v16l14-8L5 4Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+          <h3>Simulation</h3>
+          <p>Replay a full multi-day trade in minutes against saved market data — touching no live market and placing no real orders.</p>
+          <ul>
+            <li>The whole flow runs: signal, trade, monitoring, exit</li>
+            <li>Verify exactly how a setup behaves</li>
+            <li>Tweak the scenario and re-run "what-ifs" before trusting it live</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CLOSE -->
+  <section class="close">
+    <div class="wrap">
+      <h2 class="reveal">A system you can <span class="hl">interrogate</span>, not just obey.</h2>
+      <p class="reveal">Rule-based signals, defined-risk trades, self-monitoring exits, and a full audit trail — so every outcome traces back to inputs you can check yourself. That's the whole pitch: consistency you can verify.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot-in">
+    <a class="brand" href="#top" aria-label="ZuppTrade">
+      <svg class="mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M12 2c3.6 2.3 5.2 6 5.2 10.1 0 2.2-.6 4.3-1.7 6.1H8.5c-1.1-1.8-1.7-3.9-1.7-6.1C6.8 8 8.4 4.3 12 2Z" fill="currentColor" opacity=".18"/>
+        <path d="M12 2c3.6 2.3 5.2 6 5.2 10.1 0 2.2-.6 4.3-1.7 6.1H8.5c-1.1-1.8-1.7-3.9-1.7-6.1C6.8 8 8.4 4.3 12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+        <circle cx="12" cy="9.6" r="1.9" fill="currentColor"/>
+      </svg>
+      Zupp<b>Trade</b>
+    </a>
+    <p class="disc"><b>For evaluation and discussion.</b> ZuppTrade is an automated trading assistant for Nifty&nbsp;50 options and index futures. Trading in equity derivatives carries substantial risk of loss and is not suitable for every investor; past or simulated performance is not indicative of future results. Nothing here is investment advice. Figures shown are illustrative of the system's logic, not live quotes or a performance record.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var root=document.documentElement, btn=document.getElementById('themeBtn');
+  function apply(t){ if(t==='dark'||t==='light'){root.setAttribute('data-theme',t);} else {root.removeAttribute('data-theme');} }
+  try{ var saved=localStorage.getItem('zt-theme'); if(saved) apply(saved); }catch(e){}
+  btn.addEventListener('click',function(){
+    var cur=root.getAttribute('data-theme');
+    var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var eff = cur || (sysDark?'dark':'light');
+    var next = eff==='dark' ? 'light' : 'dark';
+    apply(next);
+    try{ localStorage.setItem('zt-theme',next); }catch(e){}
+  });
+
+  var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var els=[].slice.call(document.querySelectorAll('.reveal'));
+  if(reduce || !('IntersectionObserver' in window)){ els.forEach(function(el){el.classList.add('in');}); return; }
+  var io=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){ if(en.isIntersecting){ en.target.classList.add('in'); io.unobserve(en.target); } });
+  },{threshold:.12, rootMargin:'0px 0px -8% 0px'});
+  els.forEach(function(el){io.observe(el);});
+})();
+</script>

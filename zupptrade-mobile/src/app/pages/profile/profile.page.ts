@@ -3,8 +3,9 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
   IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton, IonContent,
-  IonBadge, IonRange, IonButton, IonInput, IonItem, IonLabel,
+  IonBadge, IonRange, IonButton, IonInput, IonItem, IonLabel, IonToast,
 } from '@ionic/angular/standalone';
+import { AppHeaderComponent } from '../../shared/components/app-header/app-header.component';
 import { Router } from '@angular/router';
 import { AgentUserService } from '../../core/services/agent-user.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -27,22 +28,12 @@ const TIERS: { key: TierKey; label: string }[] = [
   selector: 'app-profile',
   standalone: true,
   imports: [
-    CommonModule, FormsModule,
+    CommonModule, FormsModule, AppHeaderComponent,
     IonHeader, IonToolbar, IonTitle, IonButtons, IonBackButton, IonContent,
-    IonBadge, IonRange, IonButton, IonInput, IonItem, IonLabel,
+    IonBadge, IonRange, IonButton, IonInput, IonItem, IonLabel, IonToast,
   ],
   template: `
-    <ion-header>
-      <ion-toolbar style="--background:#ffffff; --border-color:#E2E8F0;">
-        <ion-buttons slot="start">
-          <ion-back-button defaultHref="/" text=""></ion-back-button>
-        </ion-buttons>
-        <ion-title style="color:#1B4FA8;">Profile</ion-title>
-        <ion-buttons slot="end">
-          <ion-badge [color]="isSim ? 'warning' : 'success'" style="margin-right:10px;">{{ modeLabel }}</ion-badge>
-        </ion-buttons>
-      </ion-toolbar>
-    </ion-header>
+    <app-header title="Profile"></app-header>
 
     <ion-content class="ion-padding">
 
@@ -87,7 +78,7 @@ const TIERS: { key: TierKey; label: string }[] = [
         </div>
 
         <div *ngIf="saveError" class="error-banner" style="margin-top:8px;">{{ saveError }}</div>
-        <div *ngIf="saveSuccess" style="color:var(--zt-green); font-size:12px; text-align:center; margin-top:8px;">Saved ✓</div>
+        <ion-toast [isOpen]="saveSuccess" message="Profile saved" [duration]="2000" position="bottom" (didDismiss)="saveSuccess = false"></ion-toast>
 
         <ion-button expand="block" style="margin-top:10px;" [disabled]="!canSave" (click)="save()">
           {{ saving ? 'Saving…' : 'Save Changes' }}

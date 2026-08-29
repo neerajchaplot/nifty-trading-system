@@ -22,4 +22,9 @@ export class Agent1Service {
   health(): Observable<{ status: string; lastRun: string; dataFreshness: string }> {
     return this.http.get<{ status: string; lastRun: string; dataFreshness: string }>(`${this.base}/health`);
   }
+
+  /** Backend-authoritative next expiry (holiday-aware) — never compute this client-side. */
+  nextExpiry(): Observable<{ nextExpiry: string; allUpcoming?: string[] }> {
+    return this.http.get<{ nextExpiry: string; allUpcoming?: string[] }>(`${this.base}/next-expiry`);
+  }
 }

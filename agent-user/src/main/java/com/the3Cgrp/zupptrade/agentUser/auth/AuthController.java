@@ -73,13 +73,17 @@ public class AuthController {
 
     // ── Helpers ───────────────────────────────────────────────
 
+    // Channel marker is joined with '.', an RFC 3986 unreserved character.
+    // A pipe ('|') is a reserved char that Upstox echoes un-encoded in the
+    // callback URL, which Tomcat's request-line parser rejects with HTTP 400.
+    // A UUID never contains a dot, so ".mobile"/".web" parse unambiguously.
     private static String newState(String client) {
         boolean mobile = "mobile".equalsIgnoreCase(client);
-        return UUID.randomUUID() + "|" + (mobile ? "mobile" : "web");
+        return UUID.randomUUID() + "." + (mobile ? "mobile" : "web");
     }
 
     private static boolean isMobile(String state) {
-        return state != null && state.endsWith("|mobile");
+        return state != null && state.endsWith(".mobile");
     }
 
     /** Web → uiRedirectUri; mobile → mobileRedirectUri. Tokens in the fragment (unchanged). */

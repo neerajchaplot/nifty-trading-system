@@ -35,7 +35,7 @@ class AuthControllerTest {
     void googleCallback_mobileState_redirectsToDeepLinkWithTokens() {
         when(authService.loginWithGoogle("code")).thenReturn(pair);
 
-        ResponseEntity<Void> resp = controller.googleCallback("code", "uuid|mobile");
+        ResponseEntity<Void> resp = controller.googleCallback("code", "uuid.mobile");
 
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.FOUND);
         String loc = resp.getHeaders().getLocation().toString();
@@ -48,7 +48,7 @@ class AuthControllerTest {
     @Test
     void googleCallback_webState_redirectsToWebUi() {
         when(authService.loginWithGoogle("code")).thenReturn(pair);
-        String loc = controller.googleCallback("code", "uuid|web").getHeaders().getLocation().toString();
+        String loc = controller.googleCallback("code", "uuid.web").getHeaders().getLocation().toString();
         assertThat(loc).startsWith("https://web.example.com/auth/callback#");
     }
 
@@ -62,7 +62,7 @@ class AuthControllerTest {
     @Test
     void upstoxCallback_mobileState_redirectsToDeepLink() {
         when(authService.loginWithUpstox("code")).thenReturn(pair);
-        String loc = controller.upstoxCallback("code", "uuid|mobile").getHeaders().getLocation().toString();
+        String loc = controller.upstoxCallback("code", "uuid.mobile").getHeaders().getLocation().toString();
         assertThat(loc).startsWith("zupptrade://auth/callback#");
     }
 
@@ -74,7 +74,7 @@ class AuthControllerTest {
 
         ArgumentCaptor<String> state = ArgumentCaptor.forClass(String.class);
         verify(google).buildAuthorizationUrl(state.capture());
-        assertThat(state.getValue()).endsWith("|mobile");
+        assertThat(state.getValue()).endsWith(".mobile");
     }
 
     @Test
@@ -85,6 +85,6 @@ class AuthControllerTest {
 
         ArgumentCaptor<String> state = ArgumentCaptor.forClass(String.class);
         verify(upstox).buildAuthorizationUrl(state.capture());
-        assertThat(state.getValue()).endsWith("|web");
+        assertThat(state.getValue()).endsWith(".web");
     }
 }

@@ -22,7 +22,7 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     catchError((err: HttpErrorResponse) => {
       if (err.status === 401 && !isAuthEndpoint) {
         auth.logout();
-        router.navigate(['/login']);
+        router.navigate(['/login'], { queryParams: { reason: 'expired' } });
       }
       return throwError(() => err);
     }),

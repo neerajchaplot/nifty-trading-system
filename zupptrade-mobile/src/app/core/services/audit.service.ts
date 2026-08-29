@@ -1,12 +1,13 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../../environments/environment';
 import { PortfolioSummary, SignalQuality, TradeListResponse } from '../models/audit.models';
 
 @Injectable({ providedIn: 'root' })
 export class AuditService {
   private readonly http = inject(HttpClient);
-  private readonly base = '/api/agent4';
+  private readonly base = environment.agent4BaseUrl;
 
   getSummary(from?: string, to?: string): Observable<PortfolioSummary> {
     let params = new HttpParams();

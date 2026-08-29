@@ -1,5 +1,6 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { ActivatedRoute } from '@angular/router';
 import { IonContent } from '@ionic/angular/standalone';
 import { AuthService, AuthProvider } from '../../core/services/auth.service';
 
@@ -12,6 +13,8 @@ import { AuthService, AuthProvider } from '../../core/services/auth.service';
       <div class="login-wrap">
         <img src="assets/wordmark-transparent.png" alt="ZuppTrade" class="login-logo">
         <div class="login-tag">Nifty 50 Options — sign in to continue</div>
+
+        <div class="login-alert" *ngIf="sessionExpired">Your session expired — please sign in again.</div>
 
         <button class="login-btn login-upstox" (click)="login('upstox')">
           <span class="btn-title">Continue with Upstox</span>
@@ -41,6 +44,7 @@ import { AuthService, AuthProvider } from '../../core/services/auth.service';
     }
     .login-logo { height: 44px; width: auto; object-fit: contain; margin-bottom: 4px; }
     .login-tag { font-size: 13px; color: var(--zt-sub); margin-bottom: 12px; text-align: center; }
+    .login-alert { font-size: 12px; color: var(--zt-amber); background: rgba(217,119,6,0.12); border: 1px solid rgba(217,119,6,0.3); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; text-align: center; max-width: 340px; }
     .login-btn {
       width: 100%;
       max-width: 340px;
@@ -64,7 +68,11 @@ import { AuthService, AuthProvider } from '../../core/services/auth.service';
   `],
 })
 export class LoginPage {
-  constructor(private auth: AuthService) {}
+  sessionExpired: boolean;
+
+  constructor(private auth: AuthService, route: ActivatedRoute) {
+    this.sessionExpired = route.snapshot.queryParamMap.get('reason') === 'expired';
+  }
 
   login(provider: AuthProvider): void {
     this.auth.startLogin(provider);

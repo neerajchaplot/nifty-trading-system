@@ -9,6 +9,7 @@ export interface Agent1Signal {
   compositeScore: number;
   confidenceScore: number;
   confidence: Confidence;
+  spot: number | null;
   vixLevel: number | null;
   vixRegime: VixRegime | null;
   vixDirection: string | null;
