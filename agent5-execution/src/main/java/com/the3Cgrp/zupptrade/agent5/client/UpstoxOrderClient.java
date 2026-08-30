@@ -107,6 +107,10 @@ public class UpstoxOrderClient {
         public String getOrderBook() {
             return token == null ? UpstoxOrderClient.this.getOrderBook(null) : UpstoxOrderClient.this.getOrderBook(token);
         }
+        // TEMP DIAGNOSTIC — data-plane read with the same token. Remove after Upstox diagnosis.
+        public String getUserProfile() {
+            return token == null ? UpstoxOrderClient.this.getUserProfileRaw(null) : UpstoxOrderClient.this.getUserProfileRaw(token);
+        }
         public TaggedOrdersResponse getOrderDetailsByTag(String tag) {
             return token == null ? UpstoxOrderClient.this.getOrderDetailsByTag(tag) : UpstoxOrderClient.this.getOrderDetailsByTag(tag, token);
         }
@@ -227,6 +231,18 @@ public class UpstoxOrderClient {
         return withRetry("getOrderBook",
                 () -> orderReadRestClient.get()
                         .uri("/v2/order/retrieve-all")
+                        .headers(h -> applyBearer(h, bearerToken))
+                        .retrieve()
+                        .body(String.class));
+    }
+
+    // TEMP DIAGNOSTIC: data-plane probe with the SAME token (api.upstox.com /v2/user/profile).
+    // If this succeeds while getOrderBook 401s, the token is valid but the app lacks ORDER-API access.
+    public String getUserProfileRaw(String bearerToken) {
+        log.info("upstox.diag.profile.read");
+        return withRetry("getUserProfile",
+                () -> marketRestClient.get()
+                        .uri("/v2/user/profile")
                         .headers(h -> applyBearer(h, bearerToken))
                         .retrieve()
                         .body(String.class));

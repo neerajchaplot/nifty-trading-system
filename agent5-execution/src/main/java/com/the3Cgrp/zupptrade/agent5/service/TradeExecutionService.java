@@ -139,15 +139,29 @@ public class TradeExecutionService {
     public String diagnoseOrderRead(UUID tradeId) {
         TradeOwner owner = readTradeOwner(tradeId);
         OrderSession upstox = orderClient.session(resolveOwnerToken(owner));
+
+        // Data plane (same endpoint family as the margin call that succeeds).
+        String dataPlane;
+        try {
+            String body = upstox.getUserProfile();
+            dataPlane = "OK len=" + (body == null ? 0 : body.length());
+        } catch (RuntimeException e) {
+            dataPlane = "FAILED " + e.getMessage();
+        }
+
+        // Order plane (same endpoint family as order placement).
+        String orderPlane;
         try {
             String body = upstox.getOrderBook();
-            int len = body == null ? 0 : body.length();
-            log.warn("diag.orderread.ok", kv("tradeId", tradeId), kv("ownerProfile", owner.profileId()), kv("bodyLen", len));
-            return "ORDER_READ_OK ownerProfile=" + owner.profileId() + " bodyLen=" + len;
+            orderPlane = "OK len=" + (body == null ? 0 : body.length());
         } catch (RuntimeException e) {
-            log.warn("diag.orderread.failed", kv("tradeId", tradeId), kv("ownerProfile", owner.profileId()), kv("error", e.getMessage()));
-            return "ORDER_READ_FAILED ownerProfile=" + owner.profileId() + " error=" + e.getMessage();
+            orderPlane = "FAILED " + e.getMessage();
         }
+
+        log.warn("diag.token.probe", kv("tradeId", tradeId), kv("ownerProfile", owner.profileId()),
+                kv("dataPlane", dataPlane), kv("orderPlane", orderPlane));
+        return "ownerProfile=" + owner.profileId() + " | DATA(/v2/user/profile): " + dataPlane
+                + " | ORDER(/v2/order/retrieve-all): " + orderPlane;
     }
 
     // ── Entry ───────────────────────────────────────────────────────────────
