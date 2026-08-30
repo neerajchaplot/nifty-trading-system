@@ -139,8 +139,20 @@ public class TradeExecutionService {
     public String diagnoseOrderRead(UUID tradeId) {
         TradeOwner owner = readTradeOwner(tradeId);
         OrderSession upstox = orderClient.session(resolveOwnerToken(owner));
+        return probePlanes("OWNER(" + owner.profileId() + ")", upstox);
+    }
 
-        // Data plane (same endpoint family as the margin call that succeeds).
+    /**
+     * TEMP DIAGNOSTIC — probes the SYSTEM/ADMIN token (the market-data token) against both planes.
+     * session(null) → applyBearer no-ops → the RestClient interceptors fill in the system token.
+     * No trade needed. Tells us if the admin token can reach the ORDER API when a user token can't:
+     * admin ORDER OK = login app not order-enabled (app-scoped); admin ORDER FAILED = account-wide.
+     */
+    public String diagnoseSystemToken() {
+        return probePlanes("SYSTEM/ADMIN", orderClient.session(null));
+    }
+
+    private String probePlanes(String label, OrderSession upstox) {
         String dataPlane;
         try {
             String body = upstox.getUserProfile();
@@ -148,8 +160,6 @@ public class TradeExecutionService {
         } catch (RuntimeException e) {
             dataPlane = "FAILED " + e.getMessage();
         }
-
-        // Order plane (same endpoint family as order placement).
         String orderPlane;
         try {
             String body = upstox.getOrderBook();
@@ -157,10 +167,8 @@ public class TradeExecutionService {
         } catch (RuntimeException e) {
             orderPlane = "FAILED " + e.getMessage();
         }
-
-        log.warn("diag.token.probe", kv("tradeId", tradeId), kv("ownerProfile", owner.profileId()),
-                kv("dataPlane", dataPlane), kv("orderPlane", orderPlane));
-        return "ownerProfile=" + owner.profileId() + " | DATA(/v2/user/profile): " + dataPlane
+        log.warn("diag.token.probe", kv("token", label), kv("dataPlane", dataPlane), kv("orderPlane", orderPlane));
+        return label + " | DATA(/v2/user/profile): " + dataPlane
                 + " | ORDER(/v2/order/retrieve-all): " + orderPlane;
     }
 

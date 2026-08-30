@@ -87,6 +87,13 @@ public class ExecutionController {
         return ResponseEntity.ok(executionService.diagnoseOrderRead(tradeId));
     }
 
+    /** TEMP DIAGNOSTIC — probe the SYSTEM/ADMIN (market-data) token on both planes. No trade needed. */
+    @PostMapping("/diag/order-read-system")
+    public ResponseEntity<String> diagOrderReadSystem() {
+        log.warn("api.diag.order-read-system");
+        return ResponseEntity.ok(executionService.diagnoseSystemToken());
+    }
+
     @PostMapping("/exit/{tradeId}")
     public ResponseEntity<ExitTradeResponse> exit(@PathVariable UUID tradeId,
                                                    @Valid @RequestBody ExitTradeRequest request,
