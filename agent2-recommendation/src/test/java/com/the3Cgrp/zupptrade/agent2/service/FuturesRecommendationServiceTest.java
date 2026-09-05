@@ -2,8 +2,6 @@ package com.the3Cgrp.zupptrade.agent2.service;
 
 import com.the3Cgrp.zupptrade.agent2.config.FuturesConfig;
 import com.the3Cgrp.zupptrade.agent2.client.Agent1ScoreClient;
-import com.the3Cgrp.zupptrade.agent2.client.MarketDataClient;
-import com.the3Cgrp.zupptrade.agent2.client.model.MarketSnapshot;
 import com.the3Cgrp.zupptrade.agent2.domain.entity.FutureTradeLedgerEntity;
 import com.the3Cgrp.zupptrade.agent2.domain.entity.ReferenceDataEntity;
 import com.the3Cgrp.zupptrade.agent2.domain.entity.UserProfileEntity;
@@ -14,6 +12,7 @@ import com.the3Cgrp.zupptrade.agent2.repository.UserProfileRepository;
 import com.the3Cgrp.zupptrade.agent2.util.JsonUtil;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxHistoricalDataClient;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxHistoricalDataClient.UpstoxCandle;
+import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxMarketQuoteClient;
 import com.the3Cgrp.zupptrade.shared.dto.*;
 import com.the3Cgrp.zupptrade.shared.enums.*;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,7 +47,7 @@ class FuturesRecommendationServiceTest {
     private ReferenceDataRepository refRepo;
     private FutureTradeLedgerRepository ledgerRepo;
     private UpstoxHistoricalDataClient historicalClient;
-    private MarketDataClient marketDataClient;
+    private UpstoxMarketQuoteClient marketQuoteClient;
     private FuturesInstrumentResolver instrumentResolver;
 
     private FuturesRecommendationService service;
@@ -67,7 +66,7 @@ class FuturesRecommendationServiceTest {
         refRepo = mock(ReferenceDataRepository.class);
         ledgerRepo = mock(FutureTradeLedgerRepository.class);
         historicalClient = mock(UpstoxHistoricalDataClient.class);
-        marketDataClient = mock(MarketDataClient.class);
+        marketQuoteClient = mock(UpstoxMarketQuoteClient.class);
         instrumentResolver = mock(FuturesInstrumentResolver.class);
 
         FuturesPlanEngine engine = new FuturesPlanEngine(
@@ -76,8 +75,13 @@ class FuturesRecommendationServiceTest {
                 new CostModel(), new CompressionGate(), new PositionSizer(), new MarginEstimator(),
                 new ConfidenceGate());
 
+        // Clock is 09:30 IST → SessionOpenResolver takes the actual-open branch (today's daily open).
+        SessionOpenResolver sessionOpenResolver =
+                new SessionOpenResolver(marketQuoteClient, cfg, clock);
+
         service = new FuturesRecommendationService(agent1ScoreClient, commentaryReader, profileRepo, refRepo,
-                ledgerRepo, historicalClient, marketDataClient, engine, instrumentResolver, cfg, jsonUtil, clock);
+                ledgerRepo, historicalClient, sessionOpenResolver, marketQuoteClient,
+                new ArmReachabilityCalculator(), engine, instrumentResolver, cfg, jsonUtil, clock);
 
         // Mandatory admin commentary present → Agent 1 regenerates a fresh signal from it.
         when(commentaryReader.findCommentary(any())).thenReturn(Optional.of("admin commentary"));
@@ -99,8 +103,8 @@ class FuturesRecommendationServiceTest {
         when(refRepo.findById("nifty.lot.size")).thenReturn(Optional.of(lot));
 
         when(historicalClient.fetchNiftyDailyCandles(anyInt())).thenReturn(workedExampleCandles());
-        when(marketDataClient.fetchSnapshot())
-                .thenReturn(new MarketSnapshot(new BigDecimal("24300"), new BigDecimal("13"), LocalDateTime.now()));
+        // Live level inside the worked-example rotation band → arms judged REACHABLE by default.
+        when(marketQuoteClient.fetchNiftySpot()).thenReturn(new BigDecimal("24300"));
         when(instrumentResolver.resolveCurrentMonthFut()).thenReturn("NSE_FO|54321");
         when(ledgerRepo.countByTradeDate(any())).thenReturn(0L);
         when(ledgerRepo.countByUserProfileIdAndTradeDateAndStatusIn(any(), any(), any())).thenReturn(0L);
@@ -111,6 +115,10 @@ class FuturesRecommendationServiceTest {
     private List<UpstoxCandle> workedExampleCandles() {
         List<UpstoxCandle> candles = new ArrayList<>();
         LocalDate today = LocalDate.now(clock);
+        // Today's forming candle — its open (24300) is the actual session open post-9:15 (→ RANGE zone).
+        candles.add(new UpstoxCandle(today,
+                new BigDecimal("24300"), new BigDecimal("24350"),
+                new BigDecimal("24280"), new BigDecimal("24320"), 0L));
         candles.add(new UpstoxCandle(today.minusDays(1),
                 new BigDecimal("24250"), new BigDecimal("24341.39"),
                 new BigDecimal("24196.81"), new BigDecimal("24317.16"), 0L));
@@ -141,7 +149,27 @@ class FuturesRecommendationServiceTest {
         assertThat(longRot.rrGross()).isEqualByComparingTo("2.0");
         assertThat(longRot.lots()).isEqualTo(1);
 
+        // Reachability overlay: live level 24300 is inside the rotation band → REACHABLE, and the
+        // card carries the level it was judged against.
+        assertThat(card.currentLevel()).isEqualByComparingTo("24300");
+        assertThat(longRot.reachability()).isEqualTo(ArmReachability.REACHABLE);
+
         verify(ledgerRepo).save(any(FutureTradeLedgerEntity.class));
+    }
+
+    @Test
+    void confirm_missedArm_isRejected() {
+        // Live level 24400 is above the long-rotation target (24356.92) → the arm is MISSED.
+        when(marketQuoteClient.fetchNiftySpot()).thenReturn(new BigDecimal("24400"));
+        FutureTradeLedgerEntity plan = primedPlanWithArms();
+        UUID planId = UUID.randomUUID();
+        when(ledgerRepo.findById(planId)).thenReturn(Optional.of(plan));
+
+        assertThatThrownBy(() -> service.confirm(new FuturesConfirmRequestDto(
+                planId, ConfirmAction.CONFIRM, FutureArmType.LONG_ROTATION, null)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("missed");
+        assertThat(plan.getStatus()).isEqualTo(FuturePlanStatus.PRIMED); // unchanged — not armed
     }
 
     @Test
@@ -216,7 +244,7 @@ class FuturesRecommendationServiceTest {
                 new BigDecimal("39.76"), new BigDecimal("79.52"), new BigDecimal("2.0"),
                 new BigDecimal("1.8"), new BigDecimal("8.40"), new BigDecimal("45.3"),
                 1, 65, new BigDecimal("2584.40"), new BigDecimal("2584.40"),
-                new BigDecimal("189363.72"), new BigDecimal("1578031.00")));
+                new BigDecimal("189363.72"), new BigDecimal("1578031.00"), null));
         plan.setFourArms(jsonUtil.toJson(arms));
         return plan;
     }

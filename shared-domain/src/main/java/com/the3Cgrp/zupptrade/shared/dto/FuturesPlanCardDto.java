@@ -33,7 +33,12 @@ public record FuturesPlanCardDto(
         // Levels + context
         FuturesCamarillaDto keyLevels,
         FuturesPriorOhlcDto priorOhlc,
+        // The session-open reference used to classify the day's zone: the GIFT-implied open when the
+        // plan is primed pre-market, else today's actual opening print. Fixed for the day (not live spot).
         BigDecimal openPx,
+        // Live Nifty level the arms' reachability was judged against on this read (nullable if the live
+        // level was unavailable). Distinct from openPx — this one moves; openPx is the fixed session open.
+        BigDecimal currentLevel,
         // Gates (display)
         boolean confidenceGatePassed,
         BigDecimal minConfidence,

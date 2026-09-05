@@ -10,23 +10,33 @@ public record UpstoxLegData(
         @JsonProperty("market_data") UpstoxMarketData marketData,
         @JsonProperty("option_greeks") UpstoxOptionGreeks optionGreeks
 ) {
+    // Boxed (Double, not double): Upstox returns null market_data/greeks fields pre-open and for illiquid
+    // deep-OTM strikes. Jackson 3 rejects null → primitive (FAIL_ON_NULL_FOR_PRIMITIVES), which was failing
+    // the whole option-chain parse. `close_price` (previous session close) is Upstox's fallback when the
+    // session has no last-traded-price yet — the mapper prefers ltp and falls back to closePrice.
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record UpstoxMarketData(
-            @JsonProperty("ltp") double ltp,
-            @JsonProperty("oi") double oi,
-            @JsonProperty("prev_oi") double prevOi,
-            @JsonProperty("bid_price") double bidPrice,
-            @JsonProperty("ask_price") double askPrice
+            @JsonProperty("ltp") Double ltp,
+            @JsonProperty("close_price") Double closePrice,
+            @JsonProperty("oi") Double oi,
+            @JsonProperty("prev_oi") Double prevOi,
+            @JsonProperty("bid_price") Double bidPrice,
+            @JsonProperty("ask_price") Double askPrice
             // pcr is NOT here — it lives at data[].pcr (top-level per strike in UpstoxStrikeEntry)
-    ) {}
+    ) {
+        /** Effective price: last-traded price when the session is live, else previous close (pre-open). */
+        public Double effectivePrice() {
+            return (ltp != null && ltp > 0) ? ltp : closePrice;
+        }
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record UpstoxOptionGreeks(
-            @JsonProperty("iv") double iv,
-            @JsonProperty("delta") double delta,
-            @JsonProperty("theta") double theta,
-            @JsonProperty("gamma") double gamma,
-            @JsonProperty("vega") double vega,
-            @JsonProperty("pop") double pop
+            @JsonProperty("iv") Double iv,
+            @JsonProperty("delta") Double delta,
+            @JsonProperty("theta") Double theta,
+            @JsonProperty("gamma") Double gamma,
+            @JsonProperty("vega") Double vega,
+            @JsonProperty("pop") Double pop
     ) {}
 }

@@ -3,6 +3,7 @@ package com.the3Cgrp.zupptrade.agent2.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 import java.math.BigDecimal;
+import java.time.LocalTime;
 
 /**
  * Futures engine settings (spec §5–§6). All calibratable — the spec says validate weights
@@ -36,6 +37,15 @@ public class FuturesConfig {
     /** §6.6 kill-switch — max futures plans a user may commit (ARMED+) per day. */
     private int maxTradesPerDay = 3;
 
+    /**
+     * IST market window. INSIDE [marketOpenTime, marketCloseTime] the session-open reference is
+     * today's actual opening candle; OUTSIDE it (pre-open or post-close) it falls back to the
+     * GIFT-implied open, then last close — the same reference the 09:00 pre-open plan uses.
+     * Bound from "09:15" / "15:30" in application.yml.
+     */
+    private LocalTime marketOpenTime = LocalTime.of(9, 15);
+    private LocalTime marketCloseTime = LocalTime.of(15, 30);
+
     public BigDecimal getMinConfidence() { return minConfidence; }
     public void setMinConfidence(BigDecimal v) { this.minConfidence = v; }
     public BigDecimal getCompressionThreshold() { return compressionThreshold; }
@@ -54,4 +64,8 @@ public class FuturesConfig {
     public void setCompressionLookbackDays(int v) { this.compressionLookbackDays = v; }
     public int getMaxTradesPerDay() { return maxTradesPerDay; }
     public void setMaxTradesPerDay(int v) { this.maxTradesPerDay = v; }
+    public LocalTime getMarketOpenTime() { return marketOpenTime; }
+    public void setMarketOpenTime(LocalTime v) { this.marketOpenTime = v; }
+    public LocalTime getMarketCloseTime() { return marketCloseTime; }
+    public void setMarketCloseTime(LocalTime v) { this.marketCloseTime = v; }
 }

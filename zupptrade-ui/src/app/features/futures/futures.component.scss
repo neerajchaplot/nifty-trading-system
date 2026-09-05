@@ -94,6 +94,11 @@
   background: #f8fafc;
   opacity: 0.6;
 }
+.arm-missed {
+  background: #f8fafc;
+  opacity: 0.55;
+  border-style: dashed;
+}
 
 .arm-head {
   display: flex;
@@ -112,6 +117,7 @@
   .badge-recommended { background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; }
   .badge-allowed { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
   .badge-blocked { background: #f1f5f9; color: #94a3b8; border: 1px solid #e2e8f0; }
+  .badge-missed { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
 }
 
 .arm-levels, .arm-stats {

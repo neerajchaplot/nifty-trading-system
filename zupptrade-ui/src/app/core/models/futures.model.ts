@@ -1,6 +1,7 @@
 import { Bias, Confidence } from './enums';
 import {
   ArmCardStatus,
+  ArmReachability,
   ConfirmAction,
   FutureArmType,
   FuturePlanStatus,
@@ -62,6 +63,8 @@ export interface FuturesArmCard {
   riskTotal: number;
   marginEstimate: number;
   notional: number;
+  // Live, on-read overlay: is this arm's entry still catchable at the current level? (null = unknown)
+  reachability?: ArmReachability | null;
 }
 
 /** Full futures trade card — all four arms plus every calculation. */
@@ -79,6 +82,7 @@ export interface FuturesPlanCard {
   keyLevels: FuturesCamarilla;
   priorOhlc: FuturesPriorOhlc;
   openPx: number;
+  currentLevel?: number | null;   // live Nifty level the arms' reachability was judged against
   confidenceGatePassed: boolean;
   minConfidence: number;
   compressionRci: number;

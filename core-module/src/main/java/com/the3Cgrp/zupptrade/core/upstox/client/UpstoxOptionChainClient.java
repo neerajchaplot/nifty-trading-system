@@ -141,11 +141,11 @@ public class UpstoxOptionChainClient {
     private BigDecimal computePcr(List<UpstoxOptionChainRow> rows) {
         long totalCallOi = rows.stream()
                 .filter(r -> r.callOptions() != null && r.callOptions().marketData() != null)
-                .mapToLong(r -> r.callOptions().marketData().oi())
+                .mapToLong(r -> r.callOptions().marketData().oiOr0())
                 .sum();
         long totalPutOi = rows.stream()
                 .filter(r -> r.putOptions() != null && r.putOptions().marketData() != null)
-                .mapToLong(r -> r.putOptions().marketData().oi())
+                .mapToLong(r -> r.putOptions().marketData().oiOr0())
                 .sum();
         if (totalCallOi == 0) return null;
         return BigDecimal.valueOf(totalPutOi)
@@ -173,13 +173,13 @@ public class UpstoxOptionChainClient {
 
                 // Payout to call buyers: call_OI * max(0, candidatePrice - strike)
                 if (row.callOptions() != null && row.callOptions().marketData() != null) {
-                    long callOi = row.callOptions().marketData().oi();
+                    long callOi = row.callOptions().marketData().oiOr0();
                     BigDecimal callPayout = candidatePrice.subtract(strike).max(BigDecimal.ZERO);
                     totalPayout = totalPayout.add(callPayout.multiply(BigDecimal.valueOf(callOi)));
                 }
                 // Payout to put buyers: put_OI * max(0, strike - candidatePrice)
                 if (row.putOptions() != null && row.putOptions().marketData() != null) {
-                    long putOi = row.putOptions().marketData().oi();
+                    long putOi = row.putOptions().marketData().oiOr0();
                     BigDecimal putPayout = strike.subtract(candidatePrice).max(BigDecimal.ZERO);
                     totalPayout = totalPayout.add(putPayout.multiply(BigDecimal.valueOf(putOi)));
                 }
@@ -198,7 +198,7 @@ public class UpstoxOptionChainClient {
                 .filter(s -> s != null && s.marketData() != null)
                 .mapToLong(s -> {
                     UpstoxMarketData md = s.marketData();
-                    return md.oi() - md.prevOi();
+                    return md.oiOr0() - md.prevOiOr0();
                 })
                 .sum();
     }

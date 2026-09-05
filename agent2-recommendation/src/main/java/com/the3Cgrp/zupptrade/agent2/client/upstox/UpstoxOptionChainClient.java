@@ -130,16 +130,22 @@ public class UpstoxOptionChainClient implements OptionChainClient {
         return new StrikeData(
                 strike,
                 optionType,
-                BigDecimal.valueOf(md.ltp()),
+                // Prefer live LTP; pre-open Upstox returns null ltp with the previous close in close_price.
+                BigDecimal.valueOf(d(md.effectivePrice())),
                 // Upstox returns IV as percentage (e.g. 17.77 = 17.77%) — divide by 100 for B-S formulas expecting decimal
-                greeks != null ? BigDecimal.valueOf(greeks.iv() / 100.0)  : BigDecimal.ZERO,
-                greeks != null ? BigDecimal.valueOf(greeks.delta())        : BigDecimal.ZERO,  // already decimal (-0.169)
+                greeks != null ? BigDecimal.valueOf(d(greeks.iv()) / 100.0)  : BigDecimal.ZERO,
+                greeks != null ? BigDecimal.valueOf(d(greeks.delta()))       : BigDecimal.ZERO,  // already decimal (-0.169)
                 // Upstox returns PoP as percentage (e.g. 82.6 = 82.6%) — divide by 100 for gate checks expecting decimal
-                greeks != null ? BigDecimal.valueOf(greeks.pop() / 100.0) : BigDecimal.ZERO,
-                BigDecimal.valueOf(md.oi()),
-                BigDecimal.valueOf(md.bidPrice()),
-                BigDecimal.valueOf(md.askPrice()),
+                greeks != null ? BigDecimal.valueOf(d(greeks.pop()) / 100.0) : BigDecimal.ZERO,
+                BigDecimal.valueOf(d(md.oi())),
+                BigDecimal.valueOf(d(md.bidPrice())),
+                BigDecimal.valueOf(d(md.askPrice())),
                 leg.instrumentKey()  // carried through for Agent 5 order placement
         );
+    }
+
+    /** Null-safe unbox: illiquid deep-OTM strikes return null market-data/greeks fields — treat as 0. */
+    private static double d(Double v) {
+        return v != null ? v : 0.0;
     }
 }

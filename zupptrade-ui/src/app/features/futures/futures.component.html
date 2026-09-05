@@ -60,6 +60,7 @@
     <div class="levels">
       <app-metric-box label="Prev close" [value]="fmt(c.priorOhlc.close)"></app-metric-box>
       <app-metric-box label="Open" [value]="fmt(c.openPx)"></app-metric-box>
+      <app-metric-box label="Now" [value]="fmt(c.currentLevel)" *ngIf="c.currentLevel != null"></app-metric-box>
       <app-metric-box label="Pivot" [value]="fmt(c.keyLevels.pivot)"></app-metric-box>
       <app-metric-box label="Upper trigger (H3)" [value]="fmt(c.keyLevels.h3)"></app-metric-box>
       <app-metric-box label="Upper target (H4)" [value]="fmt(c.keyLevels.h4)"></app-metric-box>
@@ -72,7 +73,8 @@
       <div *ngFor="let arm of c.arms; trackBy: trackArm" [ngClass]="armCssClass(arm)">
         <div class="arm-head">
           <span class="arm-label">{{ arm.label }}</span>
-          <span class="arm-badge" [ngClass]="'badge-' + arm.status.toLowerCase()">
+          <span class="arm-badge badge-missed" *ngIf="isMissed(arm)">Missed</span>
+          <span class="arm-badge" [ngClass]="'badge-' + arm.status.toLowerCase()" *ngIf="!isMissed(arm)">
             {{ statusBadge(arm) }}
           </span>
         </div>
@@ -102,6 +104,9 @@
             Choose this trade
           </button>
           <span class="blocked-reason" *ngIf="arm.status === 'BLOCKED'">{{ arm.blockedReason }}</span>
+          <span class="blocked-reason" *ngIf="isMissed(arm) && arm.status !== 'BLOCKED'">
+            Price has moved past this setup — entry no longer reachable.
+          </span>
         </div>
       </div>
     </div>

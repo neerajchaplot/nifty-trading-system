@@ -14,7 +14,9 @@ public record FuturesPlanInputs(
         BigDecimal priorHigh,
         BigDecimal priorLow,
         BigDecimal priorClose,
-        BigDecimal openPx,
+        // The session-open reference for open-zone classification: the GIFT-implied open pre-market,
+        // else today's actual opening print. Fixed for the day — NOT the drifting live spot.
+        BigDecimal sessionOpen,
         Bias bias,
         BigDecimal confidenceScore,
         BigDecimal prevDayRange,

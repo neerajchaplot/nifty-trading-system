@@ -104,7 +104,12 @@ export class FuturesComponent {
   // ── View helpers ───────────────────────────────────────────────────────
 
   isSelectable(arm: FuturesArmCard): boolean {
-    return arm.status !== 'BLOCKED' && this.card?.status === 'PRIMED';
+    return arm.status !== 'BLOCKED' && !this.isMissed(arm) && this.card?.status === 'PRIMED';
+  }
+
+  /** True when the live level has left this arm's stop→target band — its entry won't come. */
+  isMissed(arm: FuturesArmCard): boolean {
+    return arm.reachability === 'MISSED';
   }
 
   /** Plain-English activation condition shown on a chosen trade. */
@@ -123,7 +128,8 @@ export class FuturesComponent {
   }
 
   armCssClass(arm: FuturesArmCard): string {
-    return `arm arm-${arm.status.toLowerCase()}`;
+    const base = `arm arm-${arm.status.toLowerCase()}`;
+    return this.isMissed(arm) ? `${base} arm-missed` : base;
   }
 
   statusBadge(arm: FuturesArmCard): string {

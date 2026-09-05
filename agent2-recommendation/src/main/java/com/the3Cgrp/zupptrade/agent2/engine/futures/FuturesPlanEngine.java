@@ -57,7 +57,7 @@ public class FuturesPlanEngine {
 
     public FuturesPlanResult plan(FuturesPlanInputs in, FuturesConfig cfg) {
         CamarillaLevels levels = camarilla.calculate(in.priorHigh(), in.priorLow(), in.priorClose());
-        var openZone = openClassifier.classify(in.openPx(), levels);
+        var openZone = openClassifier.classify(in.sessionOpen(), levels);
         List<FuturesArm> grid = gridBuilder.build(levels);
         ArmSelection selection = armSelector.select(in.bias(), openZone);
 

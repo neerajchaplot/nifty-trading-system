@@ -1,6 +1,7 @@
 package com.the3Cgrp.zupptrade.shared.dto;
 
 import com.the3Cgrp.zupptrade.shared.enums.ArmCardStatus;
+import com.the3Cgrp.zupptrade.shared.enums.ArmReachability;
 import com.the3Cgrp.zupptrade.shared.enums.FutureArmType;
 import com.the3Cgrp.zupptrade.shared.enums.TradeDirection;
 
@@ -35,5 +36,15 @@ public record FuturesArmCardDto(
         BigDecimal riskPerLot,
         BigDecimal riskTotal,
         BigDecimal marginEstimate,
-        BigDecimal notional
-) {}
+        BigDecimal notional,
+        // Live, on-read overlay: is this arm's entry still catchable at the current level? Nullable
+        // (null = level unavailable / not evaluated). Never persisted — always recomputed on read.
+        ArmReachability reachability
+) {
+    /** Returns a copy with the reachability overlay set (all other fields unchanged). */
+    public FuturesArmCardDto withReachability(ArmReachability r) {
+        return new FuturesArmCardDto(armType, label, direction, status, blockedReason,
+                entry, stop, target, riskPoints, rewardPoints, rrGross, rrAfterCost, costPoints,
+                probabilityPct, lots, lotSize, riskPerLot, riskTotal, marginEstimate, notional, r);
+    }
+}

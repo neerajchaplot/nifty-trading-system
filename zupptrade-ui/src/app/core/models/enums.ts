@@ -24,6 +24,7 @@ export type FutureArmType = 'LONG_ROTATION' | 'SHORT_ROTATION' | 'LONG_BREAKOUT'
 export type TradeDirection = 'LONG' | 'SHORT';
 export type OpenZone = 'BREAKOUT' | 'RANGE' | 'BREAKDOWN';
 export type ArmCardStatus = 'RECOMMENDED' | 'ALLOWED' | 'BLOCKED';
+export type ArmReachability = 'REACHABLE' | 'MISSED';
 export type FuturePlanStatus =
   | 'PRIMED' | 'ARMED' | 'BREAK_DETECTED' | 'CONFIRMED' | 'FILLED'
   | 'CLOSED' | 'NO_TRADE' | 'REJECTED' | 'INVALIDATED' | 'EXPIRED' | 'EXECUTION_FAILED';

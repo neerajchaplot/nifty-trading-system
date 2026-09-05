@@ -1,12 +1,11 @@
 package com.the3Cgrp.zupptrade.agent2.service;
 
 import com.the3Cgrp.zupptrade.agent2.client.Agent1ScoreClient;
-import com.the3Cgrp.zupptrade.agent2.client.MarketDataClient;
-import com.the3Cgrp.zupptrade.agent2.client.model.MarketSnapshot;
 import com.the3Cgrp.zupptrade.agent2.config.FuturesConfig;
 import com.the3Cgrp.zupptrade.agent2.domain.entity.FutureTradeLedgerEntity;
 import com.the3Cgrp.zupptrade.shared.dto.Agent1SignalDto;
 import com.the3Cgrp.zupptrade.agent2.domain.entity.UserProfileEntity;
+import com.the3Cgrp.zupptrade.agent2.engine.futures.ArmReachabilityCalculator;
 import com.the3Cgrp.zupptrade.agent2.engine.futures.FuturesPlanEngine;
 import com.the3Cgrp.zupptrade.agent2.engine.futures.model.ArmPlan;
 import com.the3Cgrp.zupptrade.agent2.engine.futures.model.FuturesPlanInputs;
@@ -18,7 +17,9 @@ import com.the3Cgrp.zupptrade.agent2.repository.UserProfileRepository;
 import com.the3Cgrp.zupptrade.agent2.util.JsonUtil;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxHistoricalDataClient;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxHistoricalDataClient.UpstoxCandle;
+import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxMarketQuoteClient;
 import com.the3Cgrp.zupptrade.shared.dto.*;
+import com.the3Cgrp.zupptrade.shared.enums.ArmReachability;
 import com.the3Cgrp.zupptrade.shared.enums.ConfirmAction;
 import com.the3Cgrp.zupptrade.shared.enums.FutureArmType;
 import com.the3Cgrp.zupptrade.shared.enums.FuturePlanStatus;
@@ -69,7 +70,9 @@ public class FuturesRecommendationService {
     private final ReferenceDataRepository referenceDataRepository;
     private final FutureTradeLedgerRepository ledgerRepository;
     private final UpstoxHistoricalDataClient historicalClient;
-    private final MarketDataClient marketDataClient;
+    private final SessionOpenResolver sessionOpenResolver;
+    private final UpstoxMarketQuoteClient marketQuoteClient;
+    private final ArmReachabilityCalculator reachabilityCalculator;
     private final FuturesPlanEngine engine;
     private final FuturesInstrumentResolver instrumentResolver;
     private final FuturesConfig config;
@@ -82,7 +85,9 @@ public class FuturesRecommendationService {
                                         ReferenceDataRepository referenceDataRepository,
                                         FutureTradeLedgerRepository ledgerRepository,
                                         UpstoxHistoricalDataClient historicalClient,
-                                        MarketDataClient marketDataClient,
+                                        SessionOpenResolver sessionOpenResolver,
+                                        UpstoxMarketQuoteClient marketQuoteClient,
+                                        ArmReachabilityCalculator reachabilityCalculator,
                                         FuturesPlanEngine engine,
                                         FuturesInstrumentResolver instrumentResolver,
                                         FuturesConfig config,
@@ -94,7 +99,9 @@ public class FuturesRecommendationService {
         this.referenceDataRepository = referenceDataRepository;
         this.ledgerRepository = ledgerRepository;
         this.historicalClient = historicalClient;
-        this.marketDataClient = marketDataClient;
+        this.sessionOpenResolver = sessionOpenResolver;
+        this.marketQuoteClient = marketQuoteClient;
+        this.reachabilityCalculator = reachabilityCalculator;
         this.engine = engine;
         this.instrumentResolver = instrumentResolver;
         this.config = config;
@@ -111,7 +118,6 @@ public class FuturesRecommendationService {
                         "User profile not found: " + request.userProfileId()));
 
         int lotSize = fetchLotSize();
-        int runPhase = request.runPhase() != null ? request.runPhase() : 900;
         // Resolve "today" on the IST trading calendar so the commentary lookup is that day's row only.
         LocalDate tradeDate = LocalDate.ofInstant(clock.instant(), IST);
 
@@ -122,7 +128,18 @@ public class FuturesRecommendationService {
                         "Futures commentary required: no admin commentary submitted for " + tradeDate));
         Agent1SignalDto signal = agent1ScoreClient.score(commentary);
 
-        List<UpstoxCandle> completed = fetchCompletedDailyCandles(tradeDate);
+        List<UpstoxCandle> daily = fetchDailyCandles();
+        // Today's forming candle (present during/after market hours) carries the actual session open.
+        BigDecimal todaysActualOpen = daily.stream()
+                .filter(c -> c.date().isEqual(tradeDate))
+                .map(UpstoxCandle::open)
+                .findFirst()
+                .orElse(null);
+        // Camarilla + compression use COMPLETED prior sessions only — drop today's forming candle.
+        List<UpstoxCandle> completed = daily.stream()
+                .filter(c -> c.date().isBefore(tradeDate))
+                .sorted(Comparator.comparing(UpstoxCandle::date).reversed())
+                .toList();
         if (completed.isEmpty()) {
             throw new MarketDataUnavailableException(
                     "No completed Nifty daily candles available to derive Camarilla levels");
@@ -134,7 +151,13 @@ public class FuturesRecommendationService {
         BigDecimal prevDayRange = ranges.get(0);
         List<BigDecimal> last20 = ranges.subList(0, Math.min(COMPRESSION_SMA_WINDOW, ranges.size()));
 
-        BigDecimal openPx = resolveOpenPx(prior.close());
+        // Session open = the fixed opening reference, NOT the drifting live spot. Inside market hours
+        // it's today's actual open; outside hours it's the GIFT-implied open, then last close — the
+        // same reference the 09:00 plan uses. runPhase is driven by the resolver's IST clock.
+        SessionOpenResolver.SessionOpen sessionOpen =
+                sessionOpenResolver.resolve(todaysActualOpen, prior.close());
+        BigDecimal openPx = sessionOpen.price();
+        int runPhase = sessionOpen.runPhase();
 
         FuturesPlanInputs inputs = new FuturesPlanInputs(
                 prior.high(), prior.low(), prior.close(), openPx,
@@ -161,7 +184,10 @@ public class FuturesRecommendationService {
                 kv("primaryArm", result.primaryArm()), kv("status", status),
                 kv("compressed", result.compression().compressed()), kv("killSwitch", killSwitch));
 
-        return toCard(saved, result.confidenceGate().passed(), armCards);
+        // Persisted arms carry no reachability (it's live) — annotate only the returned card.
+        BigDecimal currentLevel = currentNiftyLevel();
+        return toCard(saved, result.confidenceGate().passed(),
+                annotateReachability(armCards, currentLevel), currentLevel);
     }
 
     // ------------------------------------------------------------------ confirm
@@ -171,12 +197,13 @@ public class FuturesRecommendationService {
         FutureTradeLedgerEntity plan = ledgerRepository.findById(request.planId())
                 .orElseThrow(() -> new IllegalArgumentException("Futures plan not found: " + request.planId()));
 
-        List<FuturesArmCardDto> arms = readArms(plan);
+        BigDecimal currentLevel = currentNiftyLevel();
+        List<FuturesArmCardDto> arms = annotateReachability(readArms(plan), currentLevel);
 
         if (request.action() == ConfirmAction.REJECT) {
             plan.setStatus(FuturePlanStatus.REJECTED);
             ledgerRepository.save(plan);
-            return toCard(plan, gatePassed(plan), arms);
+            return toCard(plan, gatePassed(plan), arms, currentLevel);
         }
 
         // APPROVE
@@ -194,6 +221,11 @@ public class FuturesRecommendationService {
                 .orElseThrow(() -> new IllegalArgumentException("Arm not on plan: " + chosenType));
         if (chosen.status() == com.the3Cgrp.zupptrade.shared.enums.ArmCardStatus.BLOCKED) {
             throw new IllegalStateException("Cannot arm a blocked trade: " + chosen.blockedReason());
+        }
+        // Hard discipline: refuse to arm a trade whose entry the market has already left behind.
+        if (chosen.reachability() == ArmReachability.MISSED) {
+            throw new IllegalStateException("Cannot arm a missed trade: entry " + chosen.entry()
+                    + " is no longer reachable at the current level " + currentLevel + ".");
         }
 
         plan.setPrimaryArm(chosenType);
@@ -220,7 +252,7 @@ public class FuturesRecommendationService {
                 kv("selectedArm", chosenType), kv("lots", request.overrideLots() != null
                         ? request.overrideLots() : chosen.lots()));
 
-        return toCard(plan, gatePassed(plan), arms);
+        return toCard(plan, gatePassed(plan), arms, currentLevel);
     }
 
     // ------------------------------------------------------------------ list (screen 2)
@@ -237,35 +269,22 @@ public class FuturesRecommendationService {
                 FuturePlanStatus.ARMED, FuturePlanStatus.BREAK_DETECTED,
                 FuturePlanStatus.CONFIRMED, FuturePlanStatus.FILLED,
                 FuturePlanStatus.EXECUTION_FAILED);
+        BigDecimal currentLevel = currentNiftyLevel();
         return ledgerRepository.findByTradeDateAndStatusInOrderByCreatedAtDesc(today, statuses).stream()
-                .map(e -> toCard(e, gatePassed(e), readArms(e)))
+                .map(e -> toCard(e, gatePassed(e), annotateReachability(readArms(e), currentLevel), currentLevel))
                 .toList();
     }
 
     // ------------------------------------------------------------------ helpers
 
-    private List<UpstoxCandle> fetchCompletedDailyCandles(LocalDate today) {
+    /** Raw Nifty daily candles (newest available first is not guaranteed — caller sorts/filters). */
+    private List<UpstoxCandle> fetchDailyCandles() {
         try {
-            return historicalClient.fetchNiftyDailyCandles(config.getCompressionLookbackDays()).stream()
-                    .filter(c -> c.date().isBefore(today)) // drop today's forming candle
-                    .sorted(Comparator.comparing(UpstoxCandle::date).reversed())
-                    .toList();
+            return historicalClient.fetchNiftyDailyCandles(config.getCompressionLookbackDays());
         } catch (Exception e) {
             log.warn("futures.candles.error error={}", e.getMessage(), e);
             return List.of();
         }
-    }
-
-    private BigDecimal resolveOpenPx(BigDecimal fallbackClose) {
-        try {
-            MarketSnapshot snap = marketDataClient.fetchSnapshot();
-            if (snap != null && snap.spot() != null) {
-                return snap.spot();
-            }
-        } catch (Exception e) {
-            log.warn("futures.openpx.snapshot_failed fallback=priorClose error={}", e.getMessage());
-        }
-        return fallbackClose;
     }
 
     private boolean killSwitchTripped(UUID userProfileId, LocalDate tradeDate) {
@@ -300,9 +319,28 @@ public class FuturesRecommendationService {
                     ap.rr().rrAfterCost(), ap.rr().costPoints(),
                     ap.probabilityPct(),
                     ap.sizing().lots(), ap.sizing().lotSize(), ap.sizing().riskPerLot(),
-                    ap.sizing().riskTotal(), ap.margin().marginEstimate(), ap.margin().notional()));
+                    ap.sizing().riskTotal(), ap.margin().marginEstimate(), ap.margin().notional(),
+                    null)); // reachability is a live, on-read overlay — never built/persisted here
         }
         return cards;
+    }
+
+    /** Live spot for the reachability overlay; null (undetermined) if unavailable. */
+    private BigDecimal currentNiftyLevel() {
+        try {
+            return marketQuoteClient.fetchNiftySpot();
+        } catch (Exception e) {
+            log.warn("futures.current_level.unavailable error={}", e.getMessage());
+            return null;
+        }
+    }
+
+    /** Stamp each arm's live reachability against the current level (null level → null reachability). */
+    private List<FuturesArmCardDto> annotateReachability(List<FuturesArmCardDto> arms, BigDecimal currentLevel) {
+        return arms.stream()
+                .map(a -> a.withReachability(
+                        reachabilityCalculator.evaluate(currentLevel, a.stop(), a.target())))
+                .toList();
     }
 
     private FutureTradeLedgerEntity persist(FuturesRecommendRequestDto request, Agent1SignalDto signal,
@@ -364,7 +402,7 @@ public class FuturesRecommendationService {
     }
 
     private FuturesPlanCardDto toCard(FutureTradeLedgerEntity e, boolean confidenceGatePassed,
-                                      List<FuturesArmCardDto> arms) {
+                                      List<FuturesArmCardDto> arms, BigDecimal currentLevel) {
         FuturesCamarillaDto levels = jsonUtil.fromJson(e.getCamarilla(), FuturesCamarillaDto.class);
         FuturesPriorOhlcDto ohlc = jsonUtil.fromJson(e.getPriorOhlc(), FuturesPriorOhlcDto.class);
         Map<?, ?> gates = e.getGateResults() != null
@@ -378,7 +416,7 @@ public class FuturesRecommendationService {
         return new FuturesPlanCardDto(
                 e.getId(), e.getPlanCode(), e.getStatus(), e.getTradeDate(), e.getRunPhase(),
                 e.getInstrumentKey(), e.getBias(), e.getConfidenceScore(), e.getConfidenceLabel(),
-                e.getOpenZone(), levels, ohlc, e.getOpenPx(),
+                e.getOpenZone(), levels, ohlc, e.getOpenPx(), currentLevel,
                 confidenceGatePassed, minConfidence, e.getCompressionRci(), compressionThreshold, compressed,
                 roundTripCost, e.getPrimaryArm(), e.getNoTradeReason(), arms, e.getCreatedAt());
     }

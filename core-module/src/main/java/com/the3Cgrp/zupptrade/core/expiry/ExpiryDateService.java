@@ -107,13 +107,15 @@ public class ExpiryDateService {
         try {
             Map<String, Object> row = jdbc.queryForMap(
                     """
-                    SELECT value, fetched_at, ttl_hours
+                    SELECT value::text AS value, fetched_at, ttl_hours
                     FROM reference_data
                     WHERE key = ?
                       AND fetched_at + (ttl_hours * interval '1 hour') > NOW()
                     """,
                     CACHE_KEY);
 
+            // value is a jsonb column — the pg driver returns it as a PGobject via queryForMap, so we
+            // cast it to text in SQL (::text) and read it back as the JSON string.
             String json = (String) row.get("value");
             List<LocalDate> dates = mapper.readValue(json, DATE_LIST_TYPE);
             log.debug("expiry.cache.hit count={}", dates.size());

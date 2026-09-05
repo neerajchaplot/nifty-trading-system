@@ -2,6 +2,7 @@ package com.the3Cgrp.zupptrade.agent2.config;
 
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxFuturesContractClient;
 import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxHistoricalDataClient;
+import com.the3Cgrp.zupptrade.core.upstox.client.UpstoxMarketQuoteClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -28,6 +29,15 @@ public class RestClientConfig {
         return new UpstoxFuturesContractClient(upstoxRestClient);
     }
 
+    /**
+     * Market-quote LTP client — GIFT Nifty (pre-open session open) and Nifty spot (live reachability
+     * level). core's UpstoxAutoConfiguration is excluded on Agent2Application, so wire it explicitly.
+     */
+    @Bean
+    public UpstoxMarketQuoteClient upstoxMarketQuoteClient(RestClient upstoxRestClient) {
+        return new UpstoxMarketQuoteClient(upstoxRestClient);
+    }
+
     @Bean
     public RestClient upstoxRestClient(TradingConfig config, UpstoxTokenHolder tokenHolder) {
         TradingConfig.Upstox upstox = config.getUpstox();
@@ -48,6 +58,9 @@ public class RestClientConfig {
                         request.getHeaders().setBearerAuth(token);
                     }
                     request.getHeaders().set("Accept", "application/json");
+                    // Market-quote LTP (v2/v3: VIX, Nifty spot, GIFT) and intraday-candle (v3) expect the
+                    // Api-Version header — matches core's UpstoxAutoConfiguration client used by agent1/agent3.
+                    request.getHeaders().set("Api-Version", "2.0");
                     return execution.execute(request, body);
                 })
                 .build();
