@@ -9,6 +9,8 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.util.UriComponentsBuilder;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Upstox OAuth login (identity + trading token). The token-exchange response carries the Upstox
@@ -19,6 +21,8 @@ import org.springframework.web.util.UriComponentsBuilder;
  */
 @Component
 public class UpstoxAuthClient {
+
+    private static final Logger log = LoggerFactory.getLogger(UpstoxAuthClient.class);
 
     private final UpstoxProperties upstox;
     private final AuthProperties auth;
@@ -51,17 +55,52 @@ public class UpstoxAuthClient {
         form.add("redirect_uri", auth.getUpstox().getRedirectUri());
         form.add("grant_type", "authorization_code");
 
-        TokenExchangeResponse r = http.post()
+        // TEMP DIAGNOSTIC: capture the RAW token-exchange response to inspect the token TYPE Upstox
+        // returns (presence of extended_token, user_type, scopes/products). Token values are masked.
+        // Remove after Upstox order-API diagnosis is closed.
+        String raw = http.post()
                 .uri("/v2/login/authorization/token")
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .body(form)
                 .retrieve()
-                .body(TokenExchangeResponse.class);
+                .body(String.class);
 
-        if (r == null || r.accessToken() == null || r.userId() == null) {
+        log.warn("upstox.token.exchange.raw hasExtendedToken={} response={}",
+                raw != null && raw.contains("extended_token"), maskTokens(raw));
+
+        String accessToken = extractJsonString(raw, "access_token");
+        String userId      = extractJsonString(raw, "user_id");
+        String email       = extractJsonString(raw, "email");
+        if (accessToken == null || userId == null) {
             throw new IllegalStateException("Upstox token exchange returned no access_token/user_id");
         }
-        return new UpstoxIdentity(r.userId(), r.email(), r.accessToken());
+        return new UpstoxIdentity(userId, email, accessToken);
+    }
+
+    // ── TEMP DIAGNOSTIC helpers (remove with the log above) ──────────────────────
+    /** Minimal JSON string-field extractor (no Jackson dependency) — matches Upstox's compact JSON. */
+    private static String extractJsonString(String json, String key) {
+        if (json == null) return null;
+        String marker = "\"" + key + "\":\"";
+        int start = json.indexOf(marker);
+        if (start < 0) return null;
+        start += marker.length();
+        int end = json.indexOf('"', start);
+        return end < 0 ? null : json.substring(start, end);
+    }
+
+    /** Replaces access_token / extended_token VALUES with a length+ends fingerprint so the response
+     *  structure (field names, user_type, products, scopes) is logged without leaking the token. */
+    private static String maskTokens(String json) {
+        if (json == null) return null;
+        for (String k : new String[]{"access_token", "extended_token"}) {
+            String v = extractJsonString(json, k);
+            if (v != null && v.length() > 8) {
+                String fp = "len=" + v.length() + "," + v.substring(0, 4) + "…" + v.substring(v.length() - 4);
+                json = json.replace(v, "<" + fp + ">");
+            }
+        }
+        return json;
     }
 
     public record UpstoxIdentity(String userId, String email, String accessToken) {}

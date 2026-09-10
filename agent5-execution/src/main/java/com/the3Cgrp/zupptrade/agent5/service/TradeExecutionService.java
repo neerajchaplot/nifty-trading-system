@@ -138,8 +138,13 @@ public class TradeExecutionService {
      */
     public String diagnoseOrderRead(UUID tradeId) {
         TradeOwner owner = readTradeOwner(tradeId);
-        OrderSession upstox = orderClient.session(resolveOwnerToken(owner));
-        return probePlanes("OWNER(" + owner.profileId() + ")", upstox);
+        String token = resolveOwnerToken(owner);
+        // TEMP DIAGNOSTIC: fingerprint the token so it can be correlated with the agent-user
+        // upstox.token.exchange.raw log (proves which token hit the order call). Remove after diagnosis.
+        String fp = (token == null || token.length() < 8) ? "none"
+                : "len=" + token.length() + "," + token.substring(0, 4) + "…" + token.substring(token.length() - 4);
+        log.warn("diag.owner.token", kv("ownerProfile", owner.profileId()), kv("tokenFp", fp));
+        return probePlanes("OWNER(" + owner.profileId() + ")", orderClient.session(token));
     }
 
     /**
