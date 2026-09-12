@@ -143,8 +143,24 @@ public class TradeExecutionService {
         // upstox.token.exchange.raw log (proves which token hit the order call). Remove after diagnosis.
         String fp = (token == null || token.length() < 8) ? "none"
                 : "len=" + token.length() + "," + token.substring(0, 4) + "…" + token.substring(token.length() - 4);
-        log.warn("diag.owner.token", kv("ownerProfile", owner.profileId()), kv("tokenFp", fp));
+        // TEMP DIAGNOSTIC: fingerprint + decoded JWT payload of the token actually sent. iat proves
+        // freshness (matches the last login), and any scope/type claim shows whether it's order-capable.
+        log.warn("diag.owner.token", kv("ownerProfile", owner.profileId()), kv("tokenFp", fp),
+                kv("jwtPayload", jwtPayload(token)));
         return probePlanes("OWNER(" + owner.profileId() + ")", orderClient.session(token));
+    }
+
+    /** TEMP DIAGNOSTIC: base64url-decode the JWT payload (claims) — no signature, safe to log. */
+    private static String jwtPayload(String jwt) {
+        try {
+            if (jwt == null) return "null";
+            String[] parts = jwt.split("\\.");
+            if (parts.length < 2) return "not-a-jwt";
+            return new String(java.util.Base64.getUrlDecoder().decode(parts[1]),
+                    java.nio.charset.StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return "decode-failed:" + e.getMessage();
+        }
     }
 
     /**
