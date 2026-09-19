@@ -94,6 +94,13 @@ public class ExecutionController {
         return ResponseEntity.ok(executionService.diagnoseSystemToken());
     }
 
+    /** TEMP DIAGNOSTIC — real POST /v3/order/place with the system token (unfillable limit @0.05). No re-login. */
+    @PostMapping("/diag/place-order-system")
+    public ResponseEntity<String> diagPlaceOrderSystem() {
+        log.warn("api.diag.place-order-system");
+        return ResponseEntity.ok(executionService.diagnosePlaceOrderSystem());
+    }
+
     @PostMapping("/exit/{tradeId}")
     public ResponseEntity<ExitTradeResponse> exit(@PathVariable UUID tradeId,
                                                    @Valid @RequestBody ExitTradeRequest request,

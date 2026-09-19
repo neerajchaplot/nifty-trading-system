@@ -173,6 +173,29 @@ public class TradeExecutionService {
         return probePlanes("SYSTEM/ADMIN", orderClient.session(null));
     }
 
+    /**
+     * TEMP DIAGNOSTIC — actually calls POST /v3/order/place with the SYSTEM/ADMIN token already loaded
+     * at startup (no re-login needed). Deliberately an UNFILLABLE LIMIT (BUY 1 lot @ Rs 0.05) so it
+     * cannot execute even if auth passes — at most it rests as an open order (cancel it in the app).
+     * Purpose: hand Upstox a REAL place-order reqid to trace (stronger than a read). Remove after diagnosis.
+     */
+    public String diagnosePlaceOrderSystem() {
+        OrderSession upstox = orderClient.session(null); // system/admin token via interceptor
+        PlaceOrderV3Request order = PlaceOrderV3Request.limit(
+                "NSE_FO|46980", "BUY", props.getProduct(), 65, new BigDecimal("0.05"), "DIAGPLACE");
+        log.warn("diag.place.attempt", kv("instrument", order.instrumentToken()),
+                kv("type", "LIMIT"), kv("price", order.price()), kv("qty", order.quantity()));
+        try {
+            PlaceOrderV3Response r = upstox.placeOrder(order);
+            log.warn("diag.place.ok", kv("orderIds", r.orderIds()));
+            return "PLACE_OK orderIds=" + r.orderIds()
+                    + " — UNFILLABLE limit @0.05; CANCEL it in the Upstox app if it rested.";
+        } catch (RuntimeException e) {
+            log.warn("diag.place.failed", kv("error", e.getMessage()));
+            return "PLACE_FAILED " + e.getMessage();
+        }
+    }
+
     private String probePlanes(String label, OrderSession upstox) {
         String dataPlane;
         try {
