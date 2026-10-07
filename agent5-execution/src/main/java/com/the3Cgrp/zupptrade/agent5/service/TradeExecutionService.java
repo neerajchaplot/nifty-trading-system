@@ -59,6 +59,11 @@ public class TradeExecutionService {
 
     private static final Logger log = LoggerFactory.getLogger(TradeExecutionService.class);
 
+    // Grace for a just-placed order that 404s on the status poll because Upstox hasn't propagated it
+    // yet. The order_id is already confirmed, so retry (at the normal poll interval) rather than
+    // declaring the leg failed — which would orphan the order and roll back the rest.
+    private static final int MAX_ORDER_NOT_FOUND_RETRIES = 5;
+
     private final UpstoxOrderClient         orderClient;
     private final Agent5ExecutionProperties props;
     private final JdbcTemplate              jdbc;
@@ -194,6 +199,20 @@ public class TradeExecutionService {
             log.warn("diag.place.failed", kv("error", e.getMessage()));
             return "PLACE_FAILED " + e.getMessage();
         }
+    }
+
+    /**
+     * TEMP DIAGNOSTIC — returns the FULL token our system resolves for this trade's owner, so it can be
+     * compared/tested against a MyApps-generated token in a raw curl. Logs only a fingerprint (not the
+     * full token). Remove after the Upstox debug session.
+     */
+    public String diagnosePrintOwnerToken(UUID tradeId) {
+        TradeOwner owner = readTradeOwner(tradeId);
+        String token = resolveOwnerToken(owner);
+        String fp = (token == null || token.length() < 8) ? "none"
+                : "len=" + token.length() + "," + token.substring(0, 4) + "…" + token.substring(token.length() - 4);
+        log.warn("diag.print.owner.token", kv("ownerProfile", owner.profileId()), kv("tokenFp", fp));
+        return token == null ? "NULL" : token;
     }
 
     private String probePlanes(String label, OrderSession upstox) {
@@ -546,12 +565,24 @@ public class TradeExecutionService {
         long timeout       = props.getFillTimeoutMs();
         long pollInterval  = props.getFillPollIntervalMs();
         boolean marketSent = false;
+        int notFoundRetries = 0;   // grace for a just-placed order not yet propagated to the status API
 
         while (true) {
             OrderStatusResponse status;
             try {
                 status = upstox.getOrderStatus(orderId);
+                notFoundRetries = 0;   // got a status — clear the propagation-grace counter
             } catch (UpstoxOrderException e) {
+                // A freshly-placed order (orderId already returned by place) can 404 "order not found"
+                // until Upstox propagates it to the status API. The order IS live, so wait briefly and
+                // retry rather than declaring the leg failed (which would orphan the order + roll back).
+                if (e.isNotFound() && notFoundRetries < MAX_ORDER_NOT_FOUND_RETRIES) {
+                    notFoundRetries++;
+                    log.warn("execution.poll.order_not_found_retry",
+                            kv("orderId", orderId), kv("attempt", notFoundRetries));
+                    sleep(pollInterval);
+                    continue;
+                }
                 log.error("execution.poll.error", kv("orderId", orderId), kv("error", e.getMessage()));
                 return PollResult.none();
             }
@@ -589,6 +620,9 @@ public class TradeExecutionService {
                         marketSent = true;
                     } catch (UpstoxOrderException e) {
                         log.error("execution.modify.market.failed", kv("orderId", orderId));
+                        // The LIMIT order is still resting on the exchange and we're abandoning this leg —
+                        // cancel it so it cannot fill later as an orphan (best-effort; re-read after).
+                        try { upstox.cancelOrder(orderId); } catch (UpstoxOrderException ignore) {}
                         return partialOrNone(orderId, legTag, leg, safeStatus(upstox, orderId));
                     }
                 }

@@ -375,6 +375,64 @@ class TradeExecutionServiceTest {
         assertThat(markets).noneMatch(r -> SHORT_KEY.equals(r.instrumentToken()) && r.quantity() == 75);
     }
 
+    // ── Order-not-found propagation lag (just-placed order 404s on status poll) ──
+
+    @Test
+    void execute_pollOrderNotFoundThenComplete_treatsLegAsFilled() {
+        givenConfirmedTrade(EXPECTED_NET);
+        givenSufficientMargin();
+        givenPlacementAccepted();
+        // The just-placed long leg 404s on the first two status polls (Upstox propagation lag),
+        // then shows complete — it must be treated as FILLED, not failed/rolled-back/orphaned.
+        when(orderClient.getOrderStatus(orderId(1)))
+                .thenThrow(new UpstoxOrderException("404 Order not found", null, false, true))
+                .thenThrow(new UpstoxOrderException("404 Order not found", null, false, true))
+                .thenReturn(new OrderStatusResponse("success", new OrderStatusResponse.OrderData(
+                        orderId(1), "complete", null, null, 75, 75, 0, new BigDecimal("24.80"))));
+        givenOrderComplete(orderId(0), 75, new BigDecimal("50.50"));
+
+        ExecuteTradeResponse response = service.execute(buildRequest());
+
+        assertThat(response.executionStatus()).isEqualTo(TradeStatus.ACTIVE);
+        assertThat(response.fills()).hasSize(2);
+        verify(orderClient, never()).cancelOrder(any());   // no failure handling needed
+    }
+
+    @Test
+    void execute_pollOrderNotFoundExhausted_failsCleanly() {
+        givenConfirmedTrade(EXPECTED_NET);
+        givenSufficientMargin();
+        givenPlacementAccepted();
+        // Status API never finds the order (beyond the propagation grace) → leg fails cleanly.
+        when(orderClient.getOrderStatus(orderId(1)))
+                .thenThrow(new UpstoxOrderException("404 Order not found", null, false, true));
+
+        ExecuteTradeResponse response = service.execute(buildRequest());
+
+        assertThat(response.executionStatus()).isEqualTo(TradeStatus.REJECTED);
+        assertThat(response.rejectionReason()).containsIgnoringCase("did not fully fill");
+        verify(orderClient, times(1)).placeOrder(any());        // second leg never attempted
+        verify(orderClient, times(6)).getOrderStatus(orderId(1)); // initial + 5 retries (MAX_ORDER_NOT_FOUND_RETRIES)
+    }
+
+    @Test
+    void execute_modifyToMarketFails_cancelsRestingOrderSoNoOrphan() {
+        props.setCancelOnTimeoutInsteadOfMarket(false);   // prod behaviour: convert LIMIT → MARKET on timeout
+        givenConfirmedTrade(EXPECTED_NET);
+        givenSufficientMargin();
+        givenPlacementAccepted();
+        // First (BUY long) leg rests open, never fills → timeout → modifyToMarket fails.
+        when(orderClient.getOrderStatus(orderId(1))).thenReturn(openStatus(orderId(1), "BUY", 75, 0));
+        doThrow(new UpstoxOrderException("modify 400", null, false))
+                .when(orderClient).modifyToMarket(orderId(1), 75);
+
+        ExecuteTradeResponse response = service.execute(buildRequest());
+
+        assertThat(response.executionStatus()).isEqualTo(TradeStatus.REJECTED);
+        // the still-resting LIMIT must be cancelled so it can't fill later as an orphan
+        verify(orderClient).cancelOrder(orderId(1));
+    }
+
     // ── Debit spread correctness ───────────────────────────────────────────────
 
     @Test

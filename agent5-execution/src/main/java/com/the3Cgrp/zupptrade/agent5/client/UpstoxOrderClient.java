@@ -357,7 +357,7 @@ public class UpstoxOrderClient {
                             kv("body", e.getResponseBodyAsString()));
                     throw new UpstoxOrderException(
                             operation + " failed with " + e.getStatusCode() + ": " + e.getResponseBodyAsString(),
-                            e, false);
+                            e, false, e.getStatusCode().value() == 404);
                 }
                 last = e;   // 429 or 5xx — retryable
                 log.warn("upstox.retryable.error",
@@ -393,14 +393,21 @@ public class UpstoxOrderClient {
      */
     public static class UpstoxOrderException extends RuntimeException {
         private final boolean ambiguous;
+        private final boolean notFound;   // true = HTTP 404 (order not found) — may be propagation lag
 
         public UpstoxOrderException(String msg) { this(msg, null, true); }
         public UpstoxOrderException(String msg, Throwable cause) { this(msg, cause, true); }
         public UpstoxOrderException(String msg, Throwable cause, boolean ambiguous) {
+            this(msg, cause, ambiguous, false);
+        }
+        public UpstoxOrderException(String msg, Throwable cause, boolean ambiguous, boolean notFound) {
             super(msg, cause);
             this.ambiguous = ambiguous;
+            this.notFound  = notFound;
         }
 
         public boolean isAmbiguous() { return ambiguous; }
+        /** 404 from Upstox. On a status poll of a just-placed order this is usually propagation lag. */
+        public boolean isNotFound() { return notFound; }
     }
 }

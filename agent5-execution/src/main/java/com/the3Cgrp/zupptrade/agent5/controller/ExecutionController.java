@@ -101,6 +101,13 @@ public class ExecutionController {
         return ResponseEntity.ok(executionService.diagnosePlaceOrderSystem());
     }
 
+    /** TEMP DIAGNOSTIC — prints the FULL token our system uses for this trade's owner (to compare vs a MyApps token). */
+    @PostMapping("/diag/print-token/{tradeId}")
+    public ResponseEntity<String> diagPrintToken(@PathVariable UUID tradeId) {
+        log.warn("api.diag.print-token", kv("tradeId", tradeId));
+        return ResponseEntity.ok(executionService.diagnosePrintOwnerToken(tradeId));
+    }
+
     @PostMapping("/exit/{tradeId}")
     public ResponseEntity<ExitTradeResponse> exit(@PathVariable UUID tradeId,
                                                    @Valid @RequestBody ExitTradeRequest request,
