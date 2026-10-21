@@ -37,13 +37,21 @@ public class CamarillaCalculator {
         BigDecimal quarter = factor.divide(FOUR, SCALE, RoundingMode.HALF_UP);
         BigDecimal half = factor.divide(TWO, SCALE, RoundingMode.HALF_UP);
 
+        // Extension levels: H5 = (H/L)·C, L5 = C − (H5 − C) = 2C − H5 (mirrored). Ratio kept at
+        // high precision before the final 2-dp rounding so H5/L5 match a charting platform.
+        BigDecimal ratio = high.divide(low, 10, RoundingMode.HALF_UP);
+        BigDecimal h5 = ratio.multiply(close).setScale(SCALE, RoundingMode.HALF_UP);
+        BigDecimal l5 = close.multiply(TWO).subtract(h5).setScale(SCALE, RoundingMode.HALF_UP);
+
         return new CamarillaLevels(
                 range.setScale(SCALE, RoundingMode.HALF_UP),
                 pivot,
                 close.add(quarter).setScale(SCALE, RoundingMode.HALF_UP),  // H3
                 close.add(half).setScale(SCALE, RoundingMode.HALF_UP),     // H4
                 close.subtract(quarter).setScale(SCALE, RoundingMode.HALF_UP), // L3
-                close.subtract(half).setScale(SCALE, RoundingMode.HALF_UP)     // L4
+                close.subtract(half).setScale(SCALE, RoundingMode.HALF_UP),    // L4
+                h5,
+                l5
         );
     }
 }

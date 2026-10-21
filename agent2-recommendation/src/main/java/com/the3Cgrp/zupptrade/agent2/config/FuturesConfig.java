@@ -15,6 +15,12 @@ public class FuturesConfig {
     /** §5 — the only hard gate: Agent 1 confidence must be ≥ this. */
     private BigDecimal minConfidence = new BigDecimal("0.40");
 
+    /**
+     * R:R gate — an arm whose after-cost R:R is at or below this is hidden entirely (not shown on
+     * the card, not selectable). Removes degenerate setups (e.g. a few-point target). Calibratable.
+     */
+    private BigDecimal minRrAfterCost = new BigDecimal("0.5");
+
     /** §6.3 — RCI below this = compressed (blocks rotation arms only). */
     private BigDecimal compressionThreshold = new BigDecimal("0.70");
 
@@ -48,6 +54,8 @@ public class FuturesConfig {
 
     public BigDecimal getMinConfidence() { return minConfidence; }
     public void setMinConfidence(BigDecimal v) { this.minConfidence = v; }
+    public BigDecimal getMinRrAfterCost() { return minRrAfterCost; }
+    public void setMinRrAfterCost(BigDecimal v) { this.minRrAfterCost = v; }
     public BigDecimal getCompressionThreshold() { return compressionThreshold; }
     public void setCompressionThreshold(BigDecimal v) { this.compressionThreshold = v; }
     public BigDecimal getSlippagePoints() { return slippagePoints; }

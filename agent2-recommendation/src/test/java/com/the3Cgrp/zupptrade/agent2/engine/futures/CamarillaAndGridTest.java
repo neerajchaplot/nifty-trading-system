@@ -47,6 +47,9 @@ class CamarillaAndGridTest {
         assertThat(lv.l3().doubleValue()).isCloseTo(24277.39, within(0.05));
         assertThat(lv.l4().doubleValue()).isCloseTo(24237.62, within(0.05));
         assertThat(lv.range().doubleValue()).isCloseTo(144.58, within(0.05));
+        // Extension levels: H5 = (H/L)·C, L5 = C − (H5 − C).
+        assertThat(lv.h5().doubleValue()).isCloseTo(24462.46, within(0.1));
+        assertThat(lv.l5().doubleValue()).isCloseTo(24171.86, within(0.1));
     }
 
     @Test
@@ -76,14 +79,14 @@ class CamarillaAndGridTest {
         assertThat(shortRot.target()).isEqualByComparingTo(lv.l3()); // → L3
 
         // Breakout entry clears H4 by the buffer (0.1 × H4-H3 gap ≈ 3.98) → ~24400.66;
-        // spec worked example rounds this to 24401. Target rounds up to the next 50 → 24450.
+        // spec worked example rounds this to 24401. Target is the H5 extension (not a round-50).
         FuturesArm longBrk = arms.get(FutureArmType.LONG_BREAKOUT);
         assertThat(longBrk.entry().doubleValue()).isCloseTo(24400.66, within(0.05));
         assertThat(longBrk.stop()).isEqualByComparingTo(lv.h3());
-        assertThat(longBrk.target()).isEqualByComparingTo("24450");
+        assertThat(longBrk.target()).isEqualByComparingTo(lv.h5());   // extension ≈ 24462.46
 
         FuturesArm shortBrk = arms.get(FutureArmType.SHORT_BREAKDOWN);
         assertThat(shortBrk.stop()).isEqualByComparingTo(lv.l3());
-        assertThat(shortBrk.target()).isEqualByComparingTo("24200"); // next 50 below ~24233.66
+        assertThat(shortBrk.target()).isEqualByComparingTo(lv.l5());  // extension ≈ 24171.86
     }
 }

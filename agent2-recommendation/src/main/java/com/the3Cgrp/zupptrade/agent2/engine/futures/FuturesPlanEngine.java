@@ -78,6 +78,13 @@ public class FuturesPlanEngine {
                     arm.entry(), pointValuePerLot,
                     cfg.getSlippagePoints(), cfg.getFlatChargesPerRoundTrip(), cfg.getTaxPctPerRoundTrip());
             ArmRiskReward rr = riskReward.compute(arm.entry(), arm.stop(), arm.target(), cost);
+
+            // R:R gate (spec §5): an arm at/below the after-cost floor is hidden entirely — not added
+            // to the card, not selectable. Kills degenerate setups (e.g. a few-point breakdown target).
+            if (rr.rrAfterCost().compareTo(cfg.getMinRrAfterCost()) <= 0) {
+                continue;
+            }
+
             SizingResult sizing = positionSizer.size(riskCapital, rr.riskPoints(), in.lotSize());
             MarginEstimate margin = marginEstimator.estimate(arm.entry(), in.lotSize(), sizing.lots(), cfg.getMarginPct());
 
